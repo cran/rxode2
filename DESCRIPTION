@@ -1,5 +1,5 @@
 Package: rxode2
-Version: 2.0.6
+Version: 2.0.7
 Title: Facilities for Simulating from ODE-Based Models
 Authors@R: c(
    person("Matthew L.","Fidler",
@@ -71,7 +71,7 @@ Encoding: UTF-8
 LazyData: true
 Language: en-US
 Config/testthat/edition: 3
-Packaged: 2022-05-05 15:13:05 UTC; matt
+Packaged: 2022-05-17 15:57:36 UTC; matt
 Author: Matthew L. Fidler [aut, cre] (<https://orcid.org/0000-0001-8538-6691>),
   Melissa Hallow [aut],
   Wenping Wang [aut],
@@ -98,4 +98,4 @@ Author: Matthew L. Fidler [aut, cre] (<https://orcid.org/0000-0001-8538-6691>),
   Kevin Ushey [ctb],
   Yu Feng [ctb]
 Repository: CRAN
-Date/Publication: 2022-05-09 07:00:02 UTC
+Date/Publication: 2022-05-17 17:50:02 UTC

@@ -1,6 +1,6 @@
-1bd7f16621fa8288a6f782e85b15b012 *DESCRIPTION
-c9a0702f62bc73565de79ebb613f0db6 *NAMESPACE
-b9f26289ab7e6f0bbeb97d1d29d1fbf4 *NEWS.md
+eb6644eecc9cc4065482692bab260b55 *DESCRIPTION
+06f704bca4e2656ab7ad9ed0d9361b49 *NAMESPACE
+db945436e7bf5063f4c08e635d0601d3 *NEWS.md
 2c608d49f0eea16ab4b5fd004f936700 *R/DollarNames.R
 bbc007c1fab49356b7691c9590193865 *R/RcppExports.R
 c7c4a100e3b6516aa3030754fce42f39 *R/assert.R
@@ -16,7 +16,8 @@ a2d7244af5cfdc10c3d54846eece72a8 *R/et.R
 55244e6fa4c429dda058e525dde423c8 *R/geom-amt.R
 1ec3b36674c98507e8f18791a31c3599 *R/geom-cens.R
 af90cc458c8e5559b1cc63a69d77b533 *R/modlib.R
-864bc90c59969be4ed4b1021ec420638 *R/mu.R
+1478f26e28584b83150e1611030508ca *R/mu-cov-downgrade.R
+b1b0cb376a144047d58c3601cd856712 *R/mu.R
 c5d2199889c138042fac92d880464ac7 *R/piping-ini.R
 740eeb34864e24c8fffbe0283cb2344d *R/piping-model.R
 7e34d9977429bdaddd21ebbdd9fe1847 *R/piping-update.R
@@ -38,12 +39,12 @@ d8df5d7ab74c04ae0a74b1120bdbf448 *R/rxPrune.R
 cbbcc0b0c549373cb91fe41b7c7b02eb *R/rxShiny.R
 85d14a3c82187e7e1a99545ab56cf783 *R/rxSymInv.R
 9e61d7bcc9e2ce64e3c794a607247442 *R/rxSyntaxFunctions.R
-95f922caaa2f458a219c52a7669706d9 *R/rxUiGet.R
+5c977bbca92ce207cda5fdc9e994a083 *R/rxUiGet.R
 b2da610a29f4220c6475921e5de7e859 *R/rxValidate.R
 79d4e4343be9033cddd195d3f45e225f *R/rxode-options.R
 55126ed276a317c3d91804b40b056808 *R/rxode2-win-setup.R
 8d280026b9c1e0f548494db9707614a3 *R/rxode2.R
-1070487156fdf37627da6ca33327fb41 *R/rxode2_md5.R
+b65d5c2af1463cda023c31daea9b765e *R/rxode2_md5.R
 b4863d08ffcde7f330d0b8f1ea759836 *R/rxrandom.R
 0bd6b9affe4adbd67c52b8a9d55e54b9 *R/rxsolve.R
 81860635d712c7b8ae84ff51ea996d0d *R/str.R
@@ -73,7 +74,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 fb7c8c9ab193ea3bfbcd431e27ef4f69 *inst/doc/rxode2-syntax.Rmd
-2c54e535eae23fccd7d868a12ad6a653 *inst/doc/rxode2-syntax.html
+593b902a8930ae86391bd556d3ebbf41 *inst/doc/rxode2-syntax.html
 12436da801b1baecb1d7f93afd2b95e1 *inst/include/rxode2.h
 c1f5079e0124f144002f0cf5d1f8428e *inst/include/rxode2_RcppExports.h
 44158d0c42a8f775edeca9165440f5fa *inst/include/rxode2_as.h
@@ -82,7 +83,7 @@ c1f5079e0124f144002f0cf5d1f8428e *inst/include/rxode2_RcppExports.h
 a5db2168a9911b0e9719eb8a60a5bdd9 *inst/include/rxode2_model_shared.h
 299972cc617766625e3bf12938612bef *inst/po/en@quot/LC_MESSAGES/R-RxODE.mo
 d56d6e65fe9313f2fa32d768f07bacd7 *inst/po/en@quot/LC_MESSAGES/RxODE.mo
-29ea1e3e964fd2b692e5ec9cff7e1b6e *inst/tools/workaround.R
+11ef2849354400476d9eaa914a75d166 *inst/tools/workaround.R
 bfb7b7b36ec6d3ecab7f4031e168f144 *inst/tran.g
 fd97b398f2b822aa8fdd703cc0d3b0bc *inst/tutorials/rxode2-00-syntax/RxODE00syntax.Rmd
 fd0845800cc8fee7da1fba5ca6e25835 *inst/tutorials/rxode2-00-syntax/images/expandTutorial.png
@@ -267,7 +268,7 @@ dec900dc270d970e9349f765eade8e44 *man/rxSyntaxFunctions.Rd
 162b3982a5d62ab412d29ecfcf63dcd2 *man/rxTheme.Rd
 d7bd68cfa238c553ab7affa7680d2541 *man/rxToSE.Rd
 32e9e6c9c99968ba8b592fb9f5fc3a20 *man/rxTrans.Rd
-278f930ec9dd297838a876f1e4a75766 *man/rxUiGet.Rd
+a9201e743534f5ddaa86ad310a39b3a6 *man/rxUiGet.Rd
 e04f7186a9bd38e118af918bbe6fc46c *man/rxUnloadAll.Rd
 c518326919334ac7fd84ca561e9171d6 *man/rxUse.Rd
 ec249b327f20f049304841937da07b35 *man/rxValidate.Rd
@@ -358,7 +359,7 @@ d04e3c541c9b3642a00170d4b12b04cb *src/matexp.f
 f17b36a693a9c6c39a1a3cdad82a78a9 *src/matexp_HM98.c
 21d028b8f261c7590050a6d6e3d30c5e *src/methodswitch.c
 f2519760fc2a12a82de69f60f33dac15 *src/needSortDefines.h
-045284ba3ade817fb780661557578350 *src/ode.h
+02ba7dcb9eec6e2edd9628948f70d1e0 *src/ode.h
 a24b26385bee4e9f4b91f4b9012fbf77 *src/omegaChol.c
 758995da84240900068f42dd30803d0e *src/opkda2.f
 937d1571dbaadd3c6190b728036811a8 *src/orderswitch.c
@@ -496,7 +497,7 @@ d21f43977365dd733ed8750556c00da6 *tests/testthat/test-lock.R
 f37cd10337b010059510b02d9af4f863 *tests/testthat/test-model-rate.R
 5bca6e12359be169650a1590e99a720d *tests/testthat/test-modelargs.R
 db6e43000779aa30f99f890f4d393e02 *tests/testthat/test-mtime.R
-2190a4297be0a29dc9b3b89a58ba7839 *tests/testthat/test-mu.R
+46a028d048890b80bb9aaf154a625bd3 *tests/testthat/test-mu.R
 7dffabd52b729a0cb5ca4dcd2cd83456 *tests/testthat/test-multi.R
 def1ca25f79234b7b92dc676b03b36f8 *tests/testthat/test-na.R
 b42f0fa9fe5ac6016cb24bc5e7218936 *tests/testthat/test-named-id.R
@@ -516,7 +517,7 @@ b67b31c797b1a83d334bd15a9e3a0c1d *tests/testthat/test-pheno.R
 65ad60e4e93f591b25753059f577d8c8 *tests/testthat/test-pipeline.R
 fec3b00e570d4f34c7e7ab3123191c2a *tests/testthat/test-plot.R
 4835f7ab2695a823b3368df94b64fb21 *tests/testthat/test-print.R
-0c2f0121619385a5238838c408470634 *tests/testthat/test-random.R
+eb397e2515b89585ee72c5c9c09c14b7 *tests/testthat/test-random.R
 f3490a6c257df506d799af1f493d5f88 *tests/testthat/test-resample.R
 f52f93d3e6d1bc70cf67e17e2b7823ac *tests/testthat/test-reset.R
 d32e95dd252ea4b5cf6383b2fc1d5784 *tests/testthat/test-rhs.R
