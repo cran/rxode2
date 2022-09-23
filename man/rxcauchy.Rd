@@ -7,9 +7,7 @@
 rxcauchy(location = 0, scale = 1, n = 1L, ncores = 1L)
 }
 \arguments{
-\item{location}{location and scale parameters.}
-
-\item{scale}{location and scale parameters.}
+\item{location, scale}{location and scale parameters.}
 
 \item{n}{number of observations. If \code{length(n) > 1}, the length
     is taken to be the number required.}
@@ -41,9 +39,8 @@ The key to avoid this problem is to either run all simulations in the
 for the whole simulation), pre-generate all random variables
 used for the simulation, or seed the rxode2 engine with \code{rxSetSeed()}
 
-Also care should be made that the computer you will be running on
-can run the same number of cores as you are running so they can
-reproduce your results.
+Internally each ID is seeded with a unique number so that the
+results do not depend on the number of cores used.
 }
 \examples{
 \donttest{

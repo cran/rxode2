@@ -163,8 +163,9 @@ static inline int handleFunctionLogit(transFunctions *tf) {
 }
 
 static inline int handleFunctionSum(transFunctions *tf) {
-  if (!strcmp("prod",tf->v) || !strcmp("sum", tf->v) || !strcmp("sign",  tf->v) ||
-      !strcmp("max", tf->v) || !strcmp("min", tf->v) || !strcmp("rxord", tf->v)){
+  if (!strcmp("prod",tf->v)   || !strcmp("sum", tf->v) || !strcmp("sign",  tf->v) ||
+      !strcmp("max", tf->v)   || !strcmp("min", tf->v) ||
+      !strcmp("rxord", tf->v)){
     int ii = d_get_number_of_children(d_get_child(tf->pn,3))+1;
     if (!strcmp("prod", tf->v)){
       sAppend(&sb, "_prod(_p, _input, _solveData->prodType, %d, (double) ", ii);
@@ -180,7 +181,7 @@ static inline int handleFunctionSum(transFunctions *tf) {
       }
     } else if (!strcmp("rxord", tf->v)) {
       sAppend(&sb, "_rxord(_cSub, %d, (double) ", ii);
-      sAppend(&sbDt, "_rxord( _cSub, %d, (double) ", ii);
+      sAppend(&sbDt, "_rxord(_cSub, %d, (double) ", ii);
     } else {
       sAppend(&sb, "_%s(%d, (double) ", tf->v, ii);
       sAppend(&sbDt, "_%s(%d, (double) ", tf->v, ii);
@@ -211,10 +212,22 @@ static inline int handleFunctionsExceptLinCmt(transFunctions *tf) {
     handleFunctionRchisq(tf) ||
     handleFunctionRgeom(tf) ||
     handleFunctionRbinom(tf) ||
+    handleFunctionRnbinom(tf) ||
+    handleFunctionRnbinomMu(tf) ||
     handleFunctionIsNan(tf) ||
     handleFunctionIsNa(tf) ||
     handleFunctionIsFinite(tf) ||
     handleFunctionIsInfinite(tf);
+}
+
+static inline void handleLlFunctions(transFunctions *tf) {
+  if (!strncmp("llikX", tf->v, 5)) {
+    D_ParseNode *xpn = d_get_child(tf->pn,2);
+    char *v2 = (char*)rc_dup_str(xpn->start_loc.s, xpn->end);
+    tb.nLlik = max2(tb.nLlik, toInt(v2)+1);
+  } else if (!strncmp("llik", tf->v, 4)) {
+    tb.nLlik = max2(tb.nLlik, 1);
+  }
 }
 
 static inline void handleBadFunctions(transFunctions *tf) {
@@ -223,6 +236,8 @@ static inline void handleBadFunctions(transFunctions *tf) {
   int foundFun = 0;
   for (int j = length(_goodFuns); j--;){
     if (!strcmp(CHAR(STRING_ELT(_goodFuns, j)),tf->v)){
+      // Save log-likelihood information
+      handleLlFunctions(tf);
       foundFun = 1;
       j=0;
       break;
@@ -264,6 +279,7 @@ static inline int handlePrintf(nodeInfo ni, char *name, int i, D_ParseNode *xpn)
     if (i == 0){
       sb.o =0; sbDt.o =0;
       sbt.o=0;
+      tb.thread = 0;
       aType(PPRN);
       aAppendN("Rprintf(", 8);
       sAppendN(&sbt,"printf(", 7);

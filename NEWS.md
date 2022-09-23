@@ -1,3 +1,63 @@
+# rxode2 2.0.8
+
+## Breaking changes
+
+- `rxgamma` now only allows a `rate` input.  This aligns with the
+  internal `rxode2` version of `rxgamma` and clarifies how this will
+  be used. It is also aligned with the `llikGamma` function used for
+  generalized likelihood estimation.
+
+- ui `cauchy` simulations now follow the ui for `normal` and `t`
+  distributions, which means you can combine with transformations.
+  This is because the `cauchy` is a `t` distribution with one degree
+  of freedom.
+
+- ui `dnorm()` and `norm()` are no longer equivalent to `add()`.  Now
+  it allows you to use the loglik `llikNorm()` instead of the standard
+  `nlmixr2` style focei likelihood.  This is done by adding `dnorm()`
+  at the end of the line.  It also means `dnorm()` now doesn't take
+  any arguments.
+
+## New features
+
+- Allow models in the `nlmixr2` form without an `ini({})` block
+
+- Allow model piping of an omega matrix by `f %>% ini(omegaMatrix)`
+
+- Standard models created with `rxode2()` can no be piped into a model function
+
+- Families of log-likelihood were added to `rxode2` so that mixed
+  likelihood nonlinear mixed effects models may be specified and run.
+
+- The memory footprint of a `rxode2` solving has been reduced
+
+- Piping now allow named strings (issue #249)
+
+## Bug fixes
+
+- `rxode2`'s symengine would convert `sqrt(2)` to `M_SQRT_2` when it
+  should be `M_SQRT2`.  This has been fixed; it was most noticeable in
+  nlmixr2 log-likelihood estimation methods
+  
+- `rxode2` treats `DV` as a non-covariate with `etTran` (last time it
+  would duplicate if it is in the model).  This is most noticeable in
+  the nlmixr2 log-likelihood estimation methods.
+  
+## New features
+
+- A new flag (`rxFlag`) has been created to tell you where in the
+  `rxode2` solving process you are.  This is useful for debugging. If
+  outputting this variable it will always be `11` or calculating the
+  left handed equations.  If you are using in conjunction with the
+  `printf()` methods, it is a double variable and should be formatted
+  with `"%f"`.
+  
+- An additional option of `fullPrint` has been added to `rxode2()`
+  which allows `rprintf()` to be used in almost all of `rxode2()`
+  steps (inductive linearization and matrix exponential are the
+  exception here) instead of just the integration `ddt` step.  It
+  defaults to `FALSE`.
+
 # rxode2 2.0.7
 
 - Removed accidental `^S` from news as requested by CRAN.

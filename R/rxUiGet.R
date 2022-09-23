@@ -10,7 +10,7 @@
 #' @param obj rxode2 ui object
 #' @param arg argument that you are trying to get from rxui
 #' @param exact exact argument
-#' @return
+#' @return object for `rxUiGet`
 #' @author Matthew L. Fidler
 #' @noRd
 .uiToRxUiGet <- function(obj, arg, exact=TRUE) {
@@ -41,6 +41,23 @@ rxUiGet <- function(x, ...) {
   }
   UseMethod("rxUiGet")
 }
+
+#' @export
+rxUiGet.state <- function(x, ...) {
+  .ui <- x[[1]]
+  rxModelVars(.ui)$state
+}
+attr(rxUiGet.state, "desc") <- "states associated with the model (in order)"
+
+#' @export
+rxUiGet.stateDf <- function(x, ...) {
+  .ui <- x[[1]]
+  .state <- rxModelVars(.ui)$state
+  data.frame("Compartment Number"=seq_along(.state), "Compartment Name"=.state,
+             check.names=FALSE)
+}
+attr(rxUiGet.stateDf, "desc") <- "states and cmt number data.frame"
+
 #' @export
 #' @rdname rxUiGet
 rxUiGet.theta <- function(x, ...) {
@@ -104,7 +121,7 @@ rxUiGet.muRefTable <- function(x, ...) {
   .muRefCov <- get("muRefCovariateDataFrame", .x)
   if (length(.muRefCov$theta) > 0) {
     .env <- new.env(parent=emptyenv())
-    lapply(seq_along(.muRefCov$theta), function(i){
+    lapply(seq_along(.muRefCov$theta), function(i) {
       .theta <- .muRefCov$theta[i]
       .cov <- paste0(.muRefCov$covariate[i], "*", .muRefCov$covariateParameter[i])
       if (exists(.theta, .env)) {
@@ -156,14 +173,22 @@ attr(rxUiGet.multipleEndpoint, "desc") <- "table of multiple endpoint translatio
 rxUiGet.funPrint <- function(x, ...) {
   .x <- x[[1]]
   .ls <- ls(.x$meta, all.names=TRUE)
-  .ret <- vector("list", length(.ls) + 3)
+  .hasIni <- length(.x$iniDf$cond) > 0
+  .ret <- vector("list", length(.ls) + ifelse(.hasIni, 3, 2))
   .ret[[1]] <- quote(`{`)
   for (.i in seq_along(.ls)) {
     .ret[[.i + 1]] <- eval(parse(text=paste("quote(", .ls[.i], "<-", deparse1(.x$meta[[.ls[.i]]]), ")")))
   }
-  .len <- length(.ls)
-  .ret[[.len + 2]] <- .x$iniFun
-  .ret[[.len + 3]] <- .x$modelFun
+  .theta <- x$theta
+  .omega <- x$omega
+  if (.hasIni) {
+    .len <- length(.ls)
+    .ret[[.len + 2]] <- .x$iniFun
+    .ret[[.len + 3]] <- .x$modelFun
+  } else {
+    .len <- length(.ls)
+    .ret[[.len + 2]] <- .x$modelFun
+  }
   .ret
 }
 attr(rxUiGet.funPrint, "desc") <- "Normalized, quoted model function (for printing)"
@@ -172,7 +197,9 @@ attr(rxUiGet.funPrint, "desc") <- "Normalized, quoted model function (for printi
 #' @rdname rxUiGet
 rxUiGet.fun <- function(x, ...) {
   .ret <- rxUiGet.funPrint(x, ...)
-  .ret2 <- function(){}
+  .ret2 <- function() {
+    
+  }
   body(.ret2) <- as.call(.ret)
   .ret2
 }
@@ -213,7 +240,7 @@ attr(rxUiGet.modelFun, "desc") <- "normalized, quoted `model()` block"
 rxUiGet.modelDesc <- function(x, ...) {
   .mv <- get("mv0", x[[1]])
   .mvL <- get("mvL", x[[1]])
-  if (!is.null(.mvL)){
+  if (!is.null(.mvL)) {
     return(sprintf(
       "rxode2-based solved PK %s-compartment model%s%s", .mvL$flags["ncmt"],
       ifelse(.mv$extraCmt == 2, " with first-order absorption", ""),
@@ -262,10 +289,10 @@ rxUiGet.default <- function(x, ...) {
 .rxUiGetSupportedDollars <- function() {
   .v <- as.character(utils::methods("rxUiGet"))
   .v <- .v[.v != "rxUiGet.default"]
-  .cls <- vapply(.v, function(methodStr){
-    substr(methodStr,9,nchar(methodStr))
+  .cls <- vapply(.v, function(methodStr) {
+    substr(methodStr, 9, nchar(methodStr))
   }, character(1), USE.NAMES=FALSE)
-  .v <- vapply(.cls, function(cls){
+  .v <- vapply(.cls, function(cls) {
     .desc <- attr(utils::getS3method("rxUiGet", cls), "desc")
     if (is.null(.desc)) .desc <- ""
     .desc
@@ -280,12 +307,12 @@ rxUiGet.default <- function(x, ...) {
 str.rxUi <- function(object, ...) {
   cat("rxode2 model function\n")
   .s <- .rxUiGetSupportedDollars()
-  cat(paste(strtrim(paste(vapply(names(.s), function(x){
+  cat(paste(strtrim(paste(vapply(names(.s), function(x) {
     .nchar <- nchar(x)
     if (.nchar >= 10) {
       return(paste0(" $ ", x, ": "))
     } else {
-      return(paste0(" $ ",x, paste(rep(" ", 10 - .nchar), collapse=""), ": "))
+      return(paste0(" $ ", x, paste(rep(" ", 10 - .nchar), collapse=""), ": "))
     }
   }, character(1), USE.NAMES=FALSE), .s), 128), collapse="\n"))
   cat("\n")

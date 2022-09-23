@@ -5,7 +5,7 @@
     return(NULL)
   }
   .predLine <- .predDf[line, ]
-  .ret <- list(x, .predLine)
+  .ret <- list(x, .predLine, line)
   class(.ret) <- c(paste(.predLine$distribution), "rxGetDistributionSimulationLines")
   .ret
 }
@@ -36,20 +36,22 @@ rxGetDistributionSimulationLines <- function(line) {
   "weibull"="rweibull",
   "cauchy"="rcauchy",
   "dgamma"="rgamma",
-  "ordinal"="rordinal"
+  "ordinal"="rordinal",
+  "nbinom"="rnbinom",
+  "nbinomMu"="rnbinomMu"
 )
 
 .getQuotedDistributionAndSimulationArgs <- function(line) {
   env <- line[[1]]
   pred1 <- line[[2]]
   .dist <- as.character(pred1$distribution)
-  if (.dist == "-2LL") {
+  if (.dist == "LL") {
     return(env$lstExpr[[pred1$line]][[3]])
   }
   .nargs <- max(.errDist[[.dist]])
   .cnd <- pred1$cond
   .argName <- .namedArgumentsToPredDf[[.dist]]
-  .args <- vapply(seq(1:.nargs), function(.i){
+  .args <- vapply(seq(1:.nargs), function(.i) {
     .curDist <- .argName[.i]
     if (!is.na(pred1[[.curDist]])) {
       return(pred1[[.curDist]])
@@ -64,7 +66,6 @@ rxGetDistributionSimulationLines <- function(line) {
     }
   }, character(1))
 
-
   as.call(lapply(c(.simulationFun[[.dist]], .args[.args != ""]), str2lang))
 }
 
@@ -73,23 +74,40 @@ rxGetDistributionSimulationLines <- function(line) {
 rxGetDistributionSimulationLines.norm <- function(line) {
   env <- line[[1]]
   pred1 <- line[[2]]
+  .errNum <- line[[3]]
   .err <- str2lang(paste0("err.", pred1$var))
   .ret <- vector("list", 2)
-  #.ret[[1]] <- bquote(.(.err) <- 0)
   .ret[[1]] <- bquote(ipredSim <- rxTBSi(rx_pred_, rx_lambda_, rx_yj_, rx_low_, rx_hi_))
   .ret[[2]] <- bquote(sim <- rxTBSi(rx_pred_+sqrt(rx_r_) * .(.err), rx_lambda_, rx_yj_, rx_low_, rx_hi_))
-  c(.handleSingleErrTypeNormOrTFoceiBase(env, pred1), .ret)
+  c(.handleSingleErrTypeNormOrTFoceiBase(env, pred1, .errNum, rxPredLlik=FALSE), .ret)
 }
+
+#' @rdname rxGetDistributionSimulationLines
+#' @export
+rxGetDistributionSimulationLines.dnorm <- rxGetDistributionSimulationLines.norm
 
 #' @rdname rxGetDistributionSimulationLines
 #' @export
 rxGetDistributionSimulationLines.t <- function(line) {
   env <- line[[1]]
   pred1 <- line[[2]]
+  .errNum <- line[[3]]
   .ret <- vector("list", 2)
   .ret[[1]] <- bquote(ipredSim <- rxTBSi(rx_pred_, rx_lambda_, rx_yj_, rx_low_, rx_hi_))
   .ret[[2]] <- bquote(sim <- rxTBSi(rx_pred_+sqrt(rx_r_) * .(.getQuotedDistributionAndSimulationArgs(line)), rx_lambda_, rx_yj_, rx_low_, rx_hi_))
-  c(.handleSingleErrTypeNormOrTFoceiBase(env, pred1), .ret)
+  c(.handleSingleErrTypeNormOrTFoceiBase(env, pred1, .errNum, rxPredLlik=FALSE), .ret)
+}
+
+#' @rdname rxGetDistributionSimulationLines
+#' @export
+rxGetDistributionSimulationLines.cauchy <- function(line) {
+  env <- line[[1]]
+  pred1 <- line[[2]]
+  .errNum <- line[[3]]
+  .ret <- vector("list", 2)
+  .ret[[1]] <- bquote(ipredSim <- rxTBSi(rx_pred_, rx_lambda_, rx_yj_, rx_low_, rx_hi_))
+  .ret[[2]] <- bquote(sim <- rxTBSi(rx_pred_+sqrt(rx_r_) * .(.getQuotedDistributionAndSimulationArgs(line)), rx_lambda_, rx_yj_, rx_low_, rx_hi_))
+  c(.handleSingleErrTypeNormOrTFoceiBase(env, pred1, .errNum, rxPredLlik=FALSE), .ret)
 }
 
 #' @rdname rxGetDistributionSimulationLines
@@ -97,7 +115,32 @@ rxGetDistributionSimulationLines.t <- function(line) {
 rxGetDistributionSimulationLines.ordinal <- function(line) {
   .env <- line[[1]]
   .pred1 <- line[[2]]
+  .errNum <- line[[3]]
   .c <- .env$lstExpr[[.pred1$line[1]]][[3]]
+  .ce <- try(eval(.c), silent=TRUE)
+  if (inherits(.ce, "try-error")) {
+  } else if (inherits(.ce, "numeric") &&
+               !is.null(names(.ce))) {
+    .n <- names(.ce)
+    .ln <- length(.n)
+    if (.n[.ln] != "") {
+      stop("last element in ordinal simulation of c(p1=0, p2=0.5, ...) must be a number, not a named number",
+           call.=FALSE)
+    }
+    .n <- .n[.n != ""]
+    if (length(.n) != .ln - 1) {
+      stop("names for ordinal simulation incorrect")
+    }
+    .ret <- vector("list", 3)
+    .ret[[1]] <- quote(ipredSim <- NA)
+    .ret[[2]] <- str2lang(paste0("rx_sim_~rxord(", paste(.n, collapse=", "), ")"))
+    .ce <- setNames(.ce, NULL)
+    
+    .ret[[3]] <- str2lang(paste0("sim<-", paste(vapply(seq_along(.ce), function(i) {
+      paste("(rx_sim_ == ", i, ")*", .ce[i]) 
+   }, character(1), USE.NAMES=FALSE), collapse="+")))
+    return(.ret)
+  }
   .c[[1]] <- quote(`rxord`)
   .ret <- vector("list", 2)
   .ret[[1]] <- quote(ipredSim <- NA)
@@ -105,22 +148,22 @@ rxGetDistributionSimulationLines.ordinal <- function(line) {
   .ret
 }
 
-
 #' @rdname rxGetDistributionSimulationLines
 #' @export
 rxGetDistributionSimulationLines.default <- function(line) {
   env <- line[[1]]
   pred1 <- line[[2]]
+  .errNum <- line[[3]]
   .ret <- vector("list", 1)
   .ret[[1]] <- bquote(sim <- .(.getQuotedDistributionAndSimulationArgs(line)))
-  .ret
+  c(.handleSingleErrTypeNormOrTFoceiBase(env, pred1, .errNum, rxPredLlik=FALSE), .ret)
 }
 
 #' @rdname rxGetDistributionSimulationLines
 #' @export
 rxGetDistributionSimulationLines.rxUi <- function(line) {
   .predDf <- get("predDf", line)
-  lapply(seq_along(.predDf$cond), function(c){
+  lapply(seq_along(.predDf$cond), function(c) {
     .mod <- .createSimLineObject(line, c)
     rxGetDistributionSimulationLines(.mod)
   })
@@ -164,7 +207,7 @@ rxUiGet.simulationSigma <- function(x, ...) {
   .exact <- x[[2]]
   .predDf <- get("predDf", .x)
   .sigmaNames <- vapply(seq_along(.predDf$var), function(i) {
-    if (.predDf$distribution[i] == "norm") {
+    if (.predDf$distribution[i] %in% c("dnorm",  "norm")) {
       paste0("err.", .predDf$var[i])
     } else {
       ""
@@ -384,7 +427,7 @@ rxCombineErrorLines <- function(uiModel, errLines=NULL, prefixLines=NULL, params
     .lenLines <- length(.predDf$line)
     .if <- useIf
   } else {
-    .lenLines <- sum(vapply(seq_along(errLines), function(i){
+    .lenLines <- sum(vapply(seq_along(errLines), function(i) {
       length(errLines[[i]])
     }, integer(1)))
   }
@@ -441,7 +484,7 @@ rxCombineErrorLines <- function(uiModel, errLines=NULL, prefixLines=NULL, params
     }
 
   }
-  for(.i in seq_along(.cmtLines)) {
+  for (.i in seq_along(.cmtLines)) {
     .ret[[.k]] <- .cmtLines[[.i]]
     .k <- .k + 1
   }

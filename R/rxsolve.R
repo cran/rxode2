@@ -88,11 +88,12 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'   solving requests.  When specified this controls the relative and
 #'   absolute tolerances of the ODE solvers.  By default the tolerance
 #'   is \code{0.5*10^(-sigdig-2)} for regular ODEs. For the
-#'   sensitivity equations and steady-state solutions the default is
-#'   \code{0.5*10^(-sigdig-1.5)} (sensitivity changes only applicable
-#'   for liblsoda).  By default this is unspecified (`NULL`) and uses
-#'   the standard `atol`/`rtol`.
-#'
+#'   sensitivity equations the default is \code{0.5*10^(-sigdig-1.5)}
+#'   (sensitivity changes only applicable for liblsoda).  This also
+#'   controls the `atol`/`rtol` of the steady state solutions. The
+#'   `ssAtol`/`ssRtol` is `0.5*10^(-sigdig)` and for the sensitivities 
+#'   `0.5*10^(-sigdig+0.625)`.  By default
+#'   this is unspecified (`NULL`) and uses the standard `atol`/`rtol`.
 #'
 #' @param atol a numeric absolute tolerance (1e-8 by default) used
 #'     by the ODE solver to determine if a good solution has been
@@ -622,6 +623,15 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'   cores. This is the reason this is set to be one, regardless of
 #'   what the number of cores are used in threaded ODE solving.
 #'
+#' @param nLlikAlloc The number of log likelihood endpoints that are
+#'   used in the model.  This allows independent log likelihood per
+#'   endpoint in focei for nlmixr2.  It likely shouldn't be set,
+#'   though it won't hurt anything if you do (just may take up more
+#'   memory for larger allocations).
+#'
+#' @param useStdPow This uses C's `pow` for exponentiation instead of
+#'   R's `R_pow` or `R_pow_di`.  By default this is `FALSE`
+#'
 #' @return An \dQuote{rxSolve} solve object that stores the solved
 #'   value in a special data.frame or other type as determined by
 #'   `returnType`. By default this has as many rows as there are
@@ -729,7 +739,9 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
                     rtolSens = 1.0e-6,
                     ssAtolSens=1.0e-8,
                     ssRtolSens=1.0e-6,
-                    simVariability=NA) {
+                    simVariability=NA,
+                    nLlikAlloc=NULL,
+                    useStdPow=FALSE) {
   if (is.null(object)) {
     .xtra <- list(...)
     .nxtra <- names(.xtra)
@@ -748,8 +760,8 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
         stop("'transitAbs' is no longer supported, use 'evid=7' instead",
              call.=FALSE)
       }
-      stop("unused argument: ", paste
-      (paste0("'", .bad, "'", sep=""), collapse=", "),
+      stop("unused argument: ",
+           paste(paste0("'", .bad, "'", sep=""), collapse=", "),
            call.=FALSE)
     }
     if (checkmate::testIntegerish(sigmaXform, len=1L, lower=1L, upper=6L, any.missing=FALSE)) {
@@ -821,7 +833,7 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
     } else if (inherits(sigma, "character")) {
       .sigma <- sigma
     } else {
-      .sigma <- lotri::lotri(sigma)
+      .sigma <- lotri(sigma)
     }
     if (inherits(omega, "logical")) {
       .omega <- omega
@@ -830,7 +842,7 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
     } else if (inherits(omega, "lotri")) {
       .omega <- omega
     } else {
-      .omega <- lotri::lotri(omega)
+      .omega <- lotri(omega)
     }
     if (checkmate::testIntegerish(indLinMatExpType, len=1, lower=1, upper=3, any.missing=FALSE)) {
       .indLinMatExpType <- as.integer(indLinMatExpType)
@@ -869,14 +881,14 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
     if (is.null(scale)) {
     } else if (is.list(scale)) {
       checkmate::assertList(scale, types="double", any.missing=FALSE,names="strict")
-      lapply(names(scale), function(n){
+      lapply(names(scale), function(n) {
         checkmate::assertNumeric(scale[[n]], lower=0, finite=TRUE, any.missing=FALSE, len=1, .var.name=n)
       })
     } else {
       checkmate::assertNumeric(scale, lower=0, finite=TRUE, any.missing=FALSE,names="strict")
     }
     if (!is.null(sigdig)) {
-      checkmate::assertNumeric(sigdig, lower=1, finite=TRUE, any.missing=FALSE, len=1)
+      checkmate::assertNumeric(sigdig, lower=2, finite=TRUE, any.missing=FALSE, len=1)
       if (missing(atol)) {
         atol <- 0.5 * 10^(-sigdig - 2)
       }
@@ -890,16 +902,16 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
         rtolSens <- 0.5 * 10^(-sigdig - 1.5)
       }
       if (missing(ssAtol)) {
-        ssAtol <- 0.5 * 10^(-sigdig - 2)
+        ssAtol <- 0.5 * 10^(-sigdig)
       }
       if (missing(ssRtol)) {
-        ssRtol <- 0.5 * 10^(-sigdig - 2)
+        ssRtol <- 0.5 * 10^(-sigdig)
       }
       if (missing(ssAtolSens)) {
-        ssAtolSens <- 0.5 * 10^(-sigdig - 1.5)
+        ssAtolSens <- 0.5 * 10^(-sigdig + 0.625)
       }
       if (missing(ssRtolSens)) {
-        ssRtolSens <- 0.5 * 10^(-sigdig - 1.5)
+        ssRtolSens <- 0.5 * 10^(-sigdig + 0.625)
       }
     }
     checkmate::assertNumeric(atol, lower=0, finite=TRUE, any.missing=FALSE, min.len=1)
@@ -981,6 +993,15 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
     }
     checkmate::assertLogical(resampleID, null.ok=FALSE, any.missing=FALSE, len=1)
     checkmate::assertIntegerish(maxwhile, lower=20, len=1)
+    if (!is.null(nLlikAlloc)) {
+      checkmate::assertIntegerish(nLlikAlloc, lower=1, len=1, any.missing=FALSE)
+    }
+    if (checkmate::testLogical(useStdPow)) {
+      checkmate::assertLogical(useStdPow, len=1, any.missing=FALSE)
+    } else {
+      checkmate::assertIntegerish(useStdPow, lower=0, upper=1, len=1, any.missing=FALSE)
+    }
+    useStdPow <- as.integer(useStdPow)
     maxwhile <- as.integer(maxwhile)
     .ret <- list(
       scale = scale, #
@@ -1068,7 +1089,9 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
       rtolSens = rtolSens,
       ssAtolSens=ssAtolSens,
       ssRtolSens=ssRtolSens,
-      simVariability=simVariability
+      simVariability=simVariability,
+      nLlikAlloc=nLlikAlloc,
+      useStdPow=useStdPow
     )
     class(.ret) <- "rxControl"
     return(.ret)
@@ -1175,10 +1198,14 @@ rxSolve.nlmixr2FitData <- function(object, params = NULL, events = NULL, inits =
   if (exists("control", envir=.env)) {
     .oldControl <- get("control", envir=.env)
     assign("control", .rxControl, envir=.env)
-    on.exit({assign("control", .oldControl, envir=.env)})
+    on.exit({
+      assign("control", .oldControl, envir=.env)
+    })
   } else {
     assign("control", .rxControl, envir=.env)
-    on.exit({rm(list="control", envir=.env)})
+    on.exit({
+      rm(list="control", envir=.env)
+    })
   }
   .rxControl <- object$rxControlWithVar
   .lst[[2]] <- .rxControl
@@ -1397,9 +1424,7 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
   .ctl$keepF <- .keepF
   rxSolveFree()
 
-
-
-  if (!is.null(theta) | !is.null(eta)) {
+  if (!is.null(theta) || !is.null(eta)) {
     .theta <- theta
     .eta <- eta
     if (!is.null(.theta)) {

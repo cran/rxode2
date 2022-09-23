@@ -39,6 +39,8 @@ rxode2_fn2 gammaqInva;
 rxode2i_fn2 rxnorm;
 rxode2i_fn2 rxnormV;
 rxode2i_rxbinom rxbinom;
+rxode2i_rxbinom rxnbinom;
+rxode2i_rxbinom rxnbinomMu;
 rxode2i_fn2 rxcauchy;
 rxode2i_fn rxchisq;
 rxode2i_fn rxexp;
@@ -54,6 +56,8 @@ rxode2i_fn2 rxweibull;
 rxode2i2_fn2 rinorm;
 rxode2i2_fn2 rinormV;
 rxode2i2_ribinom ribinom;
+rxode2i2_ribinom rinbinom;
+rxode2i2_ribinom rinbinomMu;
 rxode2i2_fn2 ricauchy;
 rxode2i2_fn richisq;
 rxode2i2_fn riexp;
@@ -65,6 +69,61 @@ rxode2i2_ifn ripois;
 rxode2i2_fn rit_;
 rxode2i2_fn2 riunif;
 rxode2i2_fn2 riweibull;
+
+rxode2_llikNormFun _llikNorm;
+rxode2_llikNormFun _llikNormDmean;
+rxode2_llikNormFun _llikNormDsd;
+
+rxode2_llikPoisFun _llikPois;
+rxode2_llikPoisFun _llikPoisDlambda;
+
+rxode2_llikBinomFun _llikBinom;
+rxode2_llikBinomFun _llikBinomDprob;
+
+rxode2_llikBinomFun _llikNbinom;
+rxode2_llikBinomFun _llikNbinomDprob;
+
+rxode2_llikBinomFun _llikNbinomMu;
+rxode2_llikBinomFun _llikNbinomMuDmu;
+
+rxode2_llikBetaFun _llikBeta;
+rxode2_llikBetaFun _llikBetaDshape1;
+rxode2_llikBetaFun _llikBetaDshape2;
+
+rxode2_llikTFun _llikT;
+rxode2_llikTFun _llikTDdf;
+rxode2_llikTFun _llikTDmean;
+rxode2_llikTFun _llikTDsd;
+
+rxode2_llikChisqFun _llikChisq;
+rxode2_llikChisqFun _llikChisqDdf;
+
+rxode2_llikExpFun _llikExp;
+rxode2_llikExpFun _llikExpDrate;
+
+rxode2_llikFFun _llikF;
+rxode2_llikFFun _llikFDdf1;
+rxode2_llikFFun _llikFDdf2;
+
+rxode2_llikGeomFun _llikGeom;
+rxode2_llikGeomFun _llikGeomDp;
+
+rxode2_llikUnifFun _llikUnif;
+rxode2_llikUnifFun _llikUnifDalpha;
+rxode2_llikUnifFun _llikUnifDbeta;
+
+rxode2_llikWeibullFun _llikWeibull;
+rxode2_llikWeibullFun _llikWeibullDshape;
+rxode2_llikWeibullFun _llikWeibullDscale;
+
+rxode2_llikGammaFun _llikGamma;
+rxode2_llikGammaFun _llikGammaDshape;
+rxode2_llikGammaFun _llikGammaDrate;
+
+rxode2_llikCauchyFun _llikCauchy;
+rxode2_llikCauchyFun _llikCauchyDlocation;
+rxode2_llikCauchyFun _llikCauchyDscale;
+
 
 rxode2_compareFactorVal_fn _compareFactorVal;
 
@@ -109,21 +168,26 @@ double _sign(unsigned int n, ...) {
 }
 
 double _rxord(int _cSub, unsigned int n,  ...) {
+  rx_solving_options_ind* ind = &(_solveData->subjects[_cSub]);
+  if (!ind->inLhs) {
+    return 1.0;
+  }
   va_list valist;
   va_start(valist, n);
-  double ret = 0.0;
+  double ret = 1.0;
   double p = 0.0;
-  double u = rxunif(&_solveData->subjects[_cSub], 0.0, 1.0);
+  double u = rxunif(ind, 0.0, 1.0);
+  int found = 0;
   for (unsigned int i = 0; i < n; i++) {
     p += va_arg(valist, double);
-    if (ret < 1e-6) {
+    if (!found) {
       if (u < p) {
         ret = (double)(i+1);
+        found = 1;
       }
     }
   }
-  if (p >= 1) ret = NA_REAL;
-  else if (ret < 1e-6) ret = (double)(n+1);
+  if (!found) ret =(double)(n+1);
   va_end(valist);
   return ret;
 }
@@ -200,7 +264,9 @@ void _assignFuns0() {
     
   rxnorm = (rxode2i_fn2)R_GetCCallable("rxode2", "rxnorm");
   rxnormV = (rxode2i_fn2)R_GetCCallable("rxode2", "rxnormV");
-  rxbinom = (rxode2i_rxbinom)R_GetCCallable("rxode2","rxbinom") ;
+  rxbinom = (rxode2i_rxbinom)R_GetCCallable("rxode2","rxbinom");
+  rxnbinom = (rxode2i_rxbinom)R_GetCCallable("rxode2","rxnbinom");
+  rxnbinomMu = (rxode2i_rxbinom)R_GetCCallable("rxode2","rxnbinomMu");
   rxcauchy = (rxode2i_fn2)R_GetCCallable("rxode2","rxcauchy") ;
   rxchisq = (rxode2i_fn)R_GetCCallable("rxode2","rxchisq") ;
   rxexp = (rxode2i_fn)R_GetCCallable("rxode2","rxexp");
@@ -215,7 +281,9 @@ void _assignFuns0() {
 
   rinorm = (rxode2i2_fn2)R_GetCCallable("rxode2", "rinorm");
   rinormV = (rxode2i2_fn2)R_GetCCallable("rxode2", "rinormV");
-  ribinom = (rxode2i2_ribinom)R_GetCCallable("rxode2","ribinom") ;
+  ribinom = (rxode2i2_ribinom)R_GetCCallable("rxode2","ribinom");
+  rinbinom = (rxode2i2_ribinom)R_GetCCallable("rxode2","rinbinom");
+  rinbinomMu = (rxode2i2_ribinom)R_GetCCallable("rxode2","rinbinomMu");
   ricauchy = (rxode2i2_fn2)R_GetCCallable("rxode2","ricauchy") ;
   richisq = (rxode2i2_fn)R_GetCCallable("rxode2","richisq") ;
   riexp = (rxode2i2_fn)R_GetCCallable("rxode2","riexp");
@@ -245,6 +313,61 @@ void _assignFuns0() {
   _compareFactorVal=(rxode2_compareFactorVal_fn) R_GetCCallable("rxode2", "compareFactorVal");
   _update_par_ptr = (_update_par_ptr_p) R_GetCCallable("rxode2","_update_par_ptr");
   _getParCov = (_getParCov_p) R_GetCCallable("rxode2","_getParCov");
+  
+  _llikNorm=(rxode2_llikNormFun) R_GetCCallable("rxode2","rxLlikNorm");
+  _llikNormDmean=(rxode2_llikNormFun) R_GetCCallable("rxode2","rxLlikNormDmean");
+  _llikNormDsd=(rxode2_llikNormFun) R_GetCCallable("rxode2","rxLlikNormDsd");
+  
+  _llikPois        = (rxode2_llikPoisFun) R_GetCCallable("rxode2","rxLlikPois");
+  _llikPoisDlambda = (rxode2_llikPoisFun) R_GetCCallable("rxode2","rxLlikPoisDlambda");
+
+  _llikBinom = (rxode2_llikBinomFun) R_GetCCallable("rxode2", "rxLlikBinom");
+  _llikBinomDprob = (rxode2_llikBinomFun) R_GetCCallable("rxode2", "rxLlikBinomDprob");
+
+  _llikNbinom = (rxode2_llikBinomFun) R_GetCCallable("rxode2", "rxLlikNbinom");
+  _llikNbinomDprob = (rxode2_llikBinomFun) R_GetCCallable("rxode2", "rxLlikNbinomDprob");
+  
+  _llikNbinomMu = (rxode2_llikBinomFun) R_GetCCallable("rxode2", "rxLlikNbinomMu");
+  _llikNbinomMuDmu = (rxode2_llikBinomFun) R_GetCCallable("rxode2", "rxLlikNbinomMuDmu");
+
+  _llikBeta = (rxode2_llikBetaFun)   R_GetCCallable("rxode2", "rxLlikBeta");
+  _llikBetaDshape1 = (rxode2_llikBetaFun) R_GetCCallable("rxode2", "rxLlikBetaDshape1");
+  _llikBetaDshape2 = (rxode2_llikBetaFun) R_GetCCallable("rxode2", "rxLlikBetaDshape2");
+
+  _llikT = (rxode2_llikTFun)   R_GetCCallable("rxode2", "rxLlikT");
+  _llikTDdf = (rxode2_llikTFun) R_GetCCallable("rxode2", "rxLlikTDdf");
+  _llikTDmean = (rxode2_llikTFun) R_GetCCallable("rxode2", "rxLlikTDmean");
+  _llikTDsd = (rxode2_llikTFun) R_GetCCallable("rxode2", "rxLlikTDsd");
+  _llikChisq    = (rxode2_llikChisqFun) R_GetCCallable("rxode2", "rxLlikChisq");
+  _llikChisqDdf = (rxode2_llikChisqFun) R_GetCCallable("rxode2", "rxLlikChisqDdf");
+
+  _llikExp    = (rxode2_llikExpFun) R_GetCCallable("rxode2", "rxLlikExp");
+  _llikExpDrate = (rxode2_llikExpFun) R_GetCCallable("rxode2", "rxLlikExpDrate");
+
+  _llikF    = (rxode2_llikFFun) R_GetCCallable("rxode2", "rxLlikF");
+  _llikFDdf1 = (rxode2_llikFFun) R_GetCCallable("rxode2", "rxLlikFDdf1");
+  _llikFDdf2 = (rxode2_llikFFun) R_GetCCallable("rxode2", "rxLlikFDdf2");
+
+  _llikGeom    = (rxode2_llikGeomFun) R_GetCCallable("rxode2", "rxLlikGeom");
+  _llikGeomDp  = (rxode2_llikGeomFun) R_GetCCallable("rxode2", "rxLlikGeomDp");
+
+  _llikUnif        = (rxode2_llikUnifFun) R_GetCCallable("rxode2", "rxLlikUnif");
+  _llikUnifDalpha  = (rxode2_llikUnifFun) R_GetCCallable("rxode2", "rxLlikUnifDalpha");
+  _llikUnifDbeta   = (rxode2_llikUnifFun) R_GetCCallable("rxode2", "rxLlikUnifDbeta");
+
+  _llikWeibull        = (rxode2_llikWeibullFun) R_GetCCallable("rxode2", "rxLlikWeibull");
+  _llikWeibullDshape  = (rxode2_llikWeibullFun) R_GetCCallable("rxode2", "rxLlikWeibullDshape");
+  _llikWeibullDscale   = (rxode2_llikWeibullFun) R_GetCCallable("rxode2", "rxLlikWeibullDscale");
+
+  _llikGamma        = (rxode2_llikGammaFun) R_GetCCallable("rxode2", "rxLlikGamma");
+  _llikGammaDshape  = (rxode2_llikGammaFun) R_GetCCallable("rxode2", "rxLlikGammaDshape");
+  _llikGammaDrate   = (rxode2_llikGammaFun) R_GetCCallable("rxode2", "rxLlikGammaDrate");
+
+  _llikCauchy        = (rxode2_llikCauchyFun) R_GetCCallable("rxode2", "rxLlikCauchy");
+  _llikCauchyDlocation  = (rxode2_llikCauchyFun) R_GetCCallable("rxode2", "rxLlikCauchyDlocation");
+  _llikCauchyDscale   = (rxode2_llikCauchyFun) R_GetCCallable("rxode2", "rxLlikCauchyDscale");
+
+
   _solveData = _getRxSolve_();
 }
 

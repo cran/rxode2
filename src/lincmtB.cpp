@@ -1,7 +1,13 @@
 //#undef NDEBUG
+#ifndef NDEBUG
+#define NDEBUG // just in case
+#endif
 #define USE_FC_LEN_T
 #define STRICT_R_HEADERS
 #include <stan/math.hpp>
+#ifndef NDEBUG
+#define NDEBUG // just in case
+#endif
 #include <Rcpp.h>
 #include <RcppEigen.h>
 #include "../inst/include/rxode2.h"
@@ -2663,7 +2669,11 @@ extern "C" double linCmtB(rx_solve *rx, unsigned int id,
     if (idx <= ind->solved && sameTime){
       // Pull from last solved value (cached)
       double *A = getAdvan(idx);
-      return linCmtBg(A, t, val, trans, ncmt, oral0, dd_v1, dd_p3, dd_p5, true, id);
+      if (A[oral0] == 0.0) {
+        ind->solved = max2(idx-1, 0);
+      } else {
+        return linCmtBg(A, t, val, trans, ncmt, oral0, dd_v1, dd_p3, dd_p5, true, id);
+      }
     }
     MatrixPd params(2*ncmt + oral0, 1);
     params(0, 0) = dd_p1;

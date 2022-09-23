@@ -1,4 +1,5 @@
 rxTest({
+  
   .rx <- loadNamespace("rxode2")
 
   testPipeQuote <- function(..., envir=parent.frame()) {
@@ -17,7 +18,7 @@ rxTest({
       tv = 3
       tcl = 10
       eta.v+eta.cl~unfix(cor(sd(0.3,0.02,0.1)))
-    }), list(quote(-ka),
+    }, "tv10=3"), list(quote(-ka),
              quote(tka <- 0.5),
              quote(tv <- 3),
              quote(tcl <- 10),
@@ -27,7 +28,8 @@ rxTest({
              quote(eta.ka ~ 3),
              quote(tv <- 3),
              quote(tcl <- 10),
-             quote(eta.v + eta.cl ~ unfix(cor(sd(0.3, 0.02, 0.1))))))
+             quote(eta.v + eta.cl ~ unfix(cor(sd(0.3, 0.02, 0.1)))),
+             quote(tv10 <- 3)))
 
     expect_equal(testPipeQuote(tka=0.5, {
       tv = 3
@@ -358,9 +360,9 @@ rxTest({
 
   one.compartment <- function() {
     ini({
-      tka <- 0.45 ; label("Log Ka")
-      tcl <- 1 ; label("Log Cl")
-      tv <- 3.45 ; label("Log V")
+      tka <- 0.45 
+      tcl <- 1 
+      tv <- 3.45 
       eta.ka ~ 0.6
       eta.cl ~ 0.3
       eta.v ~ 0.1
@@ -756,6 +758,15 @@ rxTest({
     testEst(f %>% ini(eta.cl+eta.v~fix(cor(sd(0.3,0.02,0.1)))), "eta.cl", -Inf, 0.3 * 0.3, Inf, TRUE)
     testEst(f %>% ini(eta.cl+eta.v~fix(cor(sd(0.3,0.02,0.1)))), "eta.v", -Inf, 0.1 * 0.1, Inf, TRUE)
     testEst(f %>% ini(eta.cl+eta.v~fix(cor(sd(0.3,0.02,0.1)))), "(eta.cl,eta.v)", -Inf, 0.1 * 0.3 * 0.02, Inf, TRUE)
+
+    # Test adding matrix directly
+
+    .omega <- lotri::lotri(eta.cl+eta.v~c(0.3, 0.02, 0.1))
+    
+    testEst(f %>% ini(.omega), "eta.cl", -Inf, 0.3, Inf, FALSE)
+    testEst(f %>% ini(.omega), "eta.v", -Inf, 0.1, Inf, FALSE)
+    testEst(f %>% ini(.omega), "(eta.cl,eta.v)", -Inf, 0.02, Inf, FALSE)
+
 
     expect_warning(expect_warning(
       testEst(f %>% ini(eta.cl+eta.v~unfix(cor(sd(0.3,0.02,0.1)))), "eta.cl", -Inf, 0.3 * 0.3, Inf, FALSE),

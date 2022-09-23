@@ -67,8 +67,9 @@
   .w <- which(vapply(.idx, function(x) {
     identical(.lst[[x]][[1]], quote(`ini`))
   }, logical(1), USE.NAMES=TRUE))
-  if (length(.w) != 1) {
-    stop("rxode2 model function requires one 'ini({})' block",
+  if (length(.w) == 0) {
+  } else if (length(.w) != 1) {
+    stop("rxode2 model function can only have one 'ini({})' block",
          call.=FALSE)
   }
   if (identical(.lst[[length(.lst)]][[1]], quote(`model`))) {
@@ -83,7 +84,8 @@
   }
   warning("'model({})' is not on the last line of the function, rearranging; function cannot be called directly to produce model object",
           call.=FALSE)
-  .fun2 <- function() {}
+  .fun2 <- function() {
+  }
   body(.fun2) <- as.call(lapply(c(-1L, .idx[-.w], .w), function(i) {
     if (i == -1L) return(quote(`{`))
     .lst[[i]]
@@ -236,8 +238,21 @@ model <- function(x, ..., append=FALSE, auto=getOption("rxode2.autoVarPiping", T
     .ini <- .lastIni
     .iniQ <- .lastIniQ
     if (is.null(.ini)) {
-      stop("ini({}) block must be called before the model block",
-           call.=FALSE)
+      .ini <- data.frame(ntheta=integer(0),
+                         neta1=numeric(0),
+                         neta2=numeric(0),
+                         name=character(0),
+                         lower=numeric(0),
+                         est=numeric(0),
+                         upper=numeric(0),
+                         fix=logical(0),
+                         label=character(0),
+                         backTransform=character(0),
+                         condition=character(0),
+                         err=character(0))
+      .iniQ <- NULL
+      ## stop("ini({}) block must be called before the model block",
+      ##      call.=FALSE)
     }
     assignInMyNamespace(".lastIni", NULL)
     assignInMyNamespace(".lastIniQ", NULL)
@@ -271,21 +286,29 @@ model.default <- function(x, ..., append=FALSE, envir=parent.frame()) {
 print.rxUi <-function(x, ...) {
   .md <- x$modelDesc
   cat(cli::cli_format_method({
-        cli::cli_h1("{.md}")
-    }), "\n")
-  cat(cli::cli_format_method({
-    cli::cli_h2("Initalization:")
+    cli::cli_h1("{.md}")
   }), "\n")
-  cat(paste0(crayon::bold("Fixed Effects"), " (", crayon::bold$blue("$theta"), "):"), "\n")
-  print(x$theta)
+  .theta <- x$theta
   .omega <- x$omega
+  if (length(x$iniDf$cond) > 0) {
+    cat(cli::cli_format_method({
+      cli::cli_h2("Initalization:")
+    }), "\n")
+  }
+  if (length(.theta) > 0) {
+    cat(paste0(crayon::bold("Fixed Effects"), " (", crayon::bold$blue("$theta"), "):"), "\n")
+    print(.theta)
+  }
   if (!is.null(dim(.omega))) {
     if (dim(.omega)[1] > 0) {
       cat(paste0("\n", crayon::bold("Omega"), " (", crayon::bold$blue("$omega"), "):"), "\n")
       print(.omega)
     }
   }
-
+  if (length(x$state) > 0) {
+    cat(paste0(crayon::bold("\nStates"), " (", crayon::bold$blue("$state"), " or ", crayon::bold$blue("$stateDf"), "):"), "\n")
+    print(rxUiGet.stateDf(list(x,TRUE)))
+  }
   # Multiple Endpoint
   .me <- x$multipleEndpoint
   if (!is.null(.me)) {

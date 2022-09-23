@@ -1,4 +1,19 @@
+.msgFix<- function(ini, w, fixedValue) {
+  lapply(w, function(.w) {
+    if (ini$fix[.w] != fixedValue) {
+      if (fixedValue) {
+        .minfo(paste0("fix {.code ", ini$name[.w], "} to {.code ", ini$est[.w], "}"))
+      } else {
+        .minfo(paste0("unfix {.code ", ini$name[.w], "} keeping initial estimate {.code ", ini$est[.w], "}"))
+      }
+    }
+  })
+}
+
 .iniModifyFixedForThetaOrEtablock <- function(ini, w, fixedValue) {
+  if (rxode2.verbose.pipe) {
+    .msgFix(ini, w, fixedValue)
+  }
   ini$fix[w] <- fixedValue
   .neta <- ini$neta1[w]
   if (!is.na(.neta)) {
@@ -6,7 +21,10 @@
     .fixedEtas <- NULL
     while (length(.etas) > 0) {
       .neta <- .etas[1]
-      w <-which(ini$neta1 == .neta | ini$neta2 == .neta)
+      w <- which(ini$neta1 == .neta | ini$neta2 == .neta)
+      if (rxode2.verbose.pipe) {
+        .msgFix(ini, w, fixedValue)
+      }
       ini$fix[w] <- fixedValue
       .etas <- unique(c(.etas, ini$neta1[w], ini$neta2[w]))
       .fixedEtas <- c(.neta, .fixedEtas)
@@ -298,7 +316,7 @@
 #' @keywords internal
 #' @export
 .iniHandleFixOrUnfix <- function(expr, rxui, envir=parent.frame()) {
-  if (is.call(expr) && length(expr) == 2 && is.name(expr[[2]])) {
+ if (is.call(expr) && length(expr) == 2 && is.name(expr[[2]])) {
     if (identical(expr[[1]], quote(`fix`)) ||
           identical(expr[[1]], quote(`fixed`))) {
       expr <- as.call(list(quote(`<-`), expr[[2]], quote(`fix`)))
@@ -332,7 +350,7 @@
 ini.rxUi <- function(x, ..., envir=parent.frame()) {
   .ret <- .copyUi(x) # copy so (as expected) old UI isn't affected by the call
   .iniLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
-  lapply(.iniLines, function(line){
+  lapply(.iniLines, function(line) {
     .iniHandleFixOrUnfix(line, .ret, envir=envir)
   })
   .ret
@@ -343,10 +361,24 @@ ini.rxUi <- function(x, ..., envir=parent.frame()) {
 ini.function <- function(x, ..., envir=parent.frame()) {
   .ret <- rxode2(x)
   .iniLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
-  lapply(.iniLines, function(line){
+  lapply(.iniLines, function(line) {
     .iniHandleFixOrUnfix(line, .ret, envir=envir)
   })
   .ret
+}
+
+#' @export
+#' @rdname ini
+ini.rxode2 <- function(x, ..., envir=parent.frame()) {
+  .ret <- as.function(x)
+  ini.function(.ret, ..., envir=envir)
+}
+
+#' @export
+#' @rdname ini
+ini.rxModelVars <- function(x, ..., envir=parent.frame()) {
+  .ret <- as.function(x)
+  ini.function(.ret, ..., envir=envir)
 }
 
 #' This tells if the line is modifying an estimate instead of a line of the model

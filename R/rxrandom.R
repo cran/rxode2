@@ -310,6 +310,7 @@ rxbeta <- function(shape1, shape2, n = 1L, ncores = 1L) {
 
 #' Simulate gamma variable from threefry generator
 #'
+#' @param shape The shape of the gamma random variable
 #' @inheritParams stats::rgamma
 #' @inheritParams rxnormV
 #'
@@ -340,18 +341,11 @@ rxbeta <- function(shape1, shape2, n = 1L, ncores = 1L) {
 #' }
 #'
 #' @export
-rxgamma <- function(shape, rate = 1 / scale, scale = 1, n = 1L, ncores = 1L) {
+rxgamma <- function(shape, rate = 1, n = 1L, ncores = 1L) {
   checkmate::assertNumeric(shape, len = 1, lower = 0)
   if (shape == 0) stop("'shape' cannot be 0", call. = FALSE)
   checkmate::assertNumeric(rate, len = 1, lower = 0)
-  if (rate == 0 || scale == 0) stop("'rate'/'scale' cannot be 0", call. = FALSE)
-  if (!missing(rate) && !missing(scale)) {
-    if (abs(rate * scale - 1) < 1e-15) {
-      warning("specify 'rate' or 'scale' but not both", call. = FALSE)
-    } else {
-      stop("specify 'rate' or 'scale' but not both", call. = FALSE)
-    }
-  }
+  if (rate == 0) stop("'rate' cannot be 0", call. = FALSE)
   checkmate::assertCount(n)
   checkmate::assertCount(ncores)
   rxSeedEng(ncores)
@@ -607,6 +601,69 @@ rxbinom <- function(size, prob, n = 1L, ncores = 1L) {
   .Call(`_rxode2_rxbinom_`, size, prob, n, ncores)
 }
 
+#' Simulate Binomial variable from threefry generator
+#'
+#' @inheritParams stats::rnbinom
+#' @inheritParams rxbinom
+#'
+#' @template birthdayProblem
+#'
+#' @return negative binomial random deviates. Note that `rxbinom2`
+#'   uses the `mu` parameterization an the `rxbinom` uses the `prob`
+#'   parameterization (`mu=size/(prob+size)`)
+#'
+#' @examples
+#' \donttest{
+#' ## Use threefry engine
+#'
+#' rxnbinom(10, 0.9, n = 10) # with rxbinom you have to explicitly state n
+#' rxnbinom(3, 0.5, n = 10, ncores = 2) # You can parallelize the simulation using openMP
+#'
+#' rxnbinom(4, 0.7)
+#'
+#' # use mu parameter
+#' rxnbinomMu(40, 40, n=10)
+#'
+#' ## This example uses `rxbinom` directly in the model
+#'
+#' rx <- rxode2({
+#'   a <- rxnbinom(10, 0.5)
+#' })
+#'
+#' et <- et(1, id = 1:100)
+#'
+#' s <- rxSolve(rx, et)
+#'
+#' rx <- rxode2({
+#'   a <- rxnbinomMu(10, 40)
+#' })
+#'
+#'  s <- rxSolve(rx, et)
+#'
+#' }
+#' @export
+rxnbinom <- function(size, prob, n = 1L, ncores = 1L) {
+  checkmate::assertNumeric(prob, len = 1, lower = 0, upper = 1)
+  checkmate::assertCount(size)
+  checkmate::assertCount(n)
+  checkmate::assertCount(ncores)
+  rxSeedEng(ncores)
+  .Call(`_rxode2_rxnbinom_`, size, prob, n, ncores)
+}
+
+##' @rdname rxnbinom
+##' @export
+rxnbinomMu <- function(size, mu, n = 1L, ncores = 1L) {
+  checkmate::assertNumeric(mu, len = 1, lower = 0)
+  checkmate::assertCount(size)
+  checkmate::assertCount(n)
+  checkmate::assertCount(ncores)
+  rxSeedEng(ncores)
+  .Call(`_rxode2_rxnbinomMu_`, size, mu, n, ncores)
+}
+
+
+
 
 #' Simulate a from a Poisson process
 #'
@@ -673,7 +730,7 @@ rxPp <- function(n, lambda, gamma = 1.0, prob = NULL, t0 = 0.0, tmax = Inf, rand
   checkmate::assertNumeric(lambda, len = 1, any.missing = FALSE, lower = .Machine$double.eps)
   checkmate::assertIntegerish(n, len = 1, any.missing = FALSE, lower = 1L)
   checkmate::assertLogical(randomOrder, len = 1, any.missing = FALSE)
-  if (gamma != 1.0 & is.infinite(tmax)) {
+  if (gamma != 1.0 && is.infinite(tmax)) {
     stop("when 'gamma' is not 1, 'tmax' cannot be infinite")
   }
   .Call(`_rxode2_rpp_`, n, lambda, gamma, prob, t0, tmax, randomOrder, PACKAGE = "rxode2")
