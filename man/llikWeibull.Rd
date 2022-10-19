@@ -28,8 +28,10 @@ use the x and rate arguments.  You can also get the derivative of \code{shape} o
 \code{llikWeibullDshape()} and \code{llikWeibullDscale()}.
 }
 \examples{
-
+\donttest{
 llikWeibull(1, 1, 10)
+
+# rxode2 can use this too:
 
 et  <- et(seq(0.001, 1, length.out=10))
 et$shape <- 1
@@ -41,9 +43,8 @@ model <- rxode2({
   dScale <- llikWeibullDscale(time, shape, scale)
 })
 
-
 rxSolve(model, et)
-
+}
 }
 \author{
 Matthew L. Fidler

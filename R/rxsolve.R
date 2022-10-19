@@ -73,16 +73,7 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'     vector must be the same as the state variables (e.g., PK/PD
 #'     compartments);
 #'
-#' @param method The method for solving ODEs.  Currently this supports:
-#'
-#' * `"liblsoda"` thread safe lsoda.  This supports parallel
-#'            thread-based solving, and ignores user Jacobian specification.
-#' * `"lsoda"` -- LSODA solver.  Does not support parallel thread-based
-#'       solving, but allows user Jacobian specification.
-#' * `"dop853"` -- DOP853 solver.  Does not support parallel thread-based
-#'         solving nor user Jacobain specification
-#' * `"indLin"` -- Solving through inductive linearization.  The rxode2 dll
-#'         must be setup specially to use this solving routine.
+#' @inheritParams odeMethodToInt
 #'
 #' @param sigdig Specifies the "significant digits" that the ode
 #'   solving requests.  When specified this controls the relative and
@@ -91,7 +82,7 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'   sensitivity equations the default is \code{0.5*10^(-sigdig-1.5)}
 #'   (sensitivity changes only applicable for liblsoda).  This also
 #'   controls the `atol`/`rtol` of the steady state solutions. The
-#'   `ssAtol`/`ssRtol` is `0.5*10^(-sigdig)` and for the sensitivities 
+#'   `ssAtol`/`ssRtol` is `0.5*10^(-sigdig)` and for the sensitivities
 #'   `0.5*10^(-sigdig+0.625)`.  By default
 #'   this is unspecified (`NULL`) and uses the standard `atol`/`rtol`.
 #'
@@ -796,14 +787,7 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
         nStud <- as.integer(nsim)
       }
     }
-    if (missing(method) && grepl("SunOS", Sys.info()["sysname"])) {
-      method <- 1L
-    } else if (checkmate::testIntegerish(method)) {
-        method <- as.integer(method)
-    } else {
-      .methodIdx <- c("lsoda" = 1L, "dop853" = 0L, "liblsoda" = 2L, "indLin" = 3L)
-      method <- .methodIdx[match.arg(method)]
-    }
+    method <- odeMethodToInt(method)
     if (checkmate::testIntegerish(returnType, len=1, lower=0, upper=5, any.missing=FALSE)) {
       returnType <- as.integer(returnType)
     } else {
@@ -832,6 +816,7 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
       .sigma <- sigma
     } else if (inherits(sigma, "character")) {
       .sigma <- sigma
+      checkmate::assertNumeric(dfObs, lower=length(sigma), finite=TRUE, any.missing=FALSE, len=1)
     } else {
       .sigma <- lotri(sigma)
     }
@@ -839,6 +824,7 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
       .omega <- omega
     }  else if (inherits(omega, "character")) {
       .omega <- omega
+      checkmate::testNumeric(dfSub, lower=length(omega), finite=TRUE, any.missing=FALSE, len=1)
     } else if (inherits(omega, "lotri")) {
       .omega <- omega
     } else {
@@ -1163,6 +1149,7 @@ rxSolve.function <- function(object, params = NULL, events = NULL, inits = NULL,
 #' @export
 rxSolve.rxUi <- function(object, params = NULL, events = NULL, inits = NULL, ...,
                          theta = NULL, eta = NULL) {
+  object <- rxUiDecompress(object)
   .lst <- .rxSolveFromUi(object, params = params, events = events, inits = inits, ..., theta = theta, eta = eta)
   .lst <- do.call("c", .lst)
   .pred <- FALSE
@@ -1236,60 +1223,60 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
         call. = FALSE
       )
     }
-    if (is.null(.pipelineRx)) {
+    if (is.null(rxode2et::.pipeRx(NA))) {
       stop("need an rxode2 compiled model as the start of the pipeline",
         call. = FALSE
       )
     } else {
       events <- object
-      object <- .pipelineRx
+      object <- rxode2et::.pipeRx(NA)
     }
   } else if (rxIs(object, "rxParams")) {
     .applyParams <- TRUE
     if (is.null(params) && !is.null(object$params)) {
       params <- object$params
     }
-    if (is.null(.pipelineRx)) {
+    if (is.null(rxode2et::.pipeRx(NA))) {
       stop("need an rxode2 compiled model as the start of the pipeline",
         call. = FALSE
       )
     } else {
       .rxParams <- object
-      object <- .pipelineRx
+      object <- rxode2et::.pipeRx(NA)
     }
-    if (is.null(.pipelineEvents)) {
+    if (is.null(rxode2et::.pipeEvents(NA))) {
       stop("need an rxode2 events as a part of the pipeline",
         call. = FALSE
       )
     } else {
-      events <- .pipelineEvents
-      assignInMyNamespace(".pipelineEvents", NULL)
+      events <- rxode2et::.pipeEvents(NA)
+      rxode2et::.pipeEvents(NULL)
     }
   }
-  if (!is.null(.pipelineEvents) && is.null(events) && is.null(params)) {
-    events <- .pipelineEvents
-  } else if (!is.null(.pipelineEvents) && !is.null(events)) {
+  if (!is.null(rxode2et::.pipeEvents(NA)) && is.null(events) && is.null(params)) {
+    events <- rxode2et::.pipeEvents(NA)
+  } else if (!is.null(rxode2et::.pipeEvents(NA)) && !is.null(events)) {
     stop("'events' in pipeline AND in solving arguments, please provide just one",
       call. = FALSE
     )
-  } else if (!is.null(.pipelineEvents) && !is.null(params) &&
+  } else if (!is.null(rxode2et::.pipeEvents(NA)) && !is.null(params) &&
     rxIs(params, "event.data.frame")) {
     stop("'events' in pipeline AND in solving arguments, please provide just one",
       call. = FALSE
     )
   }
 
-  if (!is.null(.pipelineParams) && is.null(params)) {
-    params <- .pipelineParams
-  } else if (!is.null(.pipelineParams) && !is.null(params)) {
+  if (!is.null(rxode2et::.pipeParams(NA)) && is.null(params)) {
+    params <- rxode2et::.pipeParams(NA)
+  } else if (!is.null(rxode2et::.pipeParams(NA)) && !is.null(params)) {
     stop("'params' in pipeline AND in solving arguments, please provide just one",
       call. = FALSE
     )
   }
 
-  if (!is.null(.pipelineInits) && is.null(inits)) {
-    inits <- .pipelineInits
-  } else if (!is.null(.pipelineInits) && !is.null(inits)) {
+  if (!is.null(rxode2et::.pipeInits(NA)) && is.null(inits)) {
+    inits <- rxode2et::.pipeInits(NA)
+  } else if (!is.null(rxode2et::.pipeInits(NA)) && !is.null(inits)) {
     stop("'inits' in pipeline AND in solving arguments, please provide just one",
       call. = FALSE
     )
@@ -1342,35 +1329,32 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
       paste(.n1, collapse = "', '")
     ), call. = FALSE)
   }
-  if (!is.null(.pipelineThetaMat) && is.null(.ctl$thetaMat)) {
-    .ctl$thetaMat <- .pipelineThetaMat
+  if (!is.null(rxode2et::.pipeThetaMat(NA)) && is.null(.ctl$thetaMat)) {
+    .ctl$thetaMat <- rxode2et::.pipeThetaMat(NA)
   }
-  if (!is.null(.pipelineOmega) && is.null(.ctl$omega)) {
-    .ctl$omega <- .pipelineOmega
+  if (!is.null(rxode2et::.pipeOmega(NA)) && is.null(.ctl$omega)) {
+    .ctl$omega <- rxode2et::.pipeOmega(NA)
   }
-  if (!is.null(.pipelineSigma) && is.null(.ctl$sigma)) {
-    .ctl$sigma <- .pipelineSigma
+  if (!is.null(rxode2et::.pipeSigma(NA)) && is.null(.ctl$sigma)) {
+    .ctl$sigma <- rxode2et::.pipeSigma(NA)
   }
-  if (!is.null(.pipelineSigma) && is.null(.ctl$sigma)) {
-    .ctl$sigma <- .pipelineSigma
+  if (!is.null(rxode2et::.pipeSigma(NA)) && is.null(.ctl$sigma)) {
+    .ctl$sigma <- rxode2et::.pipeSigma(NA)
   }
-  if (!is.null(.pipelineDfObs) && .ctl$dfObs == 0) {
-    .ctl$dfObs <- .pipelineDfObs
+  if (!is.null(rxode2et::.pipeDfObs(NA)) && .ctl$dfObs == 0) {
+    .ctl$dfObs <- rxode2et::.pipeDfObs(NA)
   }
-  if (!is.null(.pipelineDfSub) && .ctl$dfSub == 0) {
-    .ctl$dfSub <- .pipelineDfSub
+  if (!is.null(rxode2et::.pipeDfSub(NA)) && .ctl$dfSub == 0) {
+    .ctl$dfSub <- rxode2et::.pipeDfSub(NA)
   }
-  if (!is.null(.pipelineNSub) && .ctl$nSub == 1) {
-    .ctl$nSub <- .pipelineNSub
+  if (!is.null(rxode2et::.pipeNSub(NA)) && .ctl$nSub == 1) {
+    .ctl$nSub <- rxode2et::.pipeNSub(NA)
   }
-  if (!is.null(.pipelineNStud) && .ctl$nStud == 1) {
-    .ctl$nStud <- .pipelineNStud
+  if (!is.null(rxode2et::.pipeNStud(NA)) && .ctl$nStud == 1) {
+    .ctl$nStud <- rxode2et::.pipeNStud(NA)
   }
-  if (!is.null(.pipelineICov) && is.null(.ctl$iCov)) {
-    .ctl$iCov <- .pipelineICov
-  }
-  if (!is.null(.pipelineKeep) && is.null(.ctl$keep)) {
-    .ctl$keep <- .pipelineKeep
+  if (!is.null(rxode2et::.pipeKeep(NA)) && is.null(.ctl$keep)) {
+    .ctl$keep <- rxode2et::.pipeKeep(NA)
   }
   if (.applyParams) {
     if (!is.null(.rxParams$thetaMat) && is.null(.ctl$thetaMat)) {
@@ -1400,11 +1384,6 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
     if (!is.null(.rxParams$dfObs)) {
       if (.ctl$dfObs == 0) {
         .ctl$dfObs <- .rxParams$dfObs
-      }
-    }
-    if (!is.null(.rxParams$iCov)) {
-      if (is.null(.ctl$iCov)) {
-        .ctl$iCov <- .rxParams$iCov
       }
     }
     if (!is.null(.rxParams$keep)) {
@@ -1471,7 +1450,6 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
       )
     }
   }
-
   if (!is.null(.ctl$iCov)) {
     if (inherits(.ctl$iCov, "data.frame")) {
       .icovId <- which(tolower(names(.ctl$iCov)) == "id")
@@ -1529,6 +1507,55 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
   .envReset$cacheReset <- FALSE
   .envReset$unload <- FALSE
   # take care of too many DLLs or not provided simulation errors
+  .names <- NULL
+  if (inherits(.ctl$thetaMat, "matrix")) {
+    .mv <- rxModelVars(object)
+    .col <- colnames(.ctl$thetaMat)
+    .w <- .col %in% .mv$params
+    .ignore <- .col[!.w]
+    if (length(.ignore)>0) {
+      .minfo(paste0("thetaMat has too many items, ignored: '", paste(.ignore, collapse="', '"), "'"))
+    }
+    .names <- c(.names, .col[.w])
+  }
+  if (inherits(.ctl$omega, "matrix")) {
+    .mv <- rxModelVars(object)
+    .col <- colnames(.ctl$omega)
+    .w <- .col %in% .mv$params
+    .ignore <- .col[!.w]
+    if (length(.ignore)>0) {
+      .minfo(paste0("omega has too many items, ignored: '", paste(.ignore, collapse="', '"), "'"))
+    }
+    .names <- c(.names, .col[.w])
+  } else if ( inherits(.ctl$omega, "character")) {
+    .mv <- rxModelVars(object)
+    .col <- .ctl$omega
+    .w <- .col %in% .mv$params
+    .ignore <- .col[!.w]
+    if (length(.ignore)>0) {
+      .minfo(paste0("omega has too many items, ignored: '", paste(.ignore, collapse="', '"), "'"))
+    }
+    .names <- c(.names, .col[.w])
+  }
+  if (inherits(.ctl$sigma, "matrix")) {
+    .mv <- rxModelVars(object)
+    .col <- colnames(.ctl$sigma)
+    .w <- .col %in% .mv$params
+    .ignore <- .col[!.w]
+    if (length(.ignore)>0) {
+      .minfo(paste0("sigma has too many items, ignored: '", paste(.ignore, collapse="', '"), "'"))
+    }
+    .names <- c(.names, .col[.w])
+  } else if ( inherits(.ctl$sigma, "character")) {
+    .mv <- rxModelVars(object)
+    .col <- .ctl$sigma
+    .w <- .col %in% .mv$params
+    .ignore <- .col[!.w]
+    if (length(.ignore)>0) {
+      .minfo(paste0("sigma has too many items, ignored: '", paste(.ignore, collapse="', '"), "'"))
+    }
+    .names <- c(.names, .col[.w])
+  }
   if (rxode2.debug) {
     rxSetCovariateNamesForPiping(NULL)
     .envReset$ret <- .collectWarnings(rxSolveSEXP(object, .ctl, .nms, .xtra,
@@ -1837,4 +1864,48 @@ drop_units.rxSolve <- function(x) {
 #' @export
 rxControl <- function(..., params = NULL, events = NULL, inits = NULL) {
   rxSolve(object = NULL, params = params, events = events, inits = inits, ...)
+}
+
+#' @export
+rxEtDispatchSolve.rxode2et <- function(x, ...) {
+  .lst <- x
+  class(.lst) <- NULL
+  do.call(rxSolve, .lst)
+}
+
+.getEtRxSolve <- function(x) {
+  .Call(`_rxode2_getEtRxsolve`, x)
+}
+
+#' Conversion between character and integer ODE integration methods for rxode2
+#'
+#' If \code{NULL} is given as the method, all choices are returned as a named
+#' vector.
+#'
+#' @param method The method for solving ODEs.  Currently this supports:
+#'
+#' * `"liblsoda"` thread safe lsoda.  This supports parallel
+#'            thread-based solving, and ignores user Jacobian specification.
+#' * `"lsoda"` -- LSODA solver.  Does not support parallel thread-based
+#'       solving, but allows user Jacobian specification.
+#' * `"dop853"` -- DOP853 solver.  Does not support parallel thread-based
+#'         solving nor user Jacobian specification
+#' * `"indLin"` -- Solving through inductive linearization.  The rxode2 dll
+#'         must be setup specially to use this solving routine.
+#' @keywords Internal
+#' @return An integer for the method (unless the input is NULL, in which case,
+#'   see the details)
+#' @export
+odeMethodToInt <- function(method = c("liblsoda", "lsoda", "dop853", "indLin")) {
+  .methodIdx <- c("lsoda" = 1L, "dop853" = 0L, "liblsoda" = 2L, "indLin" = 3L)
+  if (missing(method) && grepl("SunOS", Sys.info()["sysname"])) {
+    method <- 1L
+  } else if (is.null(method)) {
+    method <- .methodIdx
+  } else if (checkmate::testIntegerish(method)) {
+    method <- as.integer(method)
+  } else {
+    method <- .methodIdx[match.arg(method)]
+  }
+  method
 }

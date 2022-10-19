@@ -28,25 +28,25 @@ use all arguments.  You can also get the derivative of \code{location} and \code
 \code{llikCauchyDlocation()} and \code{llikCauchyDscale()}.
 }
 \examples{
-
+\donttest{
 x <- seq(-3, 3, length.out = 21)
 
 llikCauchy(x, 0, 1)
 
 llikCauchy(x, 3, 1, full=TRUE)
 
- et <- et(-3, 3, length.out=10)
- et$location <- 0
- et$scale <- 1
+et <- et(-3, 3, length.out=10)
+et$location <- 0
+et$scale <- 1
 
- model <- rxode2({
-   fx <- llikCauchy(time, location, scale)
-   dLocation <- llikCauchyDlocation(time, location, scale)
-   dScale <- llikCauchyDscale(time, location, scale)
- })
+model <- rxode2({
+  fx <- llikCauchy(time, location, scale)
+  dLocation <- llikCauchyDlocation(time, location, scale)
+  dScale <- llikCauchyDscale(time, location, scale)
+})
 
- rxSolve(model, et)
-
+rxSolve(model, et)
+}
 }
 \author{
 Matthew L. Fidler

@@ -31,6 +31,8 @@ use the x and rate arguments.  You can also get the derivative of \code{alpha} o
 }
 \examples{
 
+\donttest{
+
 llikUnif(1, -2, 2)
 
 et  <- et(seq(1,1, length.out=4))
@@ -43,9 +45,8 @@ model <- rxode2({
   dBeta <- llikUnifDbeta(time, alpha, beta)
 })
 
-
 rxSolve(model, et)
-
+}
 }
 \author{
 Matthew L. Fidler

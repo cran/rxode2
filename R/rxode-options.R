@@ -3,26 +3,67 @@
   if (any(ls(.ggplot2) == "guide_none")) {
     assignInMyNamespace("guide_none", .ggplot2$guide_none)
   }
+  if (compareVersion(as.character(packageVersion("ggplot2")), "3.3.6.9000") < 0) {
+    assignInMyNamespace("GeomAmt",
+                        ggplot2::ggproto("GeomAmt", ggplot2::GeomSegment,
+                                         required_aes = c("x", "y", "xend", "yend"),
+                                         default_aes = ggplot2::aes(colour = "black", linetype = "dotted", size = 0.5, alpha = 1, fill = "black")))
+  } else {
+    assignInMyNamespace("GeomAmt",
+                        ggplot2::ggproto("GeomAmt", ggplot2::GeomSegment,
+                                         required_aes = c("x", "y", "xend", "yend"),
+                                         default_aes = ggplot2::aes(colour = "black", linetype = "dotted", linewidth = 0.5, alpha = 1, fill = "black")))
+  }
 }
 .hasUnits <- FALSE
 .PreciseSumsVersion <- utils::packageVersion("PreciseSums")
-.dparserVersion <- utils::packageVersion("dparser")
-.onLoad <- function(libname, pkgname) { ## nocov start
-  if (!identical(.dparserVersion, utils::packageVersion("dparser"))) {
-    stop("rxode2 compiled with dparser '", as.character(.dparserVersion),
-      "' but dparser '", as.character(utils::packageVersion("dparser")),
-      "' is loaded\nRecompile rxode2 with the this version of dparser",
-      call. = FALSE
-    )
-  }
+.rxode2llVersion <- utils::packageVersion("rxode2ll")
+.rxode2parseVersion <- utils::packageVersion("rxode2parse")
+.rxode2randomVersion <- utils::packageVersion("rxode2random")
+
+## nocov start
+.onLoad <- function(libname, pkgname) {
   if (!identical(.PreciseSumsVersion, utils::packageVersion("PreciseSums"))) {
     stop("rxode2 compiled with PreciseSums '", as.character(.PreciseSumsVersion),
       "' but PreciseSums '", as.character(utils::packageVersion("PreciseSums")),
       "' is loaded\nRecompile rxode2 with the this version of PreciseSums",
       call. = FALSE
     )
+  } else {
+    requireNamespace("PreciseSums", quietly=TRUE)
   }
 
+  if (!identical(.rxode2llVersion, utils::packageVersion("rxode2ll"))) {
+    stop("rxode2 compiled with rxode2ll '",
+         as.character(.rxode2llVersion),
+         "' but rxode2ll '", as.character(utils::packageVersion("rxode2ll")),
+         "' is loaded\nRecompile rxode2 with the this version of rxode2ll",
+         call. = FALSE)
+  } else {
+    requireNamespace("rxode2ll", quietly=TRUE)
+  }
+
+  if (!identical(.rxode2parseVersion, utils::packageVersion("rxode2parse"))) {
+    stop("rxode2 compiled with rxode2parse '",
+         as.character(.rxode2parseVersion),
+         "' but rxode2parse '", as.character(utils::packageVersion("rxode2parse")),
+         "' is loaded\nRecompile rxode2 with the this version of rxode2parse",
+         call. = FALSE)
+  } else {
+    requireNamespace("rxode2parse", quietly=TRUE)
+  }
+
+  if (!identical(.rxode2randomVersion, utils::packageVersion("rxode2random"))) {
+    stop("rxode2 compiled with rxode2random '",
+         as.character(.rxode2randomVersion),
+         "' but rxode2random '", as.character(utils::packageVersion("rxode2random")),
+         "' is loaded\nRecompile rxode2 with the this version of rxode2random",
+         call. = FALSE)
+  } else {
+    requireNamespace("rxode2random", quietly=TRUE)
+    .Call(`_rxode2_assignSeedInfo`)
+  }
+  rxode2et::.setRxode2()
   if (requireNamespace("dplyr", quietly=TRUE)) {
     .s3register("dplyr::rename", "rxUi")
     .s3register("dplyr::rename", "function")
@@ -32,39 +73,20 @@
     .s3register("nlme::fixef", "rxUi")
     .s3register("nlme::fixef", "function")
   }
-
-  if (requireNamespace("pillar", quietly = TRUE)) {
-    .s3register("pillar::type_sum", "rxEvid")
-    .s3register("pillar::type_sum", "rxRateDur")
-    .s3register("pillar::pillar_shaft", "rxEvid")
-    .s3register("pillar::pillar_shaft", "rxRateDur")
-  }
-  if (requireNamespace("tibble", quietly = TRUE)) {
-    .s3register("tibble::as_tibble", "rxEt")
-  }
-  if (requireNamespace("data.table", quietly = TRUE)) {
-    .s3register("data.table::as.data.table", "rxEt")
-  }
   if (requireNamespace("units", quietly = TRUE)) {
-    .s3register("units::set_units", "rxEt")
-    .s3register("units::set_units", "rxRateDur")
-    .s3register("units::drop_units", "rxEt")
     .s3register("units::drop_units", "rxSolve")
-    .s3register("units::units<-", "rxEvid")
     assignInMyNamespace(".hasUnits", TRUE)
   } else {
     assignInMyNamespace(".hasUnits", FALSE)
   }
-  backports::import(pkgname)
+  backports::import(pkgname) 
   ## Setup rxode2.prefer.tbl
   .Call(`_rxode2_setRstudio`, Sys.getenv("RSTUDIO") == "1")
   rxSyncOptions("permissive")
-  suppressMessages(.rxWinRtoolsPath(retry = NA))
   rxTempDir()
   if (!interactive()) {
     setProgSupported(0)
   }
-  .getDTEnv()
   .ggplot2Fix()
 } ## nocov end
 
@@ -72,16 +94,10 @@
   ## For some strange reason, mvnfast needs to be loaded before rxode2 to work correctly
   .Call(`_rxode2_setRstudio`, Sys.getenv("RSTUDIO") == "1")
   rxSyncOptions("permissive")
-  if (!.rxWinRtoolsPath(retry = NA)) {
-    ## nocov start
-    packageStartupMessage("Rtools is not set up correctly!\n\nYou need a working Rtools installation for rxode2 to compile models\n")
-    ## nocov end
-  }
   if (!interactive()) {
     setProgSupported(0)
   }
   rxTempDir()
-  .getDTEnv()
   .ggplot2Fix()
   v <- utils::packageVersion("rxode2")
   packageStartupMessage(
@@ -181,7 +197,6 @@ rxCreateCache <- function() {
   utils::assignInMyNamespace("rxode2.cache.directory", .tmp)
   invisible()
 }
-
 
 #' Clear memoise cache for rxode2
 #'

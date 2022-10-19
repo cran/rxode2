@@ -1,7 +1,6 @@
 // -*- mode: c++; c-basic-offset: 2; tab-width: 2; indent-tabs-mode: nil; -*-
 #define USE_FC_LEN_T
-// [[Rcpp::interfaces(r, cpp)]]
-// [[Rcpp::depends(RcppArmadillo)]]
+// [[Rcpp::interfaces(r,cpp)]]
 //#undef NDEBUG
 #define STRICT_R_HEADER
 #define NCMT 100
@@ -27,17 +26,30 @@
 #include "checkmate.h"
 #include <stdint.h>    // for uint64_t rather than unsigned long long
 #include "../inst/include/rxode2.h"
-#include "ode.h"
+#include <rxode2parseVer.h>
+#include <rxode2random_fillVec.h>
 #include "rxomp.h"
+#ifdef ENABLE_NLS
+#include <libintl.h>
+#define _(String) dgettext ("rxode2", String)
+/* replace pkg as appropriate */
+#else
+#define _(String) (String)
+#endif
 #define rxModelVars(a) rxModelVars_(a)
 #define min2( a , b )  ( (a) < (b) ? (a) : (b) )
 void resetSolveLinB();
 using namespace Rcpp;
 using namespace arma;
 
+typedef void (*seedEng_t)(uint32_t ncores);
+extern seedEng_t seedEng;
+
+
 #include "cbindThetaOmega.h"
-#include "handle_evid.h"
+#include <rxode2parseHandleEvid.h>
 #include "rxThreadData.h"
+//#include "seed.h"
 
 extern "C" uint64_t dtwiddle(const void *p, int i);
 extern "C" void calcNradix(int *nbyte, int *nradix, int *spare, uint64_t *maxD, uint64_t *minD);
@@ -47,15 +59,10 @@ extern "C" double *global_InfusionRate(unsigned int mx);
 extern "C" void rxOptionsFree();
 extern "C" void rxOptionsIni();
 extern "C" void rxOptionsIniEnsure(int mx);
-extern "C" void parseFree(int last);
 extern "C" void rxClearFuns();
 extern "C" void rxFreeLast();
-extern "C" void lineFree(vLines *sbb);
 extern "C" void rxode2_assign_fn_pointers(SEXP);
 extern "C" int getThrottle();
-extern "C" void lineIni(vLines *sbb);
-extern "C" void addLine(vLines *sbb, const char *format, ...);
-extern "C" void seedEng(int ncores);
 extern "C" int getRxThreads(const int64_t n, const bool throttle);
 extern "C" void rxode2_assign_fn_pointers_(const char *mv);
 extern "C" void setSilentErr(int silent);
@@ -88,16 +95,19 @@ SEXP qassertS(SEXP in, const char *test, const char *what);
 
 RObject rxSolveFreeObj=R_NilValue;
 LogicalVector rxSolveFree();
-
 List etTrans(List inData, const RObject &obj, bool addCmt=false,
              bool dropUnits=false, bool allTimeVar=false,
              bool keepDosingOnly=false, Nullable<LogicalVector> combineDvid=R_NilValue,
              CharacterVector keep = CharacterVector(0));
-RObject et_(List input, List et__);
-void setEvCur(RObject cur);
+extern "C" SEXP _rxode2_et_(SEXP x1, SEXP x2);
 
-SEXP cvPost_(SEXP nuS, SEXP omega, SEXP n, SEXP omegaIsChol, SEXP returnChol,
-             SEXP type, SEXP diagXformType);
+RObject et_(List input, List et__) {
+  return as<RObject>(_rxode2_et_(wrap(input), wrap(et__)));
+}
+extern "C" SEXP _rxode2_setEvCur(SEXP x1);
+
+extern "C" SEXP _rxode2_cvPost_(SEXP nuS, SEXP omega, SEXP n, SEXP omegaIsChol, SEXP returnChol,
+                                SEXP type, SEXP diagXformType);
 
 RObject rxUnlock(RObject obj);
 RObject rxLock(RObject obj);
@@ -431,9 +441,14 @@ extern "C" void cliAlert(const char *format, ...) {
   va_end (args);
 }
 
+extern "C" SEXP _rxode2_rxRmvn0(SEXP A_SEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP ncoresSEXP, SEXP isCholSEXP, SEXP aSEXP, SEXP tolSEXP, SEXP nlTolSEXP, SEXP nlMaxiterSEXP);
 SEXP rxRmvn0(NumericMatrix& A_, arma::rowvec mu, arma::mat sigma,
              arma::vec lower, arma::vec upper, int ncores=1, bool isChol=false,
-             double a=0.4, double tol = 2.05, double nlTol=1e-10, int nlMaxiter=100);
+             double a=0.4, double tol = 2.05, double nlTol=1e-10, int nlMaxiter=100) {
+  return _rxode2_rxRmvn0(wrap(A_), wrap(mu), wrap(sigma),
+                         wrap(lower), wrap(upper), wrap(ncores), wrap(isChol),
+                         wrap(a), wrap(tol), wrap(nlTol), wrap(nlMaxiter));
+}
 
 Function getRxFn(std::string name);
 RObject rxSimSigma(const RObject &sigma,
@@ -588,6 +603,13 @@ void getRxModels(){
     foundEnv = true;
   }
 }
+
+extern "C" void rxModelsAssignC(const char *str0, SEXP assign) {
+  getRxModels();
+  std::string str = str0;
+  _rxModels[str] = assign;
+}
+
 
 void rxModelsAssign(std::string str, SEXP assign){
   getRxModels();
@@ -836,11 +858,14 @@ List rxModelVars_(const RObject &obj){
     return rxModelVars_rxode2(obj);
   } else if (Rf_isFunction(obj)){
     Function getUi = getRxFn("assertRxUi");
-    Environment e = asEnv(getUi(obj), "rxode2(obj)");
+    RObject ro = getUi(obj);
+    Function rxUiDecompress = getRxFn("rxUiDecompress");
+    Environment e = asEnv(rxUiDecompress(ro), "rxode2(rxUiDecompress(obj))");
     List ret = asList(e["mv0"], "e[\"mv0\"]");
     return ret;
   } else if (rxIs(obj, "rxUi")){
-    Environment e = asEnv(obj, "obj");
+    Function rxUiDecompress = getRxFn("rxUiDecompress");
+    Environment e = asEnv(rxUiDecompress(obj), "obj");
     List ret = asList(e["mv0"], "e[\"mv0\"]");
     return ret;
   } else if (rxIs(obj, "rxS")){
@@ -1263,7 +1288,7 @@ NumericVector rxSetupScale(const RObject &obj,
   return ret;
 }
 
-typedef struct {
+struct rx_globals {
   double *gLlikSave;
   double *gSolveLast2;
   double *gSolveLast;
@@ -1328,7 +1353,7 @@ typedef struct {
   bool zeroOmega = false;
   bool zeroSigma = false;
   int *gindLin = NULL;
-} rx_globals;
+};
 
 
 rx_globals _globals;
@@ -1699,7 +1724,7 @@ void rxSimOmega(bool &simOmega,
         } else if (omegaSeparation == "separation") {
           defaultType = 3;
         }
-        RObject ol = cvPost_(as<SEXP>(NumericVector::create(dfSub)),
+        RObject ol = _rxode2_cvPost_(as<SEXP>(NumericVector::create(dfSub)),
                              as<SEXP>(omegaMC),
                              as<SEXP>(IntegerVector::create(1)),
                              as<SEXP>(LogicalVector::create(false)),
@@ -1712,7 +1737,7 @@ void rxSimOmega(bool &simOmega,
           omegaList = List::create(ol);
         }
       } else {
-        RObject ol = cvPost_(as<SEXP>(NumericVector::create(dfSub)),
+        RObject ol = _rxode2_cvPost_(as<SEXP>(NumericVector::create(dfSub)),
                              as<SEXP>(omegaMC),
                              as<SEXP>(IntegerVector::create(nStud)),
                              as<SEXP>(LogicalVector::create(true)),
@@ -1752,6 +1777,14 @@ arma::vec getLowerVec(int type, rx_solve* rx) {
   }
 }
 
+extern "C" SEXP getLowerVecSexp(int type, rx_solve* rx) {
+  if (type == 0) { // eps
+    return wrap(arma::vec(_globals.gsigma, rx->neps, false, true));
+  } else { // eta
+    return wrap(arma::vec(_globals.gomega, rx->neta, false, true));
+  }
+}
+
 arma::vec getUpperVec(int type, rx_solve* rx) {
   if (type == 0) { // eps
     return arma::vec(_globals.gsigma + rx->neps, rx->neps, false, true);
@@ -1759,6 +1792,15 @@ arma::vec getUpperVec(int type, rx_solve* rx) {
     return arma::vec(_globals.gomega + rx->neta, rx->neta, false, true);
   }
 }
+
+extern "C" SEXP getUpperVecSexp(int type, rx_solve* rx) {
+  if (type == 0) { // eps
+    return wrap(arma::vec(_globals.gsigma + rx->neps, rx->neps, false, true));
+  } else { // eta
+    return wrap(arma::vec(_globals.gomega + rx->neta, rx->neta, false, true));
+  }
+}
+
 
 arma::mat getArmaMat(int type, int csim, rx_solve* rx) {
   if (type == 0) { // eps
@@ -1776,7 +1818,22 @@ arma::mat getArmaMat(int type, int csim, rx_solve* rx) {
   }
 }
 
-arma::vec fillVec(arma::vec& in, int len);
+extern "C" SEXP getArmaMatSexp(int type, int csim, rx_solve* rx) {
+  if (type == 0) { // eps
+    if (_globals.nSigma == 1) {
+      return wrap(arma::mat(_globals.gsigma + 2 * rx->neps + csim * rx->neps * rx->neps, rx->neps, rx->neps, false, true));
+    } else {
+      return wrap(arma::mat(_globals.gsigma + 2 * rx->neps, rx->neps, rx->neps, false, true));
+    }
+  } else { // eta
+    if (_globals.nOmega == 1) {
+      return wrap(arma::mat(_globals.gomega + 2 * rx->neta  + csim * rx->neta * rx->neta, rx->neta,  rx->neta, false, true));
+    } else {
+      return wrap(arma::mat(_globals.gomega + 2 * rx->neta, rx->neta,  rx->neta, false, true));
+    }
+  }
+}
+
 
 //' Simulate Parameters from a Theta/Omega specification
 //'
@@ -2131,7 +2188,7 @@ List getEtRxsolve(Environment e){
     RObject eventso = e[".args.events"];
     List emptyLst(0);
     RObject et = et_(emptyLst, emptyLst);
-    setEvCur(et);
+    _rxode2_setEvCur(et);
     et_(List::create(_["data"] = eventso), List::create("importQuiet"));
     e[".et"] = et;
     Function parse2("parse", R_BaseNamespace);
@@ -2171,6 +2228,10 @@ List getEtRxsolve(Environment e){
     // Note event.copy doesn't really make sense...?  The create.eventTable does basically the same thing.
   }
   return e[".et"];
+}
+
+extern "C" SEXP _rxode2_getEtRxsolve(SEXP e) {
+  return(wrap(getEtRxsolve(as<Environment>(e))));
 }
 
 inline void updateParNames0(CharacterVector &ret, Environment &e,
@@ -2422,7 +2483,6 @@ LogicalVector rxSolveFree(){
   if (_globals.gindLin != NULL) R_Free(_globals.gindLin);
   rxOptionsFree(); // f77 losda free
   rxOptionsIni();// realloc f77 lsoda cache
-  parseFree(0); //free parser
   rxClearFuns(); // Assign all the global ODE solving functions to NULL pointers
   gFree();// Frees all the global pointers
   return LogicalVector::create(true);
@@ -2483,7 +2543,7 @@ extern "C" void sortIds(rx_solve* rx, int ini) {
   }
 }
 
-typedef struct{
+struct rxSolve_t {
   bool updateObject;
   bool isRxSolve;
   bool isEnvironment;
@@ -2520,7 +2580,7 @@ typedef struct{
   CharacterVector idLevels;
   bool convertInt = false;
   bool throttle = false;
-} rxSolve_t;
+};
 
 SEXP rxSolve_(const RObject &obj, const List &rxControl, const Nullable<CharacterVector> &specParams,
               const Nullable<List> &extraArgs, const RObject &params, const RObject &events,
@@ -4289,7 +4349,8 @@ static inline SEXP rxSolve_finalize(const RObject &obj,
   }
 }
 
-SEXP expandPars_(SEXP objectS, SEXP paramsS, SEXP eventsS, SEXP controlS);
+#define expandPars_ _rxode2_expandPars_
+extern "C" SEXP expandPars_(SEXP objectS, SEXP paramsS, SEXP eventsS, SEXP controlS);
 
 static inline void iniRx(rx_solve* rx) {
   rx->hasEvid2 = 0;
@@ -4488,7 +4549,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     trueParams = params;
   } else {
     rxSolveFree();
-    stop(_("cannot solve without event information"));
+    stop(_("cannot solve without event information\nthis can occur when the data frame you are providing does not have the column 'time'"));
   }
   getRxModels();
   bool didNesting=false;
@@ -5940,6 +6001,7 @@ bool rxAllowUnload(bool allow){
 RObject rxUnloadAll_(){
   getRxModels();
   Function dynUnload("dyn.unload", R_BaseNamespace);
+  Function shouldUnloadDll = getRxFn(".rxShouldUnload");
   CharacterVector vars = _rxModels.ls(true);
   std::string exclude = ".rxSolveDat.";
   for (unsigned int i = vars.size(); i--;) {
@@ -5949,8 +6011,10 @@ RObject rxUnloadAll_(){
         int val = asInt(_rxModels[varC], "_rxModels[varC]");
         if (val > 1){
         } else if (val == 0 && rxUnload_){
-          dynUnload(varC);
-          rmRxModelsFromDll(varC);
+          if (shouldUnloadDll(varC)){
+            dynUnload(varC);
+            rmRxModelsFromDll(varC);
+          }
         }
       }
     }

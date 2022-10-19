@@ -199,7 +199,7 @@ NA_LOGICAL <- NA # nolint
 #' Springer-Verlag (1993).
 #'
 #' Plevyak, J.
-#' *`dparser`*, <http://dparser.sourceforge.net>. Web. 12 Oct. 2015.
+#' *`dparser`*, <https://dparser.sourceforge.net/>. Web. 12 Oct. 2015.
 #'
 #' @author Melissa Hallow, Wenping Wang and Matthew Fidler
 #'
@@ -308,6 +308,7 @@ NA_LOGICAL <- NA # nolint
 #' @concept Pharmacodynamics (PD)
 #' @useDynLib rxode2, .registration=TRUE
 #' @importFrom PreciseSums fsum
+#' @importFrom rxode2parse rxode2parse
 #' @importFrom Rcpp evalCpp
 #' @importFrom checkmate qassert
 #' @importFrom utils getFromNamespace assignInMyNamespace download.file head sessionInfo compareVersion packageVersion
@@ -317,6 +318,7 @@ NA_LOGICAL <- NA # nolint
 #' @importFrom utils capture.output
 #' @importFrom qs qsave
 #' @import tools
+#' @import data.table
 #' @export
 rxode2 <- # nolint
   function(model, modName = basename(wd),
@@ -329,6 +331,7 @@ rxode2 <- # nolint
            fullPrint=getOption("rxode2.fullPrint", FALSE)) {
     assignInMyNamespace(".rxFullPrint", fullPrint)
     rxSuppressMsg()
+    rxode2parse::rxParseSuppressMsg()
     .modelName <- try(as.character(substitute(model)), silent=TRUE)
     if (inherits(.modelName, "try-error")) .modelName <- NULL
     if (!missing(modName)) {
@@ -387,9 +390,9 @@ rxode2 <- # nolint
         if (length(.args) != 1L) {
           stop("model functions can only be called with one argument", call.=FALSE)
         }
-        .tmp <- .rxFunction2ui(model)
+        .tmp <- rxUiDecompress(.rxFunction2ui(model))
         assign("modelName", .modelName, envir=.tmp)
-        return(.tmp)
+        return(rxUiCompress(.tmp))
       } else if (is(model, "rxode2")) {
         package <- get("package", model)
         if (!is.null(package)) {
@@ -1117,12 +1120,28 @@ rxMd5 <- function(model, # Model File
   }
 } # end function rxMd5
 
+.rxLastModels <- NULL
+
+.rxShouldUnload <- function(parseMd5) {
+  if (is.null(.rxLastModels)) return(TRUE)
+  return(!(parseMd5 %in% .rxLastModels))
+}
+
 .rxTimeId <- function(parseMd5) {
   if (exists(parseMd5, envir = .rxModels)) {
     .timeId <- get(parseMd5, envir = .rxModels)
   } else {
     .timeId <- as.integer(Sys.time())
     assign(parseMd5, .timeId, envir = .rxModels)
+    .rxLastModels <- c(parseMd5, .rxLastModels)
+    .nKeep <- getOption("rxode2.dontUnload", 10)
+    .nKeep <- as.integer(.nKeep)
+    if (.nKeep <= 0L) {
+      .rxLastModels <- NULL
+    } else if (length(.rxLastModels) < .nKeep) {
+      .rxLastModels <- .rxLastModels[seq(1, .nKeep)]
+    }
+    assignInMyNamespace(".rxLastModels", .rxLastModels)
   }
   return(.timeId)
 }
@@ -1202,7 +1221,6 @@ rxTrans.character <- memoise::memoise(function(model,
   if (missing(md5)) {
     md5 <- rxMd5(model)$digest
   }
-  rxode2::rxReq("dparser")
   .ret <- .Call(
     `_rxode2_trans`, model, modelPrefix, md5, .isStr,
     as.integer(crayon::has_color()),
@@ -1298,14 +1316,19 @@ rxCompile <- function(model, dir, prefix, force = FALSE, modName = NULL,
 
 .getIncludeDir <- function() {
   .cache <- R_user_dir("rxode2", "cache")
+  .parseInclude <- system.file("include", package = "rxode2parse")
   if (dir.exists(.cache)) {
     .include <- .normalizePath(file.path(.cache, "include"))
     if (!dir.exists(.include)) {
       .malert("creating rxode2 include directory")
       dir.create(.include, recursive = TRUE)
       .sysInclude <- system.file("include", package = "rxode2")
+      .files <- list.files(.parseInclude)
+      lapply(.files, function(file) {
+        file.copy(file.path(.parseInclude, file), file.path(.include, file))
+      })
       .files <- list.files(.sysInclude)
-      sapply(.files, function(file) {
+      lapply(.files, function(file) {
         file.copy(file.path(.sysInclude, file), file.path(.include, file))
       })
       .malert("getting R compile options")
@@ -1321,6 +1344,7 @@ rxCompile <- function(model, dir, prefix, force = FALSE, modName = NULL,
       .malert("precompiling headers")
       .args <- paste0(
         .cc, " -I", gsub("[\\]", "/", .normalizePath(R.home("include"))), " ",
+        " -I\"", .normalizePath(.parseInclude), "\" ", 
         .cflags, " ", .shlibCflags, " ", .cpicflags, " -I", gsub("[\\]", "/", .normalizePath(.include)), " ",
         paste(gsub("[\\]", "/", .normalizePath(.include)), "rxode2_model_shared.h", sep = "/"),
         ""
@@ -1488,9 +1512,10 @@ rxCompile.rxModelVars <- function(model, # Model
         }
         .defs <- ""
         .ret <- sprintf(
-          "#rxode2 Makevars\nPKG_CFLAGS=-O%s %s -I\"%s\"\nPKG_LIBS=$(BLAS_LIBS) $(LAPACK_LIBS) $(FLIBS)\n",
+          "#rxode2 Makevars\nPKG_CFLAGS=-O%s %s -I\"%s\" -I\"%s\"\nPKG_LIBS=$(BLAS_LIBS) $(LAPACK_LIBS) $(FLIBS)\n",
           getOption("rxode2.compile.O", "2"),
-          .defs, .getIncludeDir()
+          .defs, .getIncludeDir(),
+          system.file("include", package = "rxode2parse")
         )
         ## .ret <- paste(.ret, "-g")
         sink(.Makevars)
@@ -1537,7 +1562,7 @@ rxCompile.rxModelVars <- function(model, # Model
         }
       }
     }
-    .tmp <- try(dynLoad(.cDllFile), silent = TRUE)
+    .tmp <- try(dynLoad(.cDllFile), silent = FALSE)
     if (inherits(.tmp, "try-error")) {
       ## Try unloading rxode2 dlls now...
       rxUnloadAll()
@@ -1828,6 +1853,10 @@ rxModelVars <- function(obj) {
     .obj <- paste(.obj, collapse = "\n")
     return(rxModelVars_(.obj))
   }
+  if (inherits(obj, "raw") &&
+        inherits(obj, "rxUi")) {
+    obj <- rxUiDecompress(obj)
+  }
   if (is(obj, "rxModelVars")) {
     return(obj)
   }
@@ -1843,6 +1872,14 @@ rxModelVars <- function(obj) {
 rxModelVarsS3 <- function(obj) {
   UseMethod("rxModelVarsS3")
 }
+
+#' @rdname rxModelVars
+#' @export
+rxModelVarsS3.rxUi <- function(obj) {
+  .ret <- rxUiDecompress(obj)
+  get("mv0", .ret)
+}
+
 
 #' @rdname rxModelVars
 #' @export

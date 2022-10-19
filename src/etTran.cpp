@@ -94,7 +94,7 @@ Function getChin() {
   return b["%in%"];
 }
 
-SEXP chin(SEXP x, SEXP table){
+extern "C" SEXP chin(SEXP x, SEXP table) {
   Function chin_ = getChin();
   return chin_(x, table);
 }
@@ -330,9 +330,11 @@ bool rxSetIni0(bool ini0 = true){
   return _ini0;
 }
 
-IntegerVector convertMethod(RObject method);
+#include <rxode2etConvertMethod.h>
 
-SEXP convertId_(SEXP x);
+extern "C" SEXP _rxode2_convertId_(SEXP id);
+#define convertId_ _rxode2_convertId_
+
 bool warnedNeg=false;
 //' Event translation for rxode2
 //'
@@ -1862,16 +1864,24 @@ List etTrans(List inData, const RObject &obj, bool addCmt=false,
               added = true;
             } else if (sub1[1+j]) {
               nvTmp = as<NumericVector>(lst1[1+j]);
-              if (nvTmp[idx1] != nvTmp2[idxInput[idxOutput[i]]]){
-                sub0[baseSize+j] = true;
-                sub1[1+j] = false;
-                fPars[idx1*pars.size()+covParPos[j]] = NA_REAL;
-                if (std::find(covParPosTV.begin(), covParPosTV.end(), covParPos[j]) == covParPosTV.end()){
-                  covParPosTV.push_back(covParPos[j]);
-                }
-                nTv++;
-              }
-            }
+							int ii1 =idx1;
+							double cur1 = nvTmp[ii1];
+							int ii2 = i;
+							double cur2 =nvTmp2[idxInput[idxOutput[i]]];
+							while (ISNA(cur2) && ii2 != 0 && lastId==id[idxOutput[ii2-1]]) {
+								ii2--;
+								cur2 =nvTmp2[idxInput[idxOutput[i]]];
+							}
+							if (nvTmp[idx1] != cur2){
+								sub0[baseSize+j] = true;
+								sub1[1+j] = false;
+								fPars[idx1*pars.size()+covParPos[j]] = NA_REAL;
+								if (std::find(covParPosTV.begin(), covParPosTV.end(), covParPos[j]) == covParPosTV.end()){
+									covParPosTV.push_back(covParPos[j]);
+								}
+								nTv++;
+							}								
+						}
           }
         }
       }

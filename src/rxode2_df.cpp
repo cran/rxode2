@@ -1,6 +1,6 @@
 // -*- mode: c++; c-basic-offset: 2; tab-width: 2; indent-tabs-mode: t; -*-
 #define USE_FC_LEN_T
-// [[Rcpp::interfaces(r, cpp)]]
+// [[Rcpp::interfaces(r,cpp)]]
 // [[Rcpp::depends(RcppArmadillo)]]
 //#undef NDEBUG
 #define STRICT_R_HEADER
@@ -27,13 +27,13 @@
 #include "checkmate.h"
 #include <stdint.h>    // for uint64_t rather than unsigned long long
 #include "../inst/include/rxode2.h"
-#include "ode.h"
-#include "handle_evid.h"
-#include "getTime.h"
+#include <rxode2parseVer.h>
+#include <rxode2parseHandleEvid.h>
+#include <rxode2parseGetTime.h>
 #include "par_solve.h"
 #include <Rcpp.h>
 #include "strncmp.h"
-#define rxModelVars(a) rxModelVars_(a)
+#define rxModelVars(a) rxModelVar_s(a)
 #define min2( a , b )  ( (a) < (b) ? (a) : (b) )
 void resetSolveLinB();
 using namespace Rcpp;
@@ -120,7 +120,10 @@ static inline void dfCountRowsForNmOutput(rx_solve *rx, int nsim, int nsub) {
   di = 0;
 }
 
+extern "C" void _rxode2random_assignSolveOnly2(rx_solve rx, rx_solving_options op);
+
 extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
+	_rxode2random_assignSolveOnly2(rx_global, op_global);
   rx_solve *rx;
   rx = &rx_global;
   rx_solving_options *op = &op_global;

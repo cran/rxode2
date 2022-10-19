@@ -2,7 +2,7 @@
 #' @rdname model
 model.function <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
-  .ret <- rxode2(x)
+  .ret <- rxUiDecompress(rxode2(x))
   .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
 }
 
@@ -10,7 +10,7 @@ model.function <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()
 #' @rdname model
 model.rxUi <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
-  .ret <- .copyUi(x) # copy so (as expected) old UI isn't affected by the call
+  .ret <- rxUiDecompress(.copyUi(x)) # copy so (as expected) old UI isn't affected by the call
   .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
 }
 
@@ -19,7 +19,7 @@ model.rxUi <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
 model.rxode2 <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   x <- as.function(x)
-  .ret <- rxode2(x)
+  .ret <- rxUiDecompress(rxode2(x))
   .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
 }
 
@@ -42,6 +42,7 @@ model.rxModelVars <- model.rxode2
   checkmate::assertLogical(append, any.missing=TRUE, len=1)
   checkmate::assertLogical(auto, any.missing=TRUE, len=1)
   .doAppend <- FALSE
+  rxui <- rxUiDecompress(rxui)
   if (is.na(append)) {
     assign("lstExpr", c(modelLines, rxui$lstExpr), envir=rxui)
     .doAppend <- TRUE
@@ -68,7 +69,7 @@ model.rxModelVars <- model.rxode2
     for (v in .rhs) {
       .addVariableToIniDf(v, rxui, promote=NA)
     }
-    return(rxui$fun())
+    return(rxUiCompress(rxui$fun()))
   }
   .modifyModelLines(modelLines, rxui, modifyIni, envir)
   .v <- .getAddedOrRemovedVariablesFromNonErrorLines(rxui)
@@ -87,7 +88,7 @@ model.rxModelVars <- model.rxode2
       }
     })
   }
-  rxui$fun()
+  return(rxUiCompress(rxui$fun()))
 }
 
 .getModelLineEquivalentLhsExpressionDropEndpoint <- function(expr) {
@@ -247,13 +248,19 @@ model.rxModelVars <- model.rxode2
   if (!errorLine && length(expr) == 2L) {
     .expr1 <- expr[[1]]
     .expr2 <- expr[[2]]
-    if (identical(.expr1, quote(`f`)) ||
+    if (is.numeric(.expr2)) {
+      .state <- as.character(.expr1)
+    } else {
+      .state <- as.character(.expr2)
+    }
+    if (is.numeric(.expr2) ||
+          identical(.expr1, quote(`f`)) ||
           identical(.expr1, quote(`F`)) ||
           identical(.expr1, quote(`alag`)) ||
           identical(.expr1, quote(`lag`)) ||
           identical(.expr1, quote(`rate`)) ||
           identical(.expr1, quote(`dur`))) {
-      .expr3 <- eval(parse(text=paste0("quote(d/dt(",as.character(.expr2),"))")))
+      .expr3 <- eval(parse(text=paste0("quote(d/dt(",.state,"))")))
       for (.i in seq_along(origLines)) {
         .expr <- origLines[[.i]]
         if (identical(.expr[[2]], .expr3)) {
@@ -412,7 +419,7 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
       } else {
         .ret <- .getModelLineFromExpression(line[[2]], rxui, .isErr, .isDrop)
       }
-      if (length(.ret == 1)) {
+      if (length(.ret)  == 1) {
         if (.isErr && is.na(.ret)) {
           stop("the error '", deparse1(line[[2]]), "' is not in the multiple-endpoint model and cannot be modified",
                call.=FALSE)
@@ -725,7 +732,8 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
     .extra$name <- var
     .extra$condition <- "id"
     if (rxode2.verbose.pipe) {
-      if (promote) {
+      if (is.na(promote)) {
+      } else if (promote) {
         if (is.na(value))  {
           value <- 1
           .minfo(paste0("promote {.code ", var, "} to between subject variability"))

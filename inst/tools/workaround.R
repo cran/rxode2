@@ -17,6 +17,16 @@ for (f in c("inst/include/rxode2_RcppExports.h", "src/RcppExports.cpp")) {
   close(file.out)
 }
 
+l <- readLines("R/RcppExports.R")
+w <- which(regexpr("# Register entry points", l, fixed=TRUE) != -1)
+if (length(w) >= 1) {
+  w <- w[1]
+  l <- l[seq(1, w-1)]
+  RcppExports.R <- file("R/RcppExports.R", "wb")
+  writeLines(l, RcppExports.R)
+  close(RcppExports.R)
+}
+
 .in <- suppressWarnings(readLines("src/Makevars.in"))
 .in <- gsub("@ARMA@", file.path(find.package("RcppArmadillo"),"include"), .in)
 .in <- gsub("@BH@", file.path(find.package("BH"),"include"), .in)
@@ -33,6 +43,7 @@ for (f in c("inst/include/rxode2_RcppExports.h", "src/RcppExports.cpp")) {
 
 .in <- gsub("@SL@", "", ##paste(capture.output(StanHeaders:::LdFlags()), capture.output(RcppParallel:::RcppParallelLibs())),
             .in)
+
 
 if (.Platform$OS.type == "windows" && !file.exists("src/Makevars.win")) {
   .in <- gsub("@CXX14STD@", "-std=c++1y", .in)
@@ -64,61 +75,36 @@ unlink("R/rxode2_md5.R")
 cpp <- list.files("src", pattern = ".(c|h|cpp|f)$")
 include <- list.files("inst/include")
 #Rfiles <- list.files("R/", pattern = ".R")
-md5 <- digest::digest(lapply(c(paste0("src/", cpp),
-                               paste0("inst/include/", include)#,
-                               #paste0("R/", Rfiles)
-                               ), digest::digest, file = TRUE))
+
+cmd <- file.path(R.home("bin"), "R")
+args <- c("CMD", "config")
+
+md5 <- digest::digest(c(lapply(c(paste0("src/", cpp),
+                                 paste0("inst/include/", include)#,
+                                 #paste0("R/", Rfiles)
+                                 ), digest::digest, file = TRUE),
+                        rxode2parse::rxode2parseMd5(),
+                        rxode2random::rxode2randomMd5(),
+                        ## vapply(c("BLAS_LIBS", "CC",  "CFLAGS", "CPICFLAGS",
+                        ##          "CXX", "CXXFLAGS", "CXXPICFLAGS",
+                        ##          "CXX11", "CXX11STD", "CXX11FLAGS", "CXX11PICFLAGS",
+                        ##          "CXX14", "CXX14STD", "CXX14FLAGS", "CXX14PICFLAGS",
+                        ##          "CXX17", "CXX17STD", "CXX17FLAGS", "CXX17PICFLAGS",
+                        ##          "CXX20", "CXX20STD", "CXX20FLAGS", "CXX20PICFLAGS",
+                        ##          "FC", "FFLAGS", "FCFLAGS",  "FPICFLAGS"),
+                        ##        function(cfg) {
+                        ##          rawToChar(sys::exec_internal(cmd, c(args, cfg))$stdout)
+                        ##        }, character(1)
+                        ##       ),
+                        ""
+                        ))
 unlink("R/rxode2_md5.R")
 md5file <- file("R/rxode2_md5.R", "wb")
 writeLines(sprintf("rxode2.md5 <- \"%s\"\n", md5), md5file)
 close(md5file)
 
-l <- readLines("DESCRIPTION")
-w <- which(regexpr("Version[:] *(.*)$", l) != -1)
-v <- gsub("Version[:] *(.*)$", "\\1", l[w])
+l <- readLines(file.path(system.file(package="rxode2parse"), "include", "sbuf.c"))
 
-unlink("src/ode.h")
-ode.h <- file("src/ode.h", "wb")
-writeLines(c(sprintf("#define __VER_md5__ \"%s\"", md5),
-             "#define __VER_repo__ \"https://github.com/nlmixr2/rxode2\"",
-             sprintf("#define __VER_ver__ \"%s\"", v)),
-           ode.h)
-close(ode.h)
-
-unlink("src/codegen2.h")
-l <- readLines("inst/include/rxode2_model_shared.c")
-
-l <- l[l != ""]
-l <- gsub(" *= *NULL;", "=NULL;", l)
-
-def <- l
-w <- which(regexpr("double _prod", def) != -1) - 1
-def <- def[1:w]
-def <- gsub("=NULL", "", def)
-def <- gsub("[^ ]* *[*]?([^;]*);", "\\1", def)
-
-def <- unique(c(def, c("_sum", "_sign", "_prod", "_max", "_min", "_transit4P", "_transit3P", "_assignFuns0", "_assignFuns", "_getRxSolve_", "_solveData", "_rxord")))
-
-## deparse1 came from R 4.0, use deparse2
-deparse2 <- function (expr, collapse = " ", width.cutoff = 500L, ...) {
-  paste(deparse(expr, width.cutoff, ...), collapse = collapse)
-}
-
-final <- c("#include <time.h>",
-           "#include <stdlib.h>",
-           "unsigned long int __timeId=0;",
-           "void writeHeader(const char *md5, const char *extra) {",
-           paste0("sAppend(&sbOut, \"#define ", def, " _rx%s%s%ld\\n\", extra, md5, __timeId++);"),
-           "}",
-           "void writeBody() {",
-           paste0("sAppendN(&sbOut, ", vapply(paste0(l, "\n"), deparse2, character(1)), ", ", nchar(l) + 1, ");"),
-           "}",
-           "void writeFooter() {",
-           paste0("sAppendN(&sbOut, \"#undef ", def, "\\n\", ", nchar(def) + 8, ");"),
-           "}"
-           )
-
-codegen2.h <- file("src/codegen2.h", "wb")
-writeLines(final,
-           codegen2.h)
-close(codegen2.h)
+sbuf.c <- file("src/sbuf.c", "wb")
+writeLines(l, sbuf.c)
+close(sbuf.c)

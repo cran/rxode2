@@ -2,14 +2,14 @@
 #'
 #' @param x Observation
 #' @param mean Mean for the likelihood
-#' @param sd Standard devitation for the likelihood
+#' @param sd Standard deviation for the likelihood
 #' @param full Add the data frame showing x, mean, sd as well as the
 #'   fx and derivatives
 #'
 #' @details
 #'
 #' In an `rxode2()` model, you can use `llikNorm()` but you have to
-#' use all arguments.  You can also get the derivitaves with
+#' use all arguments.  You can also get the derivatives with
 #' `llikNormDmean()` and `llikNormDsd()`
 #'
 #' @return data frame with `fx` for the pdf value of with `dMean` and
@@ -17,16 +17,21 @@
 #'   the observation time-point
 #' @author Matthew L. Fidler
 #' @export
+#' @importFrom Rcpp sourceCpp
 #' @examples
-#'
+#' 
+#' \donttest{
+#' 
 #' llikNorm(0)
 #'
 #' llikNorm(seq(-2,2,length.out=10), full=TRUE)
-#'
+#' 
+#' # With rxode2 you can use:
+#'  
 #' et <- et(-3, 3, length.out=10)
 #' et$mu <- 0
 #' et$sigma <- 1
-#'
+#' 
 #' model <- rxode2({
 #'   fx <- llikNorm(time, mu, sigma)
 #'   dMean <- llikNormDmean(time, mu, sigma)
@@ -35,17 +40,9 @@
 #'
 #' ret <- rxSolve(model, et)
 #' ret
+#' }
 llikNorm <- function(x, mean = 0, sd = 1, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=1, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(mean, min.len=1, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(sd, min.len=1, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, mean=mean, sd=sd), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, mean and sd", call.=FALSE)
-  }
-  .ret <- llikNormInternal(.df$x, .df$mean, .df$sd)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+  rxode2ll::llikNorm(x, mean, sd, full)
 }
 #' log-likelihood for the Poisson distribution
 #'
@@ -55,7 +52,7 @@ llikNorm <- function(x, mean = 0, sd = 1, full=FALSE) {
 #' @details
 #'
 #' In an `rxode2()` model, you can use `llikPois()` but you have to
-#' use all arguments.  You can also get the derivitaves with
+#' use all arguments.  You can also get the derivatives with
 #' `llikPoisDlambda()`
 #'
 #' @return data frame with `fx` for the pdf value of with
@@ -64,34 +61,28 @@ llikNorm <- function(x, mean = 0, sd = 1, full=FALSE) {
 #' @author Matthew L. Fidler
 #' @export
 #' @examples
-#'
+#' \donttest{
 #' llikPois(0:7, lambda = 1)
 #'
 #' llikPois(0:7, lambda = 4, full=TRUE)
 #'
+#' # In rxode2 you can use:
+#'
 #' et <- et(0:10)
 #' et$lambda <- 0.5
-#'
+#' 
 #' model <- rxode2({
 #'   fx <- llikPois(time, lambda)
 #'   dLambda <- llikPoisDlambda(time, lambda)
 #' })
 #'
 #' rxSolve(model, et)
+#' }
 llikPois <- function(x, lambda, full=FALSE) {
-  checkmate::assertIntegerish(x, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertNumeric(lambda, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, lambda=lambda), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, lambda", call.=FALSE)
-  }
-  .ret <- llikPoisInternal(.df$x, .df$lambda)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+  rxode2ll::llikPois(x, lambda, full)
 }
 
 #' Calculate the log likelihood of the binomial function (and its derivatives)
-#'
 #' 
 #' @param x  Number of successes
 #' @param size Size of trial
@@ -100,41 +91,37 @@ llikPois <- function(x, lambda, full=FALSE) {
 #' @inheritParams llikNorm
 #'
 #' @details
+#' 
 #' In an `rxode2()` model, you can use `llikBinom()` but you have to
 #' use all arguments.  You can also get the derivative of `prob` with
 #' `llikBinomDprob()`
+#' 
 #' @return data frame with `fx` for the pdf value of with
 #'   `dProb` that has the derivatives with respect to the parameters at
 #'   the observation time-point
 #' @author Matthew L. Fidler
 #' @export 
 #' @examples
-#' 
+#' \donttest{
 #' llikBinom(46:54, 100, 0.5)
 #'
 #' llikBinom(46:54, 100, 0.5, TRUE)
 #'
+#' # In rxode2 you can use:
+#' 
 #' et <- et(46:54)
 #' et$size <- 100
 #' et$prob <-0.5
 #'
 #' model <- rxode2({
 #'   fx <- llikBinom(time, size, prob)
-#'   dProb <- llikBinomDprob(time, size, prob)
+#'  dProb <- llikBinomDprob(time, size, prob)
 #' })
 #'
 #' rxSolve(model, et)
+#' }
 llikBinom <- function(x, size, prob, full=FALSE) {
-  checkmate::assertIntegerish(x, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertIntegerish(size, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertNumeric(prob, min.len=0, lower=0, upper=1, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, size=size, prob=prob), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, size, prob", call.=FALSE)
-  }
-  .ret <- llikBinomInternal(.df$x, .df$size, .df$prob)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+  rxode2ll::llikBinom(x, size, prob, full)
 }
 
 #' Calculate the log likelihood of the negative binomial function (and its derivatives)
@@ -155,11 +142,13 @@ llikBinom <- function(x, size, prob, full=FALSE) {
 #' @author Matthew L. Fidler
 #' @export 
 #' @examples
-#' 
+#' \donttest{
 #' llikNbinom(46:54, 100, 0.5)
 #'
 #' llikNbinom(46:54, 100, 0.5, TRUE)
 #'
+#' # In rxode2 you can use:
+#' 
 #' et <- et(46:54)
 #' et$size <- 100
 #' et$prob <-0.5
@@ -170,42 +159,40 @@ llikBinom <- function(x, size, prob, full=FALSE) {
 #' })
 #'
 #' rxSolve(model, et)
+#' }
 llikNbinom <- function(x, size, prob, full=FALSE) {
-  checkmate::assertIntegerish(x, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertIntegerish(size, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertNumeric(prob, min.len=0, lower=0, upper=1, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, size=size, prob=prob), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, size, prob", call.=FALSE)
-  }
-  .ret <- llikNbinomInternal(.df$x, .df$size, .df$prob)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+  rxode2ll::llikNbinom(x, size, prob, full)
 }
 
 #' Calculate the log likelihood of the negative binomial function (and its derivatives)
 #' 
 #' @param x  Number of successes
+#' 
 #' @param size Size of trial
+#' 
 #' @param mu mu parameter for negative binomial
 #' 
 #' @inheritParams llikNorm
 #'
 #' @details
+#' 
 #' In an `rxode2()` model, you can use `llikNbinomMu()` but you have to
 #' use all arguments.  You can also get the derivative of `mu` with
 #' `llikNbinomMuDmu()`
+#' 
 #' @return data frame with `fx` for the pdf value of with
 #'   `dProb` that has the derivatives with respect to the parameters at
 #'   the observation time-point
+#' 
 #' @author Matthew L. Fidler
+#' 
 #' @export 
 #' @examples
-#' 
+#' \donttest{
 #' llikNbinomMu(46:54, 100, 40)
 #'
 #' llikNbinomMu(46:54, 100, 40, TRUE)
-#'
+#' 
 #' et <- et(46:54)
 #' et$size <- 100
 #' et$mu <- 40
@@ -216,17 +203,9 @@ llikNbinom <- function(x, size, prob, full=FALSE) {
 #' })
 #'
 #' rxSolve(model, et)
+#' }
 llikNbinomMu <- function(x, size, mu, full=FALSE) {
-  checkmate::assertIntegerish(x, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertIntegerish(size, min.len=0, lower=0, any.missing=FALSE)
-  checkmate::assertNumeric(mu, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, size=size, mu=mu), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, size, mu", call.=FALSE)
-  }
-  .ret <- llikNbinomMuInternal(.df$x, .df$size, .df$mu)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+  rxode2ll::llikNbinomMu(x, size, mu, full)
 }
 
 #' Calculate the log likelihood of the binomial function (and its derivatives)
@@ -236,15 +215,22 @@ llikNbinomMu <- function(x, size, mu, full=FALSE) {
 #' @inheritParams llikNorm
 #'
 #' @details
+#' 
 #' In an `rxode2()` model, you can use `llikBeta()` but you have to
 #' use all arguments.  You can also get the derivative of `shape1` and `shape2` with
 #' `llikBetaDshape1()` and `llikBetaDshape2()`.
+#' 
 #' @return data frame with `fx` for the log pdf value of with
 #'   `dShape1` and `dShape2` that has the derivatives with respect to the parameters at
 #'   the observation time-point
+#' 
 #' @author Matthew L. Fidler
-#' @export 
+#' 
+#' @export
+#' 
 #' @examples
+#' 
+#' \donttest{
 #'
 #' x <- seq(1e-4, 1 - 1e-4, length.out = 21)
 #' 
@@ -263,21 +249,12 @@ llikNbinomMu <- function(x, size, mu, full=FALSE) {
 #' })
 #'
 #' rxSolve(model, et)
-#' 
+#' }
 llikBeta <- function(x, shape1, shape2, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, lower=0, upper=1, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(shape1, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(shape2, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, shape1=shape1, shape2=shape2), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, shape1, shape2", call.=FALSE)
-  }
-  .ret <- llikBetaInternal(.df$x, .df$shape1, .df$shape2)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+  rxode2ll::llikBeta(x, shape1, shape2, full)
 }
 
-#' log likelihood of T and it's derivatives (from stan) 
+#' Log likelihood of T and it's derivatives (from stan) 
 #'
 #' @param x  Observation
 #' @inheritParams llikNorm
@@ -294,38 +271,30 @@ llikBeta <- function(x, shape1, shape2, full=FALSE) {
 #' @export 
 #' @examples
 #'
+#' \donttest{
 #' x <- seq(-3, 3, length.out = 21)
 #'
 #' llikT(x, 7, 0, 1)
 #'
 #' llikT(x, 15, 0, 1, full=TRUE)
 #'
-#'  et <- et(-3, 3, length.out=10)
-#'  et$nu <- 7
-#'  et$mean <- 0
-#'  et$sd <- 1
+#' et <- et(-3, 3, length.out=10)
+#' et$nu <- 7
+#' et$mean <- 0
+#' et$sd <- 1
 #'
-#'  model <- rxode2({
-#'    fx <- llikT(time, nu, mean, sd)
-#'    dDf <- llikTDdf(time, nu, mean, sd)
-#'    dMean <- llikTDmean(time, nu, mean, sd)
-#'    dSd   <- llikTDsd(time, nu, mean, sd)
-#'  })
+#' model <- rxode2({
+#'   fx <- llikT(time, nu, mean, sd)
+#'   dDf <- llikTDdf(time, nu, mean, sd)
+#'   dMean <- llikTDmean(time, nu, mean, sd)
+#'   dSd   <- llikTDsd(time, nu, mean, sd)
+#' })
 #'
-#'  rxSolve(model, et)
+#' rxSolve(model, et)
+#' }
 #'
-llikT <-function(x, df, mean=0, sd=1, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(df, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(mean, min.len=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(sd, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, df=df, mean=mean, sd=sd), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, df, mean, sd", call.=FALSE)
-  }
-  .ret <- llikTInternal(.df$x, .df$df, .df$mean, .df$sd)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+llikT <- function(x, df, mean=0, sd=1, full=FALSE) {
+  rxode2ll::llikT(x, df, mean, sd)
 }
 
 #' log likelihood and derivatives for chi-squared distribution
@@ -343,7 +312,8 @@ llikT <-function(x, df, mean=0, sd=1, full=FALSE) {
 #' use the x and df arguments.  You can also get the derivative of `df` with
 #' `llikChisqDdf()`.
 #' @examples
-#' 
+#'
+#' \donttest{
 #' llikChisq(1, df = 1:3, full=TRUE)
 #' 
 #' llikChisq(1, df = 6:9)
@@ -357,16 +327,9 @@ llikT <-function(x, df, mean=0, sd=1, full=FALSE) {
 #' })
 #'
 #' rxSolve(model, et)
-llikChisq <-function(x, df, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(df, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, df=df), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, df", call.=FALSE)
-  }
-  .ret <- llikChisqInternal(.df$x, .df$df)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+#' }
+llikChisq <- function(x, df, full=FALSE) {
+  rxode2ll::llikChisq(x, df, full)
 }
 
 #' log likelihood and derivatives for exponential distribution
@@ -388,10 +351,12 @@ llikChisq <-function(x, df, full=FALSE) {
 #' `llikExpDrate()`.
 #' 
 #' @examples
-#'
+#' \donttest{
 #' llikExp(1, 1:3)
 #'
 #' llikExp(1, 1:3, full=TRUE)
+#'
+#' # You can use rxode2 for these too:
 #'
 #' et <- et(1:3)
 #' et$x <- 1
@@ -402,17 +367,9 @@ llikChisq <-function(x, df, full=FALSE) {
 #' })
 #'
 #' rxSolve(model, et)
-#' 
-llikExp <-function(x, rate, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(rate, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .rate <- try(data.frame(x=x, rate=rate), silent=TRUE)
-  if (inherits(.rate, "try-error")) {
-    stop("incompatible dimensions for x, rate", call.=FALSE)
-  }
-  .ret <- llikExpInternal(.rate$x, .rate$rate)
-  if (full) .ret <- cbind(.rate, .ret)
-  .ret
+#' }
+llikExp <- function(x, rate, full=FALSE) {
+  rxode2ll::llikExp(x, rate, full)
 }
 
 #' log likelihood and derivatives for F distribution
@@ -435,14 +392,15 @@ llikExp <-function(x, rate, full=FALSE) {
 #' 
 #' @examples
 #'
+#' \donttest{
 #' x <- seq(0.001, 5, length.out = 100)
 #'
 #' llikF(x^2, 1, 5)
 #'
 #' model <- rxode2({
-#'  fx <- llikF(time, df1, df2)
-#'  dMean <- llikFDdf1(time, df1, df2)
-#'  dSd <- llikFDdf2(time, df1, df2)
+#'   fx <- llikF(time, df1, df2)
+#'   dMean <- llikFDdf1(time, df1, df2)
+#'   dSd <- llikFDdf2(time, df1, df2)
 #' })
 #' 
 #' et <- et(x)
@@ -450,18 +408,9 @@ llikExp <-function(x, rate, full=FALSE) {
 #' et$df2 <- 5
 #' 
 #' rxSolve(model, et)
-#' 
-llikF <-function(x, df1, df2, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(df1, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(df2, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .rate <- try(data.frame(x=x, df1=df1, df2=df2), silent=TRUE)
-  if (inherits(.rate, "try-error")) {
-    stop("incompatible dimensions for x, df1, df2", call.=FALSE)
-  }
-  .ret <- llikFInternal(.rate$x, .rate$df1, .rate$df2)
-  if (full) .ret <- cbind(.rate, .ret)
-  .ret
+#' }
+llikF <- function(x, df1, df2, full=FALSE) {
+  rxode2ll::llikF(x, df1, df2, full)
 }
 
 #' log likelihood and derivatives for Geom distribution
@@ -484,9 +433,11 @@ llikF <-function(x, df1, df2, full=FALSE) {
 #' `llikGeomDprob()`.
 #' 
 #' @examples
-#'
+#' 
+#' \donttest{
+#' 
 #' llikGeom(1:10, 0.2)
-#'
+#' 
 #' et  <- et(1:10)
 #' et$prob <- 0.2
 #'  
@@ -496,16 +447,9 @@ llikF <-function(x, df1, df2, full=FALSE) {
 #' })
 #'
 #' rxSolve(model, et)
-llikGeom <-function(x, prob, full=FALSE) {
-  checkmate::assertIntegerish(x, lower=0, min.len=0, any.missing=FALSE)
-  checkmate::assertNumeric(prob, min.len=0, lower=0, upper=1,any.missing=FALSE, finite=TRUE)
-  .rate <- try(data.frame(x=x, prob=prob), silent=TRUE)
-  if (inherits(.rate, "try-error")) {
-    stop("incompatible dimensions for x, prob", call.=FALSE)
-  }
-  .ret <- llikGeomInternal(.rate$x, .rate$prob)
-  if (full) .ret <- cbind(.rate, .ret)
-  .ret
+#' }
+llikGeom <- function(x, prob, full=FALSE) {
+  rxode2ll::llikGeom(x, prob, full)
 }
 
 #' log likelihood and derivatives for Unif distribution
@@ -531,6 +475,8 @@ llikGeom <-function(x, prob, full=FALSE) {
 #' 
 #' @examples
 #'
+#' \donttest{
+#'
 #' llikUnif(1, -2, 2)
 #'
 #' et  <- et(seq(1,1, length.out=4))
@@ -543,20 +489,10 @@ llikGeom <-function(x, prob, full=FALSE) {
 #'   dBeta <- llikUnifDbeta(time, alpha, beta)
 #' })
 #' 
-#'
 #' rxSolve(model, et)
-#' 
-llikUnif <-function(x, alpha, beta, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(alpha, min.len=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(beta, min.len=0, any.missing=FALSE, finite=TRUE)
-  .rate <- try(data.frame(x=x, alpha=alpha, beta=beta), silent=TRUE)
-  if (inherits(.rate, "try-error")) {
-    stop("incompatible dimensions for x, alpha, beta", call.=FALSE)
-  }
-  .ret <- llikUnifInternal(.rate$x, .rate$alpha, .rate$beta)
-  if (full) .ret <- cbind(.rate, .ret)
-  .ret
+#' }
+llikUnif <- function(x, alpha, beta, full=FALSE) {
+  rxode2ll::llikUnif(x, alpha, beta, full)
 }
 
 #' log likelihood and derivatives for Weibull distribution
@@ -580,8 +516,10 @@ llikUnif <-function(x, alpha, beta, full=FALSE) {
 #' `llikWeibullDshape()` and `llikWeibullDscale()`.
 #' 
 #' @examples
-#'
+#' \donttest{
 #' llikWeibull(1, 1, 10)
+#'
+#' # rxode2 can use this too:
 #'
 #' et  <- et(seq(0.001, 1, length.out=10))
 #' et$shape <- 1
@@ -592,21 +530,11 @@ llikUnif <-function(x, alpha, beta, full=FALSE) {
 #'   dShape<- llikWeibullDshape(time, shape, scale)
 #'   dScale <- llikWeibullDscale(time, shape, scale)
 #' })
-#' 
 #'
 #' rxSolve(model, et)
-#' 
-llikWeibull <-function(x, shape, scale, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(shape, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(scale, min.len=0, lower=0,any.missing=FALSE, finite=TRUE)
-  .rate <- try(data.frame(x=x, shape=shape, scale=scale), silent=TRUE)
-  if (inherits(.rate, "try-error")) {
-    stop("incompatible dimensions for x, shape, scale", call.=FALSE)
-  }
-  .ret <- llikWeibullInternal(.rate$x, .rate$shape, .rate$scale)
-  if (full) .ret <- cbind(.rate, .ret)
-  .ret
+#' }
+llikWeibull <- function(x, shape, scale, full=FALSE) {
+  rxode2ll::llikWeibull(x, shape, scale, full)
 }
 
 
@@ -635,9 +563,12 @@ llikWeibull <-function(x, shape, scale, full=FALSE) {
 #' `llikGammaDshape()` and `llikGammaDrate()`.
 #' 
 #' @examples
-#'
+#' \donttest{
+#' 
 #' llikGamma(1, 1, 10)
-#'
+#' 
+#' # You can use this in `rxode2` too:
+#' 
 #' et  <- et(seq(0.001, 1, length.out=10))
 #' et$shape <- 1
 #' et$rate <- 10
@@ -648,20 +579,10 @@ llikWeibull <-function(x, shape, scale, full=FALSE) {
 #'   dRate <- llikGammaDrate(time, shape, rate)
 #' })
 #' 
-#'
 #' rxSolve(model, et)
-#' 
-llikGamma <-function(x, shape, rate, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(shape, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(rate, min.len=0, lower=0,any.missing=FALSE, finite=TRUE)
-  .rate <- try(data.frame(x=x, shape=shape, rate=rate), silent=TRUE)
-  if (inherits(.rate, "try-error")) {
-    stop("incompatible dimensions for x, shape, rate", call.=FALSE)
-  }
-  .ret <- llikGammaInternal(.rate$x, .rate$shape, .rate$rate)
-  if (full) .ret <- cbind(.rate, .ret)
-  .ret
+#' }
+llikGamma <- function(x, shape, rate, full=FALSE) {
+  rxode2ll::llikGamma(x, shape, rate, full)
 }
 
 
@@ -681,34 +602,25 @@ llikGamma <-function(x, shape, rate, full=FALSE) {
 #' `llikCauchyDlocation()` and `llikCauchyDscale()`.
 #' @export 
 #' @examples
-#'
+#' \donttest{
 #' x <- seq(-3, 3, length.out = 21)
 #'
 #' llikCauchy(x, 0, 1)
 #'
 #' llikCauchy(x, 3, 1, full=TRUE)
 #'
-#'  et <- et(-3, 3, length.out=10)
-#'  et$location <- 0
-#'  et$scale <- 1
+#' et <- et(-3, 3, length.out=10)
+#' et$location <- 0
+#' et$scale <- 1
 #'
-#'  model <- rxode2({
-#'    fx <- llikCauchy(time, location, scale)
-#'    dLocation <- llikCauchyDlocation(time, location, scale)
-#'    dScale <- llikCauchyDscale(time, location, scale)
-#'  })
+#' model <- rxode2({
+#'   fx <- llikCauchy(time, location, scale)
+#'   dLocation <- llikCauchyDlocation(time, location, scale)
+#'   dScale <- llikCauchyDscale(time, location, scale)
+#' })
 #'
-#'  rxSolve(model, et)
-#'
-llikCauchy <-function(x, location=0, scale=1, full=FALSE) {
-  checkmate::assertNumeric(x, min.len=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(location, min.len=0, any.missing=FALSE, finite=TRUE)
-  checkmate::assertNumeric(scale, min.len=0, lower=0, any.missing=FALSE, finite=TRUE)
-  .df <- try(data.frame(x=x, location=location, scale=scale), silent=TRUE)
-  if (inherits(.df, "try-error")) {
-    stop("incompatible dimensions for x, location, scale", call.=FALSE)
-  }
-  .ret <- llikCauchyInternal(.df$x, .df$location, .df$scale)
-  if (full) .ret <- cbind(.df, .ret)
-  .ret
+#' rxSolve(model, et)
+#' }
+llikCauchy <- function(x, location=0, scale=1, full=FALSE) {
+  rxode2ll::llikCauchy(x, location, scale, full)
 }

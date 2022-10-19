@@ -30,10 +30,12 @@ use all arguments.  You can also get the derivative of \code{prob} with
 \code{llikBinomDprob()}
 }
 \examples{
-
+\donttest{
 llikBinom(46:54, 100, 0.5)
 
 llikBinom(46:54, 100, 0.5, TRUE)
+
+# In rxode2 you can use:
 
 et <- et(46:54)
 et$size <- 100
@@ -41,10 +43,11 @@ et$prob <-0.5
 
 model <- rxode2({
   fx <- llikBinom(time, size, prob)
-  dProb <- llikBinomDprob(time, size, prob)
+ dProb <- llikBinomDprob(time, size, prob)
 })
 
 rxSolve(model, et)
+}
 }
 \author{
 Matthew L. Fidler

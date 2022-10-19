@@ -30,8 +30,11 @@ use the x and rate arguments.  You can also get the derivative of \code{shape} o
 \code{llikGammaDshape()} and \code{llikGammaDrate()}.
 }
 \examples{
+\donttest{
 
 llikGamma(1, 1, 10)
+
+# You can use this in `rxode2` too:
 
 et  <- et(seq(0.001, 1, length.out=10))
 et$shape <- 1
@@ -43,9 +46,8 @@ model <- rxode2({
   dRate <- llikGammaDrate(time, shape, rate)
 })
 
-
 rxSolve(model, et)
-
+}
 }
 \author{
 Matthew L. Fidler
