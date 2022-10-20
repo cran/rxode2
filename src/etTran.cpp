@@ -1859,20 +1859,25 @@ List etTrans(List inData, const RObject &obj, bool addCmt=false,
             nvTmp[jj] = nvTmp2[idxInput[idxOutput[i]]];
             if (addId){
               nvTmp = as<NumericVector>(lst1[1+j]);
-              nvTmp[idx1] = nvTmp2[idxInput[idxOutput[i]]];
+							int iCur = i;
+							double vCur = nvTmp2[idxInput[idxOutput[i]]];
+							// Could be NA, look for non NA value OR beginning of subject
+							while (ISNA(vCur) && iCur != 0 && lastId == id[idxOutput[iCur]]) {
+								iCur--;
+								vCur = nvTmp2[idxInput[idxOutput[i]]];
+							}
+							if (ISNA(vCur)) {
+								Rf_warningcall(R_NilValue,"column '%s' has only 'NA' values for id '%s'" , CHAR(nme1[1+j]),
+															 CHAR(idLvl[((inId.size() == 0) ? 1 : lastId)-1]));
+							}
+              nvTmp[idx1] = vCur;
               fPars[idx1*pars.size()+covParPos[j]] = nvTmp[idx1];
               added = true;
             } else if (sub1[1+j]) {
               nvTmp = as<NumericVector>(lst1[1+j]);
-							int ii1 =idx1;
-							double cur1 = nvTmp[ii1];
-							int ii2 = i;
-							double cur2 =nvTmp2[idxInput[idxOutput[i]]];
-							while (ISNA(cur2) && ii2 != 0 && lastId==id[idxOutput[ii2-1]]) {
-								ii2--;
-								cur2 =nvTmp2[idxInput[idxOutput[i]]];
-							}
-							if (nvTmp[idx1] != cur2){
+							double cur1 = nvTmp[idx1];
+							double cur2 = nvTmp2[idxInput[idxOutput[i]]];
+							if (!ISNA(cur2) && nvTmp[idx1] != cur2){
 								sub0[baseSize+j] = true;
 								sub1[1+j] = false;
 								fPars[idx1*pars.size()+covParPos[j]] = NA_REAL;

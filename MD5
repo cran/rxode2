@@ -1,6 +1,6 @@
-9abf0103691ed31cbd652f914f81f893 *DESCRIPTION
+a5cc3c001c23f9ded3da5c8189c61909 *DESCRIPTION
 d1d1231dcdae1382b76645f0414a9e9f *NAMESPACE
-363bd9f52f510b12666714768ea52373 *NEWS.md
+9485ddd0c37140be872204f5e343341b *NEWS.md
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
 ac0ba0955a787a83f0e5366c99a2d76f *R/RcppExports.R
 4d039a945264ca49a53f1b78c8dabf32 *R/asFunction.R
@@ -43,7 +43,7 @@ d8df5d7ab74c04ae0a74b1120bdbf448 *R/rxPrune.R
 a4ccf3492ba0ecea2c30cc73f7309d41 *R/rxValidate.R
 d1512de004101e700f82f1c10fd24421 *R/rxode-options.R
 6a1ab1a9d78331902a89598b1cc669bd *R/rxode2.R
-281e86254f88403234a76318ebfe1581 *R/rxode2_md5.R
+ff1f30c19b25721d31348407ce5efaa4 *R/rxode2_md5.R
 71f5852c90a111181cab00fe671bb879 *R/rxrandom.R
 5bc3d8e62b4a21c9631a5ae82a147424 *R/rxsolve.R
 81860635d712c7b8ae84ff51ea996d0d *R/str.R
@@ -72,7 +72,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 37933cfa80da838f2c4c988312e92e99 *inst/doc/rxode2-syntax.Rmd
-c8476807bf60a3b992824d267a1231a8 *inst/doc/rxode2-syntax.html
+5098e6af5ab3cbd7f5a5a26e81a0688c *inst/doc/rxode2-syntax.html
 4b564de26e5688448deefddab82b6af7 *inst/include/rxode2.h
 815c4151bdf5cd448046df3858ff9dca *inst/include/rxode2_RcppExports.h
 44158d0c42a8f775edeca9165440f5fa *inst/include/rxode2_as.h
@@ -285,7 +285,7 @@ c250aeda8197ad95eb933d1ec649931f *man/summary.rxode2.Rd
 ebaa1516d22c36ddfaf1f8a165f00a87 *src/Makevars.in
 3d8aca9a316daa47584163b7a2fa35c5 *src/RcppExports.cpp
 660dfbf7e7ab77cded72a75065a4248d *src/RxODE_types.h
-54104f149cd433a6e234cfadb3500514 *src/approx.c
+adba05ef576a1115e7a9441b6c6a4de9 *src/approx.c
 e8c92f5fc6afd5cecd604958dd3cb2e5 *src/blas.h
 e7001ac761dad9c8757c4abac9459521 *src/boost.cpp
 de87878b3ac7d1ed467f5781b14ca161 *src/box.c
@@ -309,7 +309,7 @@ be816a79a730f829325ffcbd20943747 *src/correction.c
 b3207298b70d82dfac19ed89b21d7345 *src/dop853.h
 d840aec10ac90d3d4909878897c924e8 *src/dscal.c
 982c7c8994a60d759ecb76fb31b3602f *src/dsphiv.f
-94e129b6a73e73ee6485447e78b00ca5 *src/etTran.cpp
+a4556c19b1460c192baa02f8df79f74a *src/etTran.cpp
 d3efc7f01eeabfd4c87a0a94f45be224 *src/expandGrid.cpp
 ea08217cc4295859f8b5904ea6ca0435 *src/expm.cpp
 a43b7dd8e6b51fb86b4e9c6edd7826ea *src/fnorm.c
@@ -333,12 +333,12 @@ a24b26385bee4e9f4b91f4b9012fbf77 *src/omegaChol.c
 fbcdbbd417d4b617e086b70b32575693 *src/par_solve.h
 7a2a9a8e812ecfc90871b1e8860dca67 *src/prja.c
 3c2ad77656bc710022f9042666e550fd *src/rprintf.c
-3628b145fddc5269c788959eb12b8ee6 *src/rxData.cpp
+5e10d2991d4b08100e4f658756974da7 *src/rxData.cpp
 999b28705579e945be764c0a709be867 *src/rxData.h
 4a3c660bfba001d223a71f16cc1f0094 *src/rxInv.cpp
 68da7fc70dbff124390d420058183b92 *src/rxOptRep.cpp
 e0848f41f25b982aafc281eb990e129c *src/rxThreadData.h
-7b435c515f4a470684edc5914cb81607 *src/rxode2_df.cpp
+2c1e3ac63802f64bf2db04c88d799768 *src/rxode2_df.cpp
 af31f183e586c5b35630b6c8b396f127 *src/rxode2_df.h
 23274f5ae5c84699ffe1e33e1ccde911 *src/rxode2parse.c
 25c66420bd951ac62c1b921a07c34c35 *src/rxode2random.c
@@ -371,7 +371,7 @@ bd4e8efa0c997d4ea5210a1547b0645c *tests/testthat/test-bad-dose.R
 69a2b4026bd69f57999ff6adc7360c1f *tests/testthat/test-bioavailibility.R
 201214e99000e7a175b473c98569310a *tests/testthat/test-cbind-study-individual.R
 0a722f9a34df82c52859048039f95b6b *tests/testthat/test-cmt-order.R
-e37fcd5a60d2b145719718f1c517620a *tests/testthat/test-cov.R
+91b526222ee5c02e8335e01b8e3ecc4b *tests/testthat/test-cov.R
 03d2c3bf6c8dd051a95426bc0701acc3 *tests/testthat/test-cvpost.R
 ab408d5c17cff397af7d9625afb89b87 *tests/testthat/test-data-frame.R
 eb4f2d83669437a257a16450567f6d2b *tests/testthat/test-data-setup.qs
@@ -387,7 +387,7 @@ bf7fa1ea894cad721a524ab40288f961 *tests/testthat/test-drop.R
 a4622ffcc8e9f2a54cb15e2749b579aa *tests/testthat/test-dsl.R
 757b4cdf075c77284074d31ef39e2b71 *tests/testthat/test-et.R
 6f771a2b4806eb0047b45d1399439d13 *tests/testthat/test-etTrans-1.rds
-2723b9a36b5fa8e50dcccb72c707567c *tests/testthat/test-etTrans.R
+c1665f2c99dfbefd19af93f6ab62ffa7 *tests/testthat/test-etTrans.R
 58bbd21b0c5c99947df82759a940011b *tests/testthat/test-evid2.R
 de1b8f0c6772e675adcfdd75a466e872 *tests/testthat/test-evid3.R
 68f2015613f51c63781290a187dc7e41 *tests/testthat/test-example-3-1.R
