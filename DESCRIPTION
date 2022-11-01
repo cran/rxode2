@@ -1,5 +1,5 @@
 Package: rxode2
-Version: 2.0.10
+Version: 2.0.11
 Title: Facilities for Simulating from ODE-Based Models
 Authors@R: c(
    person("Matthew L.","Fidler",
@@ -43,7 +43,7 @@ Suggests: Matrix, DT, covr, crayon, curl, digest, dplyr (>= 0.8.0),
 Imports: PreciseSums (>= 0.3), Rcpp (>= 0.12.3), backports, cli (>=
         2.0.0), checkmate, ggplot2, inline, lotri (>= 0.4.0), magrittr,
         memoise, methods, rex, sys, tools, utils, rxode2ll(>= 2.0.9),
-        rxode2et (>= 2.0.9), rxode2parse (>= 2.0.11), rxode2random (>=
+        rxode2et (>= 2.0.9), rxode2parse (>= 2.0.12), rxode2random (>=
         2.0.9), data.table (>= 1.12.4), qs
 Description: Facilities for running simulations from ordinary
     differential equation ('ODE') models, such as pharmacometrics and other
@@ -65,13 +65,13 @@ URL: https://nlmixr2.github.io/rxode2/,
         https://github.com/nlmixr2/rxode2/
 RoxygenNote: 7.2.1
 Biarch: true
-LinkingTo: rxode2parse, rxode2random, rxode2et, PreciseSums (>= 0.3),
-        Rcpp, RcppArmadillo (>= 0.9.300.2.0), BH
+LinkingTo: rxode2parse (>= 2.0.12), rxode2random, rxode2et, PreciseSums
+        (>= 0.3), Rcpp, RcppArmadillo (>= 0.9.300.2.0), BH
 Encoding: UTF-8
 LazyData: true
 Language: en-US
 Config/testthat/edition: 3
-Packaged: 2022-10-20 15:32:54 UTC; matt
+Packaged: 2022-11-01 14:05:28 UTC; matt
 Author: Matthew L. Fidler [aut, cre] (<https://orcid.org/0000-0001-8538-6691>),
   Melissa Hallow [aut],
   Wenping Wang [aut],
@@ -98,4 +98,4 @@ Author: Matthew L. Fidler [aut, cre] (<https://orcid.org/0000-0001-8538-6691>),
   Simon Frost [ctb],
   Yu Feng [ctb]
 Repository: CRAN
-Date/Publication: 2022-10-20 21:12:35 UTC
+Date/Publication: 2022-11-01 21:45:04 UTC

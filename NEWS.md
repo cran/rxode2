@@ -1,3 +1,11 @@
+# rxode2 2.0.11
+
+- Give a more meaningful error for 'rxode2' ui models with only error expressions 
+
+- Break the ABI requirement between `roxde2()` and `rxode2parse()`
+
+- The new `rxode2parse` will fix the `sprintf` exclusion shown on CRAN.
+
 # rxode2 2.0.10
 
 - Time invariant covariates can now contain 'NA' values.
