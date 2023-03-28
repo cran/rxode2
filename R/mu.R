@@ -57,11 +57,30 @@
 .rxMuRefHasThetaEtaOrCov <- function(x, env) {
   if (is.name(x)) {
     .n <- as.character(x)
+    .lhs <- deparse1(env$curLhs)
     if (any(.n == env$info$eta)) {
+      .w <- which(env$etaLhsDf$lhs == .lhs &
+                    env$etaLhsDf$eta == .n)
+      if (length(.w) == 0) {
+        env$etaLhsDf <- rbind(env$etaLhsDf,
+                              data.frame(lhs=.lhs, eta=.n))
+      }
       return(TRUE)
     } else if (any(.n == env$info$theta)) {
+      .w <- which(env$thetaLhsDf$lhs == .lhs &
+                    env$thetaLhsDf$theta == .n)
+      if (length(.w) == 0) {
+        env$thetaLhsDf <- rbind(env$thetaLhsDf,
+                              data.frame(lhs=.lhs, theta=.n))
+      }
       return(TRUE)
     } else if (any(.n == env$info$cov)) {
+      .w <- which(env$covLhsDf$lhs == .lhs &
+                    env$covLhsDf$cov == .n)
+      if (length(.w) == 0) {
+        env$covLhsDf <- rbind(env$covLhsDf,
+                                data.frame(lhs=.lhs, cov=.n))
+      }
       return(TRUE)
     }
     return(FALSE)
@@ -643,6 +662,7 @@
       x <- y[[.i]]
       if (identical(x[[1]], quote(`=`)) ||
             identical(x[[1]], quote(`~`))) {
+        env$curLhs <- x[[2]]
         #.handleSingleEtaIfExists(x[[3]], env)
         if (.rxMuRefHasThetaEtaOrCov(x[[3]], env)) {
           # This line has etas or covariates and might need to be
@@ -804,6 +824,10 @@
   .env$muRefCovariateEmpty <- NULL
   .env$nonMuEtas <- NULL
   .env$covariates <- .info$cov
+  .env$etaLhsDf <- data.frame(lhs=character(0), eta=character(0))
+  .env$thetaLhsDf <- data.frame(lhs=character(0), theta=character(0))
+  .env$covLhsDf <- data.frame(lhs=character(0), cov=character(0))
+  .env$curLhs <- NULL
   return(.env)
 }
 #' Check/adjust ranges for error parameters
@@ -825,8 +849,8 @@
       .range <- .errDistArgRanges[[.curErr]]
       .est <- .iniDf$est[.err]
       .lower <- .iniDf$lower[.err]
-      .upper <- .iniDf$upper[.err]
       .name <- .iniDf$name[.err]
+      .upper <- .iniDf$upper[.err]
       if (.range[1] > .est) {
         env$err <- c(env$err,
                      paste0("'", .name, "' estimate (", .est, ") needs to be above ", .range[1]))
@@ -836,13 +860,15 @@
                      paste0("'", .name, "' estimate (", .est, ") needs to be below ", .range[2]))
       }
       if (.lower < .range[1]) {
-        ## warning("'", .name, "' lower bound (", .lower, ") needs to be equal or above ", .range[1], "; adjusting",
-        ##         call.=FALSE)
+        if (rxode2.verbose.pipe && is.finite(.lower)) {
+          .minfo(paste0("'", .name, "' lower bound (", .lower, ") needs to be equal or above ", .range[1], "; adjusting"))
+        }
         .lower <- .range[1]
       }
       if (.upper > .range[2]) {
-        ## warning("'", .name, "' upper bound (", .upper, ") needs to be equal or below ", .range[2],"; adjusting",
-        ##         call.=FALSE)
+        if (rxode2.verbose.pipe && is.finite(.upper)) {
+          .minfo(paste0("'", .name, "' upper bound (", .upper, ") needs to be equal or below ", .range[2],"; adjusting"))
+        }
         .upper <- .range[2]
       }
       .iniDf$lower[.err] <- .lower
@@ -994,7 +1020,7 @@
                      "found", "info", "log.theta", "logit.theta", "logit.theta.hi",
                      "logit.theta.low", "param", "probit.theta", "probit.theta.hi",
                      "probit.theta.low", "probitInv.theta", "probitInv.theta.hi",
-                     "probitInv.theta.low", "top", "dupErr", "lstErr", "lstChr"),
+                     "probitInv.theta.low", "top", "dupErr", "lstErr", "lstChr", "curLhs"),
                    ls(envir=.env, all.names=TRUE))
   if (length(.rm) > 0) rm(list=.rm, envir=.env)
   return(invisible(.env))

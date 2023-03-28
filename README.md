@@ -5,9 +5,9 @@
 
 <!-- badges: start -->
 
-[![R build
-status](https://github.com/nlmixr2/rxode2/workflows/R-CMD-check/badge.svg)](https://github.com/nlmixr2/rxode2/actions)
-[![codecov.io](https://codecov.io/github/nlmixr2/rxode2/coverage.svg)](https://codecov.io/github/nlmixr2/rxode2)
+[![R-CMD-check](https://github.com/nlmixr2/rxode2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/nlmixr2/rxode2/actions/workflows/R-CMD-check.yaml)
+[![Codecov test
+coverage](https://codecov.io/gh/nlmixr2/rxode2/branch/main/graph/badge.svg)](https://app.codecov.io/gh/nlmixr2/rxode2?branch=main)
 [![CRAN
 version](http://www.r-pkg.org/badges/version/rxode2)](https://cran.r-project.org/package=rxode2)
 [![CRAN total
@@ -25,7 +25,7 @@ models. These models are convert the rxode2 mini-language to C and
 create a compiled dll for fast solving. ODE solving using rxode2 has a
 few key parts:
 
-  - `rxode()` which creates the C code for fast ODE solving based on a
+  - `rxode2()` which creates the C code for fast ODE solving based on a
     [simple
     syntax](https://nlmixr2.github.io/rxode2/articles/rxode2-syntax.html)
     related to Leibnitz notation.
@@ -59,7 +59,19 @@ You can install the released version of rxode2 from
 install.packages("rxode2")
 ```
 
-You can install the development version of rxode2 with
+The fastest way to install the development version of `rxode2` is to use
+the `r-universe` service. This service compiles binares of the
+development version for MacOS and for Windows so you don’t have to wait
+for package compilation:
+
+``` r
+install.packages(c("dparser", "rxode2ll", "rxode2parse",
+                   "rxode2random", "rxode2et", "rxode2"),
+                 repos=c(nlmixr2="https://nlmixr2.r-universe.dev",
+                         CRAN="https://cloud.r-project.org"))
+```
+
+If this doesn’t work you install the development version of rxode2 with
 
 ``` r
 devtools::install_github("nlmixr2/rxode2parse")
@@ -171,7 +183,7 @@ To load `rxode2` package and compile the model:
 
 ``` r
 library(rxode2)
-#> rxode2 2.0.9 using 4 threads (see ?getRxThreads)
+#> rxode2 2.0.11.9000 using 4 threads (see ?getRxThreads)
 
 mod1 <- rxode2({
   C2 <- centr/V2;

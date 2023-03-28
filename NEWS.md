@@ -1,6 +1,97 @@
+# rxode2 2.0.12
+
+## New features
+
+- A new function `zeroRe()` allows simple setting of omega and/or sigma values
+  to zero for a model (#456)
+
+- Diagonal zeros in the `omega` and `sigma` matrices are treated as
+  zeros in the model. The corresponding `omega` and `sigma` matrices
+  drop columns/rows where the diagonals are zero to create a new
+  `omega` and `sigma` matrix for simulation.  This is the same idiom
+  that NONMEM uses for simulation from these matrices.
+
+- Add the ability to pipe model estimates from another model by
+  `parentModel %>% ini(modelWithNewEsts)`
+
+- Add the ability to append model statements with piping using `%>%
+  model(x=3, append=d/dt(depot))`, still supports appending with
+  `append=TRUE` and pre-pending with `append=NA` (the default is to
+  replace lines with `append=FALSE`)
+
+- rxSolve's keep argument will now maintain character and factor classes from
+  input data with the same class (#190)
+
+- Parameter labels may now be modified via `ini(param = label("text"))` (#351).
+
+- Parameter order may be modified via the `append` argument to `ini()`
+  when piping a model.  For example, `ini(param = 1, append = 0)` or
+  `ini(param = label("text"), append = "param2")` (#352).
+
+## Internal changes
+
+- If lower/upper bounds are outside the required bounds, the
+  adjustment is displayed.
+
+- When initial values are piped that break the model's boundary
+  condition reset the boundary to unbounded and message which boundary
+  was reset.
+
+- Added `as.rxUi()` function to convert the following objects to
+  `rxUi` objects: `rxode2`, `rxModelVars`, `function`.  Converting
+  nlmixr2 fits to `rxUi` will be placed in the `s3` method in the
+  corresponding package.
+
+- `assertRxUi(x)` now uses `as.rxUi()` so that it can be extended
+  outside of `rxode2`/`nlmixr2`.
+
+- `rxode2` now supports `addl` with `ss` doses
+
+- Moved `rxDerived` to `rxode2parse` (and re-exported it here).
+
+- Added test for transit compartment solving in absence of dosing to the
+  transit compartment (fixed in `rxode2parse` but solving tested
+  here)
+
+- Using `ini()` without any arguments on a `rxode2` type function will
+  return the `ini()` block.  Also added a method `ini(mod) <-
+  iniBlock` to modify the `ini` block is you wish.  `iniBlock` should
+  be an expression.
+
+- Using `model()` without any arguments on a `rxode2` type function
+  will return the `model()` block.  Also added a new method
+  `model(mod) <- modelBlock`
+
+- Added a new method `rxode2(mod) <- modFunction` which allows
+  replacing the function with a new function while maintaining the
+  meta information about the ui (like information that comes from
+  `nonmem2rx` models).  The `modFunction` should be the body of the
+  new function, the new function, or a new `rxode2` ui.
+
+- `rxode2` ui objects now have a `$sticky` item inside the internal
+  (compressed) environment.  This `$sticky` tells what variables to
+  keep if there is a "significant" change in the ui during piping or
+  other sort of model change.  This is respected during model piping,
+  or modifying the model with `ini(mod)<-`, `model(mod)<-`,
+  `rxode2(mod)<-`.  A significant change is a change in the model
+  block, a change in the number of estimates, or a change to the value
+  of the estimates.  Estimate bounds, weather an estimate is fixed or
+  estimate label changes are not considered significant.
+
+- Added `as.ini()` method to convert various formats to an ini
+  expression.  It is used internally with `ini(mod)<-`.  If you want to
+  assign something new that you can convert to an ini expression, add
+  a method for `as.ini()`.
+
+- Added `as.model()` method to convert various formats to a model
+  expression.  It is used internally with `model(mod)<-`.  If you want to
+  assign something new that you can convert to a model expression, add
+  a method for `as.model()`.
+
 # rxode2 2.0.11
 
-- Give a more meaningful error for 'rxode2' ui models with only error expressions 
+- Give a more meaningful error for 'rxode2' ui models with only error
+  expressions
 
 - Break the ABI requirement between `roxde2()` and `rxode2parse()`
 
@@ -12,7 +103,7 @@
 
 - When a column has 'NA' for the entire id, now 'rxode2' warns about
   both the id and column instead of just the id.
-  
+
 - To fix some CRAN issues in 'nlmixr2est', make the version dependency
   explicit.
 
@@ -21,11 +112,11 @@
 - Remove log likelihoods from 'rxode2' to reduce compilation time and
   increase maintainability of 'rxode2'. They were transferred to
   'rxode2ll' (requested by CRAN).
-  
+
 - Remove the parsing from 'rxode2' and solved linear compartment code
   and move to 'rxode2parse' to reduce the compilation time (as requested
   by CRAN).
-  
+
 - Remove the random number generation from 'rxode2' and move to
   'rxode2random' to reduce the compilation time (as requested by
   CRAN).
@@ -33,11 +124,11 @@
 - Remove the event table translation and generation from 'rxode2' and
   move to 'rxode2et' to reduce the compilation time (as requested by
   CRAN).
-  
+
 - Change the `rxode2` ui object so it is a compressed, serialized
   object by default.  This could reduce the `C stack size` problem
   that occurs with too many environments in R.
-  
+
 - Warn when ignoring items during simulations
 
 - Export a method to change 'rxode2' solve methods into internal integers
@@ -64,7 +155,7 @@
   `nlmixr2` style focei likelihood.  This is done by adding `dnorm()`
   at the end of the line.  It also means `dnorm()` now doesn't take
   any arguments.
-  
+
 - Vandercorput normal removed (non-random number generator)
 
 ## New features
@@ -87,11 +178,11 @@
 - `rxode2`'s symengine would convert `sqrt(2)` to `M_SQRT_2` when it
   should be `M_SQRT2`.  This has been fixed; it was most noticeable in
   nlmixr2 log-likelihood estimation methods
-  
+
 - `rxode2` treats `DV` as a non-covariate with `etTran` (last time it
   would duplicate if it is in the model).  This is most noticeable in
   the nlmixr2 log-likelihood estimation methods.
-  
+
 ## New features
 
 - A new flag (`rxFlag`) has been created to tell you where in the
@@ -100,7 +191,7 @@
   left handed equations.  If you are using in conjunction with the
   `printf()` methods, it is a double variable and should be formatted
   with `"%f"`.
-  
+
 - An additional option of `fullPrint` has been added to `rxode2()`
   which allows `rprintf()` to be used in almost all of `rxode2()`
   steps (inductive linearization and matrix exponential are the
@@ -127,11 +218,11 @@
 * The options for `rxControl` and `rxSolve` are more strict.
   `camelCase` is now always used.  Old options like `add.cov` and
   `transit_abs` are no longer supported, only `addCov` is supported.
-  
+
 * A new option, `sigdig` has been added to `rxControl()`, which
   controls some of the more common significant figure options like
-  `atol`, `rtol`, `ssAtol`, `ssRtol`, with a single option. 
-  
+  `atol`, `rtol`, `ssAtol`, `ssRtol`, with a single option.
+
 ### Simulations
 
 * For simulations, `$simulationSigma` now assumes a diagonal matrix.
@@ -184,10 +275,10 @@
 
 * The function `rxode2Test()` has been removed in favor of using testthat
   directly.
-  
+
 * Transit compartments need to use a new `evid`, `evid=7`.  That being
   said, the `transitAbs` option is no longer supported.
-  
+
 * `ID` columns in input parameter data frames are not sorted or merged
   with original dataset any more; The underlying assumption of ID
   order should now be checked outside of `rxode2()`.  Note that the
@@ -203,16 +294,16 @@
 * You may now combine 2 models in `rxode2` with `rxAppendModel()`. In
   fact, as long as the first value is a rxode2 evaluated ui model, you can
   use  `c`/`rbind` to bind 2 or more models together.
-  
+
 * You may now append model lines with piping using `%>% model(lines,
   append=TRUE)` you can also pre-pend lines by `%>% model(lines,
   append=NA)`
-  
+
 * You may now rename model variables, states and defined parameters
   with `%>% rxRename(new=old)` or if `dplyr` is loaded: `%>%
   rename(new=old)`
-  
-* You can fix parameters with `%>% ini(tcl=fix)` or `%>% ini(fix(tcl))` as well as unfix parameters with 
+
+* You can fix parameters with `%>% ini(tcl=fix)` or `%>% ini(fix(tcl))` as well as unfix parameters with
   `%>% ini(tcl=unfix)` or `%>% ini(unfix(tcl))`
 
 ## Internal changes
@@ -221,10 +312,10 @@
 
 * Since there are many changes that could be incompatible, this
   version has been renamed to `rxode2`
-  
+
 * `rxode2()` printout no longer uses rules and centered headings to
   make it display better on a larger variety of systems.
-  
+
 ## Bug fixes
 
 * `tad()` and related time features only reset at the start of an

@@ -219,26 +219,3 @@ void curLineType(vLines *sbb, int propId) {
   sbb->lType[sbb->n] = propId;
 }
 
-void doDot(sbuf *out, char *buf) {
-  for (int k = 0; k < (int)strlen(buf); k++){
-    if (buf[k] == '.'){
-      sAppend(out,"_DoT_");
-    } else {
-      sPut(out,buf[k]);
-    }
-  }
-}
-
-void doDot2(sbuf *sb, sbuf *sbDt, char *buf) {
-  for (int k = 0; k < (int)strlen(buf); k++) {
-    if (buf[k] == '.') {
-      sAppend(sb,"_DoT_");
-      sAppend(sbDt,"_DoT_");
-    } else {
-      sPut(sb,buf[k]);
-      sPut(sbDt,buf[k]);
-    }
-  }
-}
-
-

@@ -1,8 +1,10 @@
+
 #' @export
 #' @rdname model
 model.function <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   .ret <- rxUiDecompress(rxode2(x))
+  if (length(.modelLines) == 0) return(.ret$modelFun)
   .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
 }
 
@@ -11,7 +13,18 @@ model.function <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()
 model.rxUi <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   .ret <- rxUiDecompress(.copyUi(x)) # copy so (as expected) old UI isn't affected by the call
-  .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
+  if (length(.modelLines) == 0) return(.ret$modelFun)
+  .ret <- .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
+  # need to adjust since the model function was from a rxui object
+  .x <- rxUiDecompress(x)
+  .ret <- rxUiDecompress(.ret)
+  .ret <- .newModelAdjust(.ret, .x)
+  .ret <- rxUiCompress(.ret)
+  .cls <- setdiff(class(x), class(.ret))
+  if (length(.cls) > 0) {
+    class(.ret) <- c(.cls, class(.ret))
+  }
+  .ret
 }
 
 #' @export
@@ -20,6 +33,7 @@ model.rxode2 <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) 
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   x <- as.function(x)
   .ret <- rxUiDecompress(rxode2(x))
+  if (length(.modelLines) == 0) return(.ret$modelFun)
   .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
 }
 
@@ -39,39 +53,55 @@ model.rxModelVars <- model.rxode2
 #' @export
 .modelHandleModelLines <- function(modelLines, rxui, modifyIni=FALSE, append=FALSE, auto=TRUE, envir) {
   checkmate::assertLogical(modifyIni, any.missing=FALSE, len=1)
-  checkmate::assertLogical(append, any.missing=TRUE, len=1)
+  ## checkmate::assertLogical(append, any.missing=TRUE, len=1)
   checkmate::assertLogical(auto, any.missing=TRUE, len=1)
   .doAppend <- FALSE
   rxui <- rxUiDecompress(rxui)
-  if (is.na(append)) {
+  if (!is.null(.nsEnv$.quoteCallInfoLinesAppend)) {
+    .ll <- length(rxui$lstExpr)
+    .w <- which(vapply(seq_len(.ll),
+                       function(i) {
+                         .lhs <- .getLhs(rxui$lstExpr[[i]])
+                         identical(.lhs, .nsEnv$.quoteCallInfoLinesAppend)
+                       }, logical(1), USE.NAMES=FALSE))
+    if (length(.w) == 0) stop("cannot find '",
+                              deparse1(.nsEnv$.quoteCallInfoLinesAppend),
+                              "' in lhs model, cannot append")
+    .w <- max(.w)
+    if (.w == .ll) {
+      assign("lstExpr", c(rxui$lstExpr, modelLines), envir=rxui)
+    } else {
+      assign("lstExpr", c(rxui$lstExpr[seq(1, .w)], modelLines, rxui$lstExpr[seq(.w+1, .ll)]),
+             envir=rxui)
+    }
+    .doAppend <- TRUE
+  } else if (is.logical(append) && length(append) == 1L && is.na(append)) {
     assign("lstExpr", c(modelLines, rxui$lstExpr), envir=rxui)
     .doAppend <- TRUE
-  } else if (append) {
+  } else if (isTRUE(append)) {
     assign("lstExpr", c(rxui$lstExpr, modelLines), envir=rxui)
     .doAppend <- TRUE
   }
   if (.doAppend) {
     # in pre-pending or appending, lines are only added
-    .lhs <- NULL
-    .rhs <- NULL
+    .lhs <- character()
+    .rhs <- character()
     for (x in modelLines) {
-      .isTilde <- identical(x[[1]], quote(`~`))
-      if (.isTilde ||
-            identical(x[[1]], quote(`=`)) ||
-            identical(x[[1]], quote(`<-`))) {
-        .tmp <- .getVariablesFromExpression(x[[3]], ignorePipe=.isTilde)
-        .tmp <- .tmp[!(.tmp %in% .lhs)]
-        .rhs <- unique(c(.tmp, .rhs))
-        .lhs <- unique(c(.getVariablesFromExpression(x[[2]]),.lhs))
+      .isTilde <- .isEndpoint(x)
+      if (.isTilde || .isAssignment(x)) {
+        .rhs <- unique(c(.getVariablesFromExpression(.getRhs(x), ignorePipe=.isTilde), .rhs))
+        .lhs <- unique(c(.getVariablesFromExpression(.getLhs(x)), .lhs))
       }
-    }
-    .rhs <- .rhs[!(.rhs %in% c(rxui$mv0$lhs, rxui$mv0$state, rxui$allCovs, rxui$iniDf$name))]
-    for (v in .rhs) {
-      .addVariableToIniDf(v, rxui, promote=NA)
+      .rhs <- setdiff(.rhs, c(.lhs, rxui$mv0$lhs, rxui$mv0$state, rxui$allCovs, rxui$iniDf$name))
+      if (isTRUE(auto)) {
+        for (v in .rhs) {
+          .addVariableToIniDf(v, rxui, promote=ifelse(.isTilde,NA, TRUE))
+        }
+      }
     }
     return(rxUiCompress(rxui$fun()))
   }
-  .modifyModelLines(modelLines, rxui, modifyIni, envir)
+  .modifyModelLines(lines = modelLines, rxui = rxui, modifyIni = modifyIni, envir = envir)
   .v <- .getAddedOrRemovedVariablesFromNonErrorLines(rxui)
   if (length(.v$rm) > 0) {
     lapply(.v$rm, function(x) {
@@ -88,39 +118,58 @@ model.rxModelVars <- model.rxode2
       }
     })
   }
-  return(rxUiCompress(rxui$fun()))
+  rxUiCompress(rxui$fun())
+}
+
+# Determine if the input is an endpoint by being 3 long and the call part being
+# a tilde
+.isEndpoint <- function(expr) {
+  .matchesLangTemplate(expr, str2lang(". ~ ."))
+}
+
+# Determine if the input is an assignment by being 3 long and the call part
+# being either the left arrow, right arrow, or equal sign
+.isAssignment <- function(expr) {
+  .matchesLangTemplate(expr, str2lang(". <- .")) ||
+    .matchesLangTemplate(expr, str2lang(". = ."))
+}
+
+# get the left hand side of an assignment or endpoint; returns NULL if the input
+# is not an assignment or endpoint
+.getLhs <- function(expr) {
+  ret <- NULL
+  if (.isAssignment(expr) || .isEndpoint(expr)) {
+    ret <- expr[[2]]
+  }
+  ret
+}
+
+.getRhs <- function(expr, ignorePipe=FALSE) {
+  ret <- NULL
+  if (.isAssignment(expr) || .isEndpoint(expr)) {
+    ret <- expr[[3]]
+  }
+  ret
 }
 
 .getModelLineEquivalentLhsExpressionDropEndpoint <- function(expr) {
-  if (length(expr) == 3L) {
-    if (identical(expr[[1]], quote(`~`))) {
-      .expr2 <- expr[[2]]
-      if (length(.expr2) == 2L) {
-        if (identical(.expr2[[1]], quote(`-`)) &&
-              is.name(.expr2[[2]])) {
-          return(.expr2[[2]])
-        }
-      }
+  ret <- NULL
+  if (.isEndpoint(expr)) {
+    lhs <- .getLhs(expr)
+    if (.matchesLangTemplate(lhs, str2lang("-."))) {
+      # If it is a drop expression with a minus sign, grab the non-minus part
+      ret <- lhs[[2]]
     }
   }
-  NULL
+  ret
 }
 
 .getModelLineEquivalentLhsExpressionDropDdt <- function(expr) {
   .expr3 <- NULL
-  if (length(expr) == 3L) {
-    .expr1 <- expr[[1]]
-    .expr2 <- expr[[2]]
-    if (identical(.expr1, quote(`/`))) {
-      if (length(.expr2) == 2L) {
-        if (identical(.expr2[[1]], quote(`-`)) &&
-              identical(.expr2[[2]], quote(`d`)) &&
-              is.call(expr[[3]]) &&
-              identical(expr[[3]][[1]], quote(`dt`))) {
-          .expr3 <- as.call(list(.expr1, .expr2[[2]], expr[[3]]))
-        }
-      }
-    }
+  if (.matchesLangTemplate(x = expr, template = str2lang("-d/dt(.name)"))) {
+    .expr3 <- expr
+    # remove the minus sign from the numerator
+    .expr3[[2]] <- .expr3[[2]][[2]]
   }
   .expr3
 }
@@ -181,7 +230,7 @@ model.rxModelVars <- model.rxode2
 #'
 #' @author Matthew L. Fidler
 #' @noRd
-.getModelineFromExperssionsAndOriginalLines <- function(expr, altExpr, useErrorLine,
+.getModelineFromExpressionsAndOriginalLines <- function(expr, altExpr, useErrorLine,
                                                         errLines, origLines, rxui,
                                                         returnAllLines=FALSE) {
   .ret <- NA_integer_
@@ -310,7 +359,7 @@ model.rxModelVars <- model.rxode2
   .origLines <- rxui$lstExpr
   .errLines <- rxui$predDf$line
   .expr3 <- .getModelLineEquivalentLhsExpression(lhsExpr)
-  .ret <- .getModelineFromExperssionsAndOriginalLines(lhsExpr, .expr3, errorLine, .errLines, .origLines, rxui, returnAllLines)
+  .ret <- .getModelineFromExpressionsAndOriginalLines(lhsExpr, .expr3, errorLine, .errLines, .origLines, rxui, returnAllLines)
   if (is.null(.ret)) {
     return(NULL)
   } else if (length(.ret) > 1) {
@@ -409,7 +458,7 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
     if (modifyIni && .isQuotedLineRhsModifiesEstimates(line, rxui)) {
       .iniHandleFixOrUnfix(line, rxui, envir=envir)
     } else {
-      .isErr <- .isErrorExpression(line)
+      .isErr  <- .isErrorExpression(line)
       .isDrop <- .isDropExpression(line)
       if (.isDrop && .isErr) {
         .ret <- .getModelLineFromExpression(.getModelLineEquivalentLhsExpression(line), rxui, .isErr, FALSE)
@@ -417,7 +466,7 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
         .ret <- .getModelLineFromExpression(.getModelLineEquivalentLhsExpression(line), rxui, .isErr, .isDrop)
         .ret <- c(.ret, .getAdditionalDropLines(line, rxui, .isErr, .isDrop))
       } else {
-        .ret <- .getModelLineFromExpression(line[[2]], rxui, .isErr, .isDrop)
+        .ret <- .getModelLineFromExpression(.getLhs(line), rxui, .isErr, .isDrop)
       }
       if (length(.ret)  == 1) {
         if (.isErr && is.na(.ret)) {
@@ -427,13 +476,12 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
       }
       if (is.null(.ret)) {
         assign(".err",
-               c(.err, paste0("the lhs expression '", paste0(as.character(line[[2]])), "' is duplicated in the model and cannot be modified by piping")),
+               c(.err, paste0("the lhs expression '", deparse1(line[[2]]), "' is duplicated in the model and cannot be modified by piping")),
                envir=.env)
       } else if (is.na(.ret[1])) {
           assign(".err",
-                 c(.err, paste0("the lhs expression '", paste0(as.character(line[[2]])), "' is not in model and cannot be modified by piping")),
+                 c(.err, paste0("the lhs expression '", deparse1(line[[2]]), "' is not in the model and cannot be modified by piping")),
                  envir=.env)
-
       } else if (all(.ret > 0)) {
         if (.isDrop) {
           .lstExpr <- get("lstExpr", rxui)
@@ -485,6 +533,7 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
     stop(paste(.err, collapse="\n"), call.=FALSE)
   }
 }
+
 #' Get the Variables from the expression
 #'
 #' @param x Expression
@@ -496,7 +545,10 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
     character()
   } else if (is.name(x)) {
     return(as.character(x))
-  } else  {
+  } else if (.matchesLangTemplate(x, str2lang("d/dt(.name)"))) {
+    # ODE expressions only pull out the state name and not "d" or "dt"
+    return(as.character(x[[3]][[2]]))
+  } else {
     if (is.call(x)) {
       if (ignorePipe && identical(x[[1]], quote(`|`))) {
         return(.getVariablesFromExpression(x[[2]]))
@@ -546,7 +598,11 @@ attr(rxUiGet.errParams, "desc") <- "Get the error-associated variables"
   .new <- c(.new1, .new2)
   .new <- setdiff(.new, rxui$mv0$lhs)
 
-  list(rm=c(.rm1, .rm2), new=.new, err=.err)
+  .rm <- c(.rm1, .rm2)
+
+  .rm <- setdiff(.rm, .err)
+
+  list(rm=.rm, new=.new, err=.err)
 }
 
 #' Remove a single variable from the initialization data frame

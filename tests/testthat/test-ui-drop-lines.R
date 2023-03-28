@@ -1,44 +1,39 @@
 rxTest({
-  .rx <- loadNamespace("rxode2")
-
-
   test_that("drop support functions", {
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-cl)), quote(cl))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-lag(matt))), quote(lag(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-alag(matt))), quote(alag(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-F(matt))), quote(F(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-f(matt))), quote(f(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-rate(matt))), quote(rate(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-dur(matt))), quote(dur(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-matt(0))), quote(matt(0)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-d/dt(matt))), quote(d/dt(matt)))
-    expect_equal(.rx$.getModelLineEquivalentLhsExpression(quote(-cp ~ .)), quote(cp))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-cl)), quote(cl))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-lag(matt))), quote(lag(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-alag(matt))), quote(alag(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-F(matt))), quote(F(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-f(matt))), quote(f(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-rate(matt))), quote(rate(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-dur(matt))), quote(dur(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-matt(0))), quote(matt(0)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-d/dt(matt))), quote(d/dt(matt)))
+    expect_equal(.getModelLineEquivalentLhsExpression(quote(-cp ~ .)), quote(cp))
 
-    expect_true(.rx$.isDropExpression(quote(-v)))
-    expect_false(.rx$.isDropExpression(quote(-v+3)))
-    expect_false(.rx$.isDropExpression(quote(-3)))
+    expect_true(.isDropExpression(quote(-v)))
+    expect_false(.isDropExpression(quote(-v+3)))
+    expect_false(.isDropExpression(quote(-3)))
 
-    expect_false(.rx$.isDropExpression(quote(x <- y)))
-    expect_false(.rx$.isDropExpression(quote(x + y ~ c(1, 0.01, 1))))
+    expect_false(.isDropExpression(quote(x <- y)))
+    expect_false(.isDropExpression(quote(x + y ~ c(1, 0.01, 1))))
 
-    expect_true(.rx$.isDropExpression(quote(-f(depot))))
-    expect_true(.rx$.isDropExpression(quote(-F(depot))))
-    expect_true(.rx$.isDropExpression(quote(-alag(depot))))
-    expect_true(.rx$.isDropExpression(quote(-lag(depot))))
-    expect_true(.rx$.isDropExpression(quote(-rate(depot))))
-    expect_true(.rx$.isDropExpression(quote(-dur(depot))))
-    expect_false(.rx$.isDropExpression(quote(-matt(depot))))
-    expect_false(.rx$.isDropExpression(quote(-f(depot + central))))
+    expect_true(.isDropExpression(quote(-f(depot))))
+    expect_true(.isDropExpression(quote(-F(depot))))
+    expect_true(.isDropExpression(quote(-alag(depot))))
+    expect_true(.isDropExpression(quote(-lag(depot))))
+    expect_true(.isDropExpression(quote(-rate(depot))))
+    expect_true(.isDropExpression(quote(-dur(depot))))
+    expect_false(.isDropExpression(quote(-matt(depot))))
+    expect_false(.isDropExpression(quote(-f(depot + central))))
 
-    expect_true(.rx$.isDropExpression(quote(-depot(0))))
-    expect_true(.rx$.isDropExpression(quote(-d/dt(depot))))
+    expect_true(.isDropExpression(quote(-depot(0))))
+    expect_true(.isDropExpression(quote(-d/dt(depot))))
 
-    expect_true(.rx$.isDropExpression(quote(-cp~.)))
-
+    expect_true(.isDropExpression(quote(-cp~.)))
   })
 
   test_that("drop from model before single endpoint model", {
-
     one.compartment <- function() {
       ini({
         tka <- 0.45 ; label("Log Ka")
@@ -66,13 +61,9 @@ rxTest({
 
     expect_equal(f2$lstExpr[[8]], quote(cp ~ add(add.err)))
     expect_length(f2$lstExpr, 8L)
-
   })
-
-
 
   test_that("drop from model after single endpoint model", {
-
     one.compartment <- function() {
       ini({
         tka <- 0.45 ; label("Log Ka")
@@ -99,13 +90,9 @@ rxTest({
     f2 <- one.compartment %>% model(-cp2)
     expect_equal(f2$lstExpr[[8]], quote(cp ~ add(add.err)))
     expect_length(f2$lstExpr, 8L)
-
   })
 
-
-
   test_that("drop endpoint from  multiple endpoint model", {
-
     pk.turnover.emax <- function() {
       ini({
         tktr <- log(1)
@@ -163,17 +150,16 @@ rxTest({
       })
     }
 
-    f2 <- pk.turnover.emax %>% model(-cp)
+    suppressMessages(
+      f2 <- pk.turnover.emax %>% model(-cp)
+    )
 
     expect_length(f2$predDf$cond, 1)
     expect_equal(f2$predDf$cond, "effect")
     expect_length(f2$lstExpr, 17)
-
   })
 
-
   test_that("drop compartment and compartment-related properties", {
-
     one.compartment <- function() {
       ini({
         tka <- 0.45 ; label("Log Ka")
@@ -197,20 +183,18 @@ rxTest({
       })
     }
 
-    f2 <- one.compartment %>% model(-d/dt(depot))
-
+    suppressMessages(
+      f2 <- one.compartment %>% model(-d/dt(depot))
+    )
     expect_equal(f2$mv0$state, "center")
     expect_length(f2$lstExpr, 7L)
 
     f2 <- one.compartment %>% model(-f(depot))
     expect_equal(f2$mv0$state, c("depot", "center"))
     expect_length(f2$lstExpr, 8L)
-
   })
 
-
   test_that("drop endpoint test", {
-
     ocmt <- function() {
       ini({
         tka <- 0.45 ; label("Log Ka")
@@ -233,15 +217,17 @@ rxTest({
       })
     }
 
-    f2 <- ocmt %>% model(-cp ~ .)
-
+    suppressMessages(
+      f2 <- ocmt %>% model(-cp ~ .)
+    )
     expect_true(is.null(f2$predDf))
     expect_equal(f2$theta, c(tka = 0.45, tcl = 1, tv = 3.45))
 
-    f3 <- f2 %>% model(cp ~ add(add.sd), append=TRUE)
+    suppressMessages(
+      f3 <- f2 %>% model(cp ~ add(add.sd), append=TRUE)
+    )
 
     expect_false(is.null(f3$predDf))
     expect_equal(f3$theta, c(tka = 0.45, tcl = 1, tv = 3.45, add.sd=1))
-
   })
 })

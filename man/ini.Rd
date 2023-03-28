@@ -2,24 +2,15 @@
 % Please edit documentation in R/piping-ini.R, R/ui.R
 \name{ini.rxUi}
 \alias{ini.rxUi}
-\alias{ini.function}
-\alias{ini.rxode2}
-\alias{ini.rxModelVars}
-\alias{ini}
 \alias{ini.default}
+\alias{ini}
 \title{Ini block for rxode2/nlmixr models}
 \usage{
-\method{ini}{rxUi}(x, ..., envir = parent.frame())
+\method{ini}{rxUi}(x, ..., envir = parent.frame(), append = NULL)
 
-\method{ini}{`function`}(x, ..., envir = parent.frame())
+\method{ini}{default}(x, ..., envir = parent.frame(), append = NULL)
 
-\method{ini}{rxode2}(x, ..., envir = parent.frame())
-
-\method{ini}{rxModelVars}(x, ..., envir = parent.frame())
-
-ini(x, ..., envir = parent.frame())
-
-\method{ini}{default}(x, ...)
+ini(x, ..., envir = parent.frame(), append = NULL)
 }
 \arguments{
 \item{x}{expression}
@@ -29,18 +20,30 @@ ini(x, ..., envir = parent.frame())
 \item{envir}{the \code{environment} in which unevaluated model
 expressions is to be evaluated.  May also be \code{NULL}, a list, a
 data frame, a pairlist or an integer as specified to \code{sys.call}.}
+
+\item{append}{Reorder theta parameters.  \code{NULL} means no change to
+parameter order.  A parameter name (as a character string) means to put the
+new parameter after the named parameter.  A number less than or equal to
+zero means to put the parameter at the beginning of the list.  A number
+greater than the last parameter number means to put the parameter at the
+end of the list.}
 }
 \value{
-Ini block
+ini block
 }
 \description{
 The ini block controls initial conditions for 'theta' (fixed effects),
 'omega' (random effects), and 'sigma' (residual error) elements of the model.
 }
 \details{
+The \code{ini()} function is used in two different ways.  The main way that
+it is used is to set the initial conditions and associated attributes
+(described below) in a model.  The other way that it is used is for updating
+the initial conditions in a model, often using the pipe operator.
+
 'theta' and 'sigma' can be set using either \code{<-} or \code{=} such as
 \code{tvCL <- 1} or equivalently \code{tvCL = 1}.  'omega' can be set with a
-\code{~}.
+\code{~} such as \code{etaCL ~ 0.1}.
 
 Parameters can be named or unnamed (though named parameters are preferred).
 A named parameter is set using the name on the left of the assignment while
@@ -51,7 +54,7 @@ are set using just the value, such as \code{1}.
 For some estimation methods, lower and upper bounds can be set for 'theta'
 and 'sigma' values.  To set a lower and/or upper bound, use a vector of
 values.  The vector is \code{c(lower, estimate, upper)}.  The vector may be
-given with just the estimate (\code{c(estimate)}), the lower bound and
+given with just the estimate (\code{estimate}), the lower bound and
 estimate (\code{c(lower, estimate)}), or all three (\code{c(lower, estimate,
 upper)}).  To set an estimate and upper bound without a lower bound, set the
 lower bound to \code{-Inf}, \code{c(-Inf, estimate, upper)}.  When an
@@ -85,7 +88,7 @@ that \code{fixed} is used, \code{FIX}, \code{FIXED}, or \code{fix} may be
 used equivalently.
 
 For any value, standard mathematical operators or functions may be used to
-define the value.  For example, \code{exp(2)} and \code{24*30} may be used to
+define the value.  For example, \code{log(2)} and \code{24*30} may be used to
 define a value anywhere that a number can be used (e.g. lower bound,
 estimate, upper bound, variance, etc.).
 
@@ -96,14 +99,53 @@ estimation.  The typical way to set a label so that the parameter \code{tvCL}
 has a label of "Typical Value of Clearance (L/hr)" is \code{tvCL <- 1;
 label("Typical Value of Clearance (L/hr)")}.
 
-\code{rxode2}/\code{nlmixr2} will attempt to determine some back-transformations for the
-user.  For example, \code{CL <- exp(tvCL)} will detect that \code{tvCL} must
-be back-transformed by \code{exp()} for easier interpretation.  When you want
-to control the back-transformation, you can specify the back-transformation
-using \code{backTransform()} after the assignment.  For example, to set the
+\code{rxode2}/\code{nlmixr2} will attempt to determine some
+back-transformations for the user.  For example, \code{CL <- exp(tvCL)} will
+detect that \code{tvCL} must be back-transformed by \code{exp()} for easier
+interpretation.  When you want to control the back-transformation, you can
+specify the back-transformation using \code{backTransform()} after the
+assignment.  For example, to set the
 back-transformation to \code{exp()}, you can use \code{tvCL <- 1;
 backTransform(exp())}.
+}
+\examples{
+# Set the ini() block in a model
+one.compartment <- function() {
+  ini({
+    tka <- log(1.57); label("Ka")
+    tcl <- log(2.72); label("Cl")
+    tv <- log(31.5); label("V")
+    eta.ka ~ 0.6
+    eta.cl ~ 0.3
+    eta.v ~ 0.1
+    add.sd <- 0.7
+  })
+  model({
+    ka <- exp(tka + eta.ka)
+    cl <- exp(tcl + eta.cl)
+    v <- exp(tv + eta.v)
+    d/dt(depot) = -ka * depot
+    d/dt(center) = ka * depot - cl / v * center
+    cp = center / v
+    cp ~ add(add.sd)
+  })
+}
+
+# Use piping to update initial conditions
+one.compartment \%>\% ini(tka <- log(2))
+one.compartment \%>\% ini(tka <- label("Absorption rate, Ka (1/hr)"))
+# Move the tka parameter to be just below the tv parameter (affects parameter
+# summary table, only)
+one.compartment \%>\% ini(tka <- label("Absorption rate, Ka (1/hr)"), append = "tv")
+# When programming with rxode2/nlmixr2, it may be easier to pass strings in
+# to modify the ini
+one.compartment \%>\% ini("tka <- log(2)")
+}
+\seealso{
+Other Initial conditions: 
+\code{\link{zeroRe}()}
 }
 \author{
 Matthew Fidler
 }
+\concept{Initial conditions}

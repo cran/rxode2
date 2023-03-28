@@ -18,7 +18,6 @@
 .hasUnits <- FALSE
 .PreciseSumsVersion <- utils::packageVersion("PreciseSums")
 .rxode2parseMd5 <- rxode2parse::rxode2parseMd5()
-.rxode2randomVersion <- utils::packageVersion("rxode2random")
 
 ## nocov start
 .onLoad <- function(libname, pkgname) {
@@ -40,16 +39,9 @@
     requireNamespace("rxode2parse", quietly=TRUE)
   }
 
-  if (!identical(.rxode2randomVersion, utils::packageVersion("rxode2random"))) {
-    stop("rxode2 compiled with rxode2random '",
-         as.character(.rxode2randomVersion),
-         "' but rxode2random '", as.character(utils::packageVersion("rxode2random")),
-         "' is loaded\nRecompile rxode2 with the this version of rxode2random",
-         call. = FALSE)
-  } else {
-    requireNamespace("rxode2random", quietly=TRUE)
-    .Call(`_rxode2_assignSeedInfo`)
-  }
+  requireNamespace("rxode2random", quietly=TRUE)
+  .Call(`_rxode2_assignSeedInfo`)
+  
   rxode2et::.setRxode2()
   if (requireNamespace("dplyr", quietly=TRUE)) {
     .s3register("dplyr::rename", "rxUi")
@@ -66,7 +58,7 @@
   } else {
     assignInMyNamespace(".hasUnits", FALSE)
   }
-  backports::import(pkgname) 
+  backports::import(pkgname)
   ## Setup rxode2.prefer.tbl
   .Call(`_rxode2_setRstudio`, Sys.getenv("RSTUDIO") == "1")
   rxSyncOptions("permissive")
@@ -116,11 +108,11 @@
 
 .mkCache <- function(.tmp) {
   if (!file.exists(.tmp)) {
-    dir.create(.tmp, recursive = TRUE)
+    dir.create(.tmp, recursive = TRUE, showWarnings = FALSE)
   } else if (!file.exists(file.path(.tmp, paste0(rxode2.md5, ".md5")))) {
     if (!.cacheIsTemp) packageStartupMessage("detected new version of rxode2, cleaning cache")
     unlink(.tmp, recursive = TRUE, force = TRUE)
-    dir.create(.tmp, recursive = TRUE)
+    dir.create(.tmp, recursive = TRUE, showWarnings = FALSE)
     writeLines("rxode2", file.path(.tmp, paste0(rxode2.md5, ".md5")))
   }
 }

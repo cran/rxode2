@@ -1,4 +1,4 @@
-// -*- mode: c++; c-basic-offset: 2; tab-width: 2; indent-tabs-mode: t; -*-
+// -*- mode: c++; c-basic-offset: 2; tab-width: 2; indent-tabs-mode: nil; -*-
 #define USE_FC_LEN_T
 // [[Rcpp::interfaces(r,cpp)]]
 // [[Rcpp::depends(RcppArmadillo)]]
@@ -101,7 +101,7 @@ static inline void dfCountRowsForNmOutput(rx_solve *rx, int nsim, int nsub) {
         if (evid == 9) continue; // not output in NONMEM
         if (isDose(evid)) {
           getWh(evid, &wh, &cmt, &wh100, &whI, &wh0);
-          if (whI == 7  || whI == 6){
+          if (whI == EVIDF_MODEL_RATE_OFF  || whI == EVIDF_MODEL_DUR_OFF){
             di++;
             continue;
           }
@@ -123,7 +123,7 @@ static inline void dfCountRowsForNmOutput(rx_solve *rx, int nsim, int nsub) {
 extern "C" void _rxode2random_assignSolveOnly2(rx_solve rx, rx_solving_options op);
 
 extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
-	_rxode2random_assignSolveOnly2(rx_global, op_global);
+  _rxode2random_assignSolveOnly2(rx_global, op_global);
   rx_solve *rx;
   rx = &rx_global;
   rx_solving_options *op = &op_global;
@@ -273,8 +273,36 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
     charItem = CHAR(STRING_ELT(fkeepNames, i));
     df[j++] = getDfLevels(charItem, rx);
   }
-  ncols+= ncols2;
-  for (i = ncols + doseCols + nidCols + 2*nmevid; i < ncols + doseCols + nidCols + doTBS*4 + nmevid*5; i++){
+  ncols += ncols2;
+  for (i = ncols + doseCols + nidCols + 2*nmevid;
+       i < ncols + doseCols + nidCols + nmevid*5 - nkeep;
+       i++){
+    df[i] = NumericVector(rx->nr);
+  }
+  // keep items
+  j = 0;
+  for (i = ncols + doseCols + nidCols + nmevid*5 - nkeep;
+       i < ncols + doseCols + nidCols + nmevid*5;
+       i++) {
+    int curType = get_fkeepType(j);
+    if (curType == 4) {
+      df[i] = NumericVector(rx->nr);
+    } else if (curType == 1) {
+      df[i] = StringVector(rx->nr);
+    } else {
+      IntegerVector cur(rx->nr);
+      if (curType == 2) {
+        cur.attr("levels") = get_fkeepLevels(j);
+        cur.attr("class") = "factor";
+      }
+      df[i] = cur;
+    }
+    j++;
+  }
+  // tbs items
+  for (i = ncols + doseCols + nidCols + nmevid*5;
+       i < ncols + doseCols + nidCols + nmevid*5 + doTBS*4;
+       i++) {
     df[i] = NumericVector(rx->nr);
   }
   // Now create the data frame
@@ -300,6 +328,18 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
         if (evid == 9) continue;
         if (isDose(evid)){
           getWh(ind->evid[ind->ix[i]], &(ind->wh), &(ind->cmt), &(ind->wh100), &(ind->whI), &(ind->wh0));
+          switch (ind->whI) {
+          case EVIDF_INF_RATE:
+          case EVIDF_MODEL_DUR_ON:
+          case EVIDF_MODEL_DUR_OFF:
+          case EVIDF_MODEL_RATE_ON:
+          case EVIDF_MODEL_RATE_OFF:
+            dullRate=0;
+            break;
+          case EVIDF_INF_DUR:
+            dullDur=0;
+            break;
+          }
           handleTlastInline(&curT, ind);
         }
         if (updateErr){
@@ -320,10 +360,15 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
           if (isObs(evid) && evid >= 10) continue;
           if (isDose(evid)){
             getWh(evid, &wh, &cmt, &wh100, &whI, &wh0);
-            if (whI == 7 || whI == 6){
+            if (whI == EVIDF_MODEL_RATE_OFF || whI == EVIDF_MODEL_DUR_OFF){
+              // modeled duration is in the RATE column like NONMEM datsets
               dullRate=0;
               di++;
               continue;
+            } else if (whI == EVIDF_INF_RATE || whI == EVIDF_MODEL_RATE_ON || whI == EVIDF_MODEL_DUR_ON) {
+              dullRate = 0;
+            } else if (whI == EVIDF_INF_DUR) {
+              dullDur = 0;
             }
             if (getDoseNumber(ind, di) <= 0){
               di++;
@@ -386,34 +431,42 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 getWh(evid, &wh, &cmt, &wh100, &whI, &wh0);
                 dfi = INTEGER(VECTOR_ELT(df, jj++));
                 double curAmt = getDoseNumber(ind, di);
-                if (whI == 7){
+                if (whI == EVIDF_MODEL_RATE_OFF){
                   dullRate=0;
                   dfi[ii] = -1;
-                } else if (whI == 6){
-                  dullRate=0;
+                } else if (whI == EVIDF_MODEL_DUR_OFF){
+                  dullRate=0; // rate specifies modeled duration
                   dfi[ii] = -2; // evid
                 } else {
                   if (curAmt > 0) {
-                    if (whI == 4){
+                    if (whI == EVIDF_REPLACE){
                       dfi[ii] = 5;
-                    } else if (whI == 5){
+                    } else if (whI == EVIDF_MULT){
                       dfi[ii] = 6;
                     } else {
                       dfi[ii] = 1; // evid
+                      if (whI == EVIDF_INF_RATE || whI == EVIDF_MODEL_DUR_ON || whI == EVIDF_MODEL_RATE_ON) {
+                        dullRate = 0;
+                      } else if (whI == EVIDF_INF_DUR) {
+                        dullDur = 0;
+                      }
                     }
                   } else {
-                    if (whI == 1){
+                    if (whI == EVIDF_INF_RATE){
                       dullRate=0;
                       dfi[ii] = -10; // evid
-                    } else if (whI == 2) {
+                    } else if (whI == EVIDF_INF_DUR) {
                       dullDur=0;
                       dfi[ii] = -20; // evid
-                    } else if (whI == 4){
+                    } else if (whI == EVIDF_REPLACE){
                       dfi[ii] = 5;
-                    } else if (whI == 5){
+                    } else if (whI == EVIDF_MULT){
                       dfi[ii] = 6;
                     } else {
                       dfi[ii] = 1;
+                      if (whI == EVIDF_INF_DUR) {
+                        dullDur = 0;
+                      }
                     }
                   }
                 }
@@ -430,12 +483,18 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 dfi = INTEGER(VECTOR_ELT(df, jj++));
                 switch (wh0){
                   /* case 30: */
-                case 20:
+                case EVID0_SS2:
                   dullSS=0;
                   dfi[ii] = 2;
                   break;
-                case 10:
+                case EVID0_SS:
                   dullSS=0;
+                  dfi[ii] = 1;
+                  break;
+                case 40:
+                  dullRate=0;
+                  dullSS=0;
+                  dullIi=0;
                   dfi[ii] = 1;
                   break;
                 default:
@@ -457,7 +516,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
               double curAmt = getDoseNumber(ind, di++);
               // rate dur ii ss
               switch(ind->whI){
-              case 9: // modeled rate
+              case EVIDF_MODEL_RATE_ON: // modeled rate
                 // amt
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curAmt;
@@ -471,7 +530,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curIi;
                 break;
-              case 8: // modeled duration
+              case EVIDF_MODEL_DUR_ON: // modeled duration
                 // amt
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curAmt;
@@ -485,7 +544,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curIi;
                 break;
-              case 7: // End modeled rate
+              case EVIDF_MODEL_RATE_OFF: // End modeled rate
                 // amt
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = NA_REAL;
@@ -499,7 +558,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curIi;
                 break;
-              case 6: // end modeled duration
+              case EVIDF_MODEL_DUR_OFF: // end modeled duration
                 // amt
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = NA_REAL;
@@ -513,7 +572,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curIi;
                 break;
-              case 2: // Infusion specified by dur
+              case EVIDF_INF_DUR: // Infusion specified by dur
                 if (curAmt < 0){
                   // amt
                   dfp = REAL(VECTOR_ELT(df, jj++));
@@ -531,6 +590,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                     if (getDoseNumber(ind, jjj) == -curAmt){
                       int nWh = 0, nCmt = 0, nWh100 = 0, nWhI = 0, nWh0 = 0;
                       getWh(ind->evid[ind->idose[jjj]], &nWh, &nCmt, &nWh100, &nWhI, &nWh0);
+                      dullRate=0;
                       if (nWhI == whI && nCmt == cmt){
                         curDur = getTime_(ind->idose[jjj], ind) -
                           getTime_(ind->ix[i], ind);
@@ -552,7 +612,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                 dfp = REAL(VECTOR_ELT(df, jj++));
                 dfp[ii] = curIi;
                 break;
-              case 1: // Infusion specified by rate
+              case EVIDF_INF_RATE: // Infusion specified by rate
                 if (curAmt < 0){
                   // amt
                   dfp = REAL(VECTOR_ELT(df, jj++));
@@ -569,6 +629,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                     if (getDoseNumber(ind, jjj) == -curAmt){
                       int nWh = 0, nCmt = 0, nWh100 = 0, nWhI = 0, nWh0 = 0;
                       getWh(ind->evid[ind->idose[jjj]], &nWh, &nCmt, &nWh100, &nWhI, &nWh0);
+                      dullRate=0;
                       if (nWhI == whI && nCmt == cmt){
                         curDur = getTime_(ind->idose[jjj], ind) -
                           getTime_(ind->ix[i], ind);
@@ -676,6 +737,8 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
               dfp = REAL(tmp);
               // is this ntimes = nAllTimes or nObs time for this subject...?
               dfp[ii] = get_fkeep(j, curi + ind->ix[i], ind);
+            } else if (TYPEOF(tmp) == STRSXP){
+              SET_STRING_ELT(tmp, ii, get_fkeepChar(j, get_fkeep(j, curi + ind->ix[i], ind)));
             } else {
               dfi = INTEGER(tmp);
               /* if (j == 0) RSprintf("j: %d, %d; %f\n", j, i, get_fkeep(j, curi + i)); */
@@ -828,7 +891,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
       jj++;kk++;
     }
     if (ms) {
-      SET_STRING_ELT(sexp_colnames, jj, Rf_mkChar("resetno"));
+      SET_STRING_ELT(sexp_colnames2, jj, Rf_mkChar("resetno"));
       SET_VECTOR_ELT(df2, jj, VECTOR_ELT(df, kk));
       jj++; kk++;
     }
