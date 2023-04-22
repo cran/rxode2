@@ -433,9 +433,6 @@
          call. = FALSE)
   }
 
-  # (Maybe) update parameter order
-  .iniHandleAppend(expr = expr, rxui = rxui, envir = envir, append = append)
-
   # Convert fix(name) or unfix(name) to name <- fix or name <- unfix
   if (.matchesLangTemplate(expr, str2lang("fix(.name)"))) {
     expr <- as.call(list(quote(`<-`), expr[[2]], quote(`fix`)))
@@ -473,6 +470,10 @@
     # that is not a character string.
     stop("invalid expr for ini() modification", call.=FALSE)
   }
+
+  # (Maybe) update parameter order; this must be at the end so that the
+  # parameter exists in case it is promoted from a covariate
+  .iniHandleAppend(expr = expr, rxui = rxui, envir = envir, append = append)
 }
 
 # TODO: while nlmixr2est is changed
@@ -621,52 +622,35 @@ zeroRe <- function(object, which = c("omega", "sigma"), fix = TRUE) {
   object <- assertRxUi(object)
   which <- match.arg(which, several.ok = TRUE)
   .ret <- rxUiDecompress(.copyUi(object)) # copy so (as expected) old UI isn't affected by the call
-  iniCommand <- character()
+  iniDf <- .ret$iniDf
   # In the code below there is no test for bounds since the bounds are typically (0, Inf).
   if ("omega" %in% which) {
-    if (fix) {
-      fmtOmega <- "%s ~ fix(0)"
-    } else {
-      fmtOmega <- "%s ~ 0"
-    }
-    omegaNames <- .ret$iniDf$name[!is.na(.ret$iniDf$neta1)]
-    if (length(omegaNames) == 0) {
+    maskOmega <- !is.na(iniDf$neta1)
+    if (sum(maskOmega) == 0) {
       cli::cli_warn("No omega parameters in the model")
     } else {
-      iniCommand <- c(iniCommand, sprintf(fmtOmega, omegaNames))
-    }
-  }
-  if ("sigma" %in% which) {
-    sigmaNames <- .ret$iniDf$name[!is.na(.ret$iniDf$err)]
-    if (length(sigmaNames) == 0) {
-      cli::cli_warn("No sigma parameters in the model")
-    } else {
-      for (currentSigma in sigmaNames) {
-        currentSigmaIdx <- which(.ret$iniDf$name %in% currentSigma)
-        if (.ret$iniDf$lower[currentSigmaIdx] > 0) {
-          # Change the lower bound to zero
-          fmtBounds <- "c(0, 0)"
-        } else {
-          fmtBounds <- "0"
-        }
-        # It is an error when creating the model for the upper bound to be <0,
-        # so no upper bound test is performed.
-        if (fix) {
-          fmtSigma <- paste0("%s <- fix(", fmtBounds, ")")
-        } else {
-          fmtSigma <- paste0("%s <- c(", fmtBounds, ")")
-        }
-        iniCommand <- c(iniCommand, sprintf(fmtSigma, currentSigma))
+      iniDf$est[maskOmega] <- 0
+      if (fix) {
+        iniDf$fix[maskOmega] <- TRUE
       }
     }
   }
-  if (length(iniCommand) > 0) {
-    envir <- parent.frame()
-    .iniLines <- .quoteCallInfoLines(iniCommand, envir = envir, iniDf = .ret$iniDf)
-    lapply(.iniLines, function(line) {
-      .iniHandleLine(expr = line, rxui = .ret, envir = envir, append = NULL)
-    })
-    rxUiCompress(.ret)
+  if ("sigma" %in% which) {
+    maskSigma <- !is.na(iniDf$err)
+    if (sum(maskSigma) == 0) {
+      cli::cli_warn("No sigma parameters in the model")
+    } else {
+      iniDf$est[maskSigma] <- 0
+      maskLowerBound <- maskSigma & iniDf$lower > 0
+      if (any(maskLowerBound)) {
+        iniDf$lower[maskLowerBound] <- 0
+      }
+      if (fix) {
+        iniDf$fix[maskSigma] <- TRUE
+      }
+
+    }
   }
+  ini(.ret) <- iniDf
   .ret
 }

@@ -388,9 +388,11 @@ test_that("zeroRe", {
   expect_equal(newMod$iniDf$est, c(1, 0, 0))
 
   # Confirm that you can simulate from the model
-  expect_equal(
-    rxSolve(newMod, events = data.frame(TIME = 0:2))$b,
-    rep(1, 3)
+  suppressMessages(
+    expect_equal(
+      rxSolve(newMod, events = data.frame(TIME = 0:2))$b,
+      rep(1, 3)
+    )
   )
 
   # Confirm that the `fix` flag is respected
@@ -401,7 +403,7 @@ test_that("zeroRe", {
   )
   # detect change
   expect_equal(uiOmegaSigma$iniDf$fix, rep(FALSE, 3))
-  expect_equal(newUi$iniDf$fix, c(FALSE, TRUE, FALSE))
+  expect_equal(newUi$iniDf$fix, c(FALSE, TRUE, TRUE))
   expect_equal(newUiNoFix$iniDf$fix, rep(FALSE, 3))
 
   suppressMessages(
@@ -482,6 +484,28 @@ test_that("zeroRe", {
   expect_error(zeroRe(modOmegaSigma, which = "foo"), regexp = "should be one of")
 })
 
+test_that("zeroRe works with correlated etas (#480)", {
+  mod <- function() {
+    ini({
+      lka <- 0.45
+      lcl <- 1
+      lvc <- 3.45
+      propSd <- c(0, 0.5)
+      etalka + etalcl + etalvc ~ c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
+    })
+    model({
+      ka <- exp(lka + etalka)
+      cl <- exp(lcl + etalcl)
+      vc <- exp(lvc + etalvc)
+      cp <- linCmt()
+      cp ~ prop(propSd)
+    })
+  }
+  ui <- rxode2(mod)
+  expect_equal(ui$iniDf$est[!is.na(ui$iniDf$neta1)], (1:6)/10)
+  suppressMessages(zeroUi <- zeroRe(mod))
+  expect_equal(zeroUi$iniDf$est[!is.na(zeroUi$iniDf$neta1)], c(0, 0, 0))
+})
 
 test_that("Piping outside the boundaries", {
 
@@ -507,4 +531,41 @@ test_that("Piping outside the boundaries", {
     f2 <- m1 %>% ini(x3=c(0,3))
     expect_equal(f2$iniDf[f2$iniDf$name == "x3","upper"], Inf)
   })
+})
+
+test_that("append allows promoting from covariate (#472)", {
+  mod <- function() {
+    ini({
+      lka <- 0.45
+      lcl <- 1
+      lvc  <- 3.45
+      propSd <- 0.5
+    })
+    model({
+      ka <- exp(lka)
+      cl <- exp(lcl)
+      vc  <- exp(lvc)
+
+      kel <- cl / vc
+
+      d/dt(depot) <- -ka*depot
+      d/dt(central) <- ka*depot-kel*central
+
+      cp <- central / vc
+      cp ~ prop(propSd)
+    })
+  }
+  suppressMessages(
+    newmod <-
+      mod %>%
+      model(
+        ka <- exp(lka + ka_dose*DOSE),
+        auto = FALSE
+      ) %>%
+      ini(
+        ka_dose <- 1,
+        append = "lka"
+      )
+  )
+  expect_equal(newmod$iniDf$name, c("lka", "ka_dose", "lcl", "lvc", "propSd"))
 })
