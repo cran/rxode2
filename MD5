@@ -1,8 +1,8 @@
-5c6459294f9d154dbc017431db675818 *DESCRIPTION
+6ffaf3847230acb17aa57b78bb4ceba3 *DESCRIPTION
 3cb0b66284d293251a7edb990e784888 *NAMESPACE
-7ef87ebea3f7245d90dccb1c0df796ed *NEWS.md
+2d63e93a9dc5770a0eb879c6daaf6050 *NEWS.md
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
-f08ebd31b3eb7dcee8dca2aacaac1d8d *R/RcppExports.R
+0df6498e578e2bfc927f981c133fa426 *R/RcppExports.R
 4d039a945264ca49a53f1b78c8dabf32 *R/asFunction.R
 7332fd71cc04bcf542ec89a353cabf22 *R/asIni.R
 6308df7325bc9b85e7277316c1bd1a00 *R/asModel.R
@@ -12,11 +12,11 @@ e7201d4fe701d2252289364f5b4d3d4c *R/assert.R
 a78ee21e4f4f7cf944d4b855ca9907ed *R/dsl.R
 37cfc344c70c7f4ffff3b2187dbcd051 *R/err-foceiBase.R
 4898ae8a35d7f8788759de8971d7e987 *R/err-sim.R
-d1b92c1f6e662e1b0676b036440a5eee *R/err.R
+c513a38442068e95e72925ba8a9d2175 *R/err.R
 73b474fb64bba383cbe440fdd802b0e6 *R/fixef.R
 1c46a5438e9a6c5bc25d266c796691ee *R/format.R
-41098a6d46e3bb0bcda77a05d4a63a6f *R/genShinyApp.template.R
-9f5b4da3b4f9c76ce4fc2e72e50decce *R/geom-amt.R
+dd5b96f4f99dbb8366a86b9e32c51195 *R/genShinyApp.template.R
+f58f5fc05c1f2e21ca87c58b46d4680c *R/geom-amt.R
 1ec3b36674c98507e8f18791a31c3599 *R/geom-cens.R
 384f6b04a1a8602106bfc7a74ece9bcf *R/getBaseSim.R
 5b661ba0947213c36daf9c40dcca9118 *R/llik.R
@@ -48,7 +48,7 @@ d8df5d7ab74c04ae0a74b1120bdbf448 *R/rxPrune.R
 a4ccf3492ba0ecea2c30cc73f7309d41 *R/rxValidate.R
 7920f3cc2114236c666f41000be5fc15 *R/rxode-options.R
 c553fa5f119c4f596236e02429b8bfa2 *R/rxode2.R
-218113dd3b5b6d044aa4c1b63b024b28 *R/rxode2_md5.R
+05587168bafd55789e41ff130c8add16 *R/rxode2_md5.R
 e45c817a6e3c355aad30ea37a098e0b3 *R/rxrandom.R
 e84d0c7af6beb8cf2cb111450890fcaa *R/rxsolve.R
 81860635d712c7b8ae84ff51ea996d0d *R/str.R
@@ -63,7 +63,7 @@ f3a9852f112ec6c9f0651781df61e45e *R/ui-rename.R
 927be4562ed217b77509c60be6b7c309 *R/utils.R
 aa90bd510d4795e1322e30f05b916fe1 *R/version.R
 c8aeba8f5f7ebaa6a82281c7e1e5b5c4 *README.md
-a1dcfe9c33ef2c7bb0f7e2f3eea86543 *build/vignette.rds
+eedd704a863480228655a5c1d8808137 *build/vignette.rds
 22221f4e98aadad64790ec625ce641a6 *cleanup
 c57a96dde3a290cb24bc059ba354a73b *cleanup.win
 0f8d26342f68c1dbe6a58c0f453fff1b *configure
@@ -78,7 +78,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 37933cfa80da838f2c4c988312e92e99 *inst/doc/rxode2-syntax.Rmd
-9d1f926f086bebd0066e999fa7658af5 *inst/doc/rxode2-syntax.html
+17c2687ae412482a168fb4221a04e9c6 *inst/doc/rxode2-syntax.html
 b30547ed39caf90543f378be2c8d60a0 *inst/include/rxode2.h
 815c4151bdf5cd448046df3858ff9dca *inst/include/rxode2_RcppExports.h
 44158d0c42a8f775edeca9165440f5fa *inst/include/rxode2_as.h
@@ -132,7 +132,7 @@ bf53fd40659a8fb11530aa930b955a7b *man/gammap.Rd
 f09b5dcb1fa21df1d4dd0d7930504ff6 *man/gammapInv.Rd
 20922cd4611b3470283dbe963723cfbd *man/gammaq.Rd
 a9f08f6d46702ea786194941a6f2161a *man/gammaqInv.Rd
-8d4a44a90c45091add8bca6b2199a58d *man/genShinyApp.template.Rd
+e388266e7cfedd06ba9ec03ec46f8b7c *man/genShinyApp.template.Rd
 41ac01f189dea75f2e935e02c31eab7a *man/getBaseSimModel.Rd
 750c2532c6ac6c59fbf44f3b9921234e *man/getRxThreads.Rd
 71bde493d5e517d572e90f8b5a4cbb64 *man/guide_none.Rd
@@ -193,7 +193,7 @@ b27932aae76d0b1e60dc011e446f0cf1 *man/rxDfdy.Rd
 44eeafe3d1ba074d9a0f3359d7731049 *man/rxDll.Rd
 99d4436199feae84e17a92a281f3a4a5 *man/rxDynLoad.Rd
 26dadb771772d3c03822b87509adc828 *man/rxDynUnload.Rd
-7debfe096ec7be6d110cc2fddfa5e0b8 *man/rxErrTypeCombine.Rd
+d423ef657bf8034618f9fe1147690407 *man/rxErrTypeCombine.Rd
 e58eff72e4f226513f03e5e34bc49935 *man/rxExpandFEta_.Rd
 2379f6cf90fc6558edfe9b11b54ff7ab *man/rxExpandGrid.Rd
 b52da840f80df6519f00084fdb65d49b *man/rxExpandGrid_.Rd
@@ -235,7 +235,7 @@ a8821c7851fa2932439e7b32b9d398a2 *man/rxPrune.Rd
 3b85393d1326d79a3f7e8f03f0d97ffe *man/rxReload.Rd
 9e5329851d0bdd4deaa540911bb0a8c9 *man/rxRemoveControl.Rd
 0a1b08aa6a83934e05e42d34d3e3ca69 *man/rxRename.Rd
-14bf732434908e62594c334b889b3a8e *man/rxRepR0_.Rd
+e319fa85432028faa4f9fb9c36fe59ce *man/rxRepR0_.Rd
 746dc6f2f357270f84ba037d25542984 *man/rxReservedKeywords.Rd
 489002ad79b8a4a51c1be0800bb9c023 *man/rxS.Rd
 4cd71faa47807b2f43c9acab4c6f6b2c *man/rxSetControl.Rd
@@ -245,7 +245,7 @@ bc0bd2bfa8a45d1a3573de20b4ce3458 *man/rxSetProd.Rd
 51dfcf1e669e705bb8a46d30567ab5db *man/rxSetSilentErr.Rd
 27e4098798e4dd72273a355bc3c43d9b *man/rxSetSum.Rd
 506275af1f940682903b87643bd9d616 *man/rxSetupIni.Rd
-5b373a33311529095366d9b0e720c00d *man/rxSetupScale.Rd
+4a922e2e3c487eed69ac4a11a8ea9c11 *man/rxSetupScale.Rd
 46eb45e204bb569092a78e7d02edeb0f *man/rxShiny.Rd
 33f98600d36e480a303b9759815e7080 *man/rxSimThetaOmega.Rd
 40ade79f4db3b4330234829741297f90 *man/rxSolve.Rd
@@ -287,7 +287,7 @@ a43c5a01f0f714ca1cc09d16e559f289 *man/rxord.Rd
 de7e32f002548d3ad71ad2346b44d9d2 *man/rxt.Rd
 42a42067c65103ac6a1166a762ad2785 *man/rxunif.Rd
 9e5312851cdb7db5e02e286781916331 *man/rxweibull.Rd
-e6e82c09e3a1371beb6e344a8fc59bfa *man/stat_amt.Rd
+4a181b158b6fa28120a85a2f6d3586b7 *man/stat_amt.Rd
 b592a34b195cb152b949208838b24d0c *man/stat_cens.Rd
 c04dfb1d176ee2759425d6d524218d88 *man/summary.rxDll.Rd
 c250aeda8197ad95eb933d1ec649931f *man/summary.rxode2.Rd
@@ -322,7 +322,7 @@ b3207298b70d82dfac19ed89b21d7345 *src/dop853.h
 d840aec10ac90d3d4909878897c924e8 *src/dscal.c
 982c7c8994a60d759ecb76fb31b3602f *src/dsphiv.f
 2983801e3ec4ae3aa9622b411a096b51 *src/etTran.cpp
-d3efc7f01eeabfd4c87a0a94f45be224 *src/expandGrid.cpp
+ca817ab075a93d410085e7595965ef8c *src/expandGrid.cpp
 4cfb0594a09a990fa65ae0d39b26f713 *src/expm.cpp
 a43b7dd8e6b51fb86b4e9c6edd7826ea *src/fnorm.c
 df34ed351572d04c907b1640fafac558 *src/forder.cpp
@@ -334,7 +334,7 @@ f14d3be8a3cacd28cab9569d4ce38a68 *src/intdy.c
 1f9ba7bab6a88e455346dd6e385f2574 *src/lsoda.c
 c767650d124860fdef47061d88d5c481 *src/lsoda.h
 7e9f586fc68fa150e36829e7934f0fbb *src/lsoda_internal.h
-d04e3c541c9b3642a00170d4b12b04cb *src/matexp.f
+fef961f0beb37a876fb2c1c0bf5d0b27 *src/matexp.f
 f17b36a693a9c6c39a1a3cdad82a78a9 *src/matexp_HM98.c
 21d028b8f261c7590050a6d6e3d30c5e *src/methodswitch.c
 d3839d96772df1ad8704c200420a6351 *src/nearPD.cpp
@@ -347,7 +347,7 @@ edcf2097b6df1c55d8178a44eb3a4915 *src/par_solve.cpp
 fbcdbbd417d4b617e086b70b32575693 *src/par_solve.h
 7a2a9a8e812ecfc90871b1e8860dca67 *src/prja.c
 3c2ad77656bc710022f9042666e550fd *src/rprintf.c
-59dd30f09b788958dd9a3c5a51d024e1 *src/rxData.cpp
+23c7d572f9f3f44fa04332d5f27e8d4d *src/rxData.cpp
 6b4cfcc8faac7aa260e3cd8071f61894 *src/rxData.h
 4a3c660bfba001d223a71f16cc1f0094 *src/rxInv.cpp
 68da7fc70dbff124390d420058183b92 *src/rxOptRep.cpp

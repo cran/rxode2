@@ -1,5 +1,5 @@
 Package: rxode2
-Version: 2.0.13
+Version: 2.0.14
 Title: Facilities for Simulating from ODE-Based Models
 Authors@R: c(
    person("Matthew L.","Fidler",
@@ -7,7 +7,7 @@ Authors@R: c(
       comment=c(ORCID="0000-0001-8538-6691")),
    person("Melissa", "Hallow",
       role = "aut", email = "hallowkm@uga.edu"),
-   person("Wenping", "Wang", 
+   person("Wenping", "Wang",
       role = c("aut"), email = "wwang8198@gmail.com"),
    person("Zufar", "Mulyukov", role="ctb", email="zufar.mulyukov@novartis.com"),
    person("Alan", "Hindmarsh",role="ctb"),
@@ -40,10 +40,10 @@ Suggests: Matrix, DT, covr, crayon, curl, digest, dplyr (>= 0.8.0),
         xgxr, pillar, tibble, units (>= 0.6-0), rsconnect, devtools,
         patchwork, nlmixr2data, lifecycle
 Imports: PreciseSums (>= 0.3), Rcpp (>= 0.12.3), backports, cli (>=
-        2.0.0), checkmate, ggplot2, inline, lotri (>= 0.4.0), magrittr,
-        memoise, methods, rex, sys, tools, utils, rxode2ll(>= 2.0.9),
-        rxode2et (>= 2.0.9), rxode2parse (>= 2.0.12), rxode2random (>=
-        2.0.9), data.table (>= 1.12.4), qs
+        2.0.0), checkmate, ggplot2 (>= 3.4.0), inline, lotri (>=
+        0.4.0), magrittr, memoise, methods, rex, sys, tools, utils,
+        rxode2ll(>= 2.0.9), rxode2et (>= 2.0.9), rxode2parse (>=
+        2.0.12), rxode2random (>= 2.0.9), data.table (>= 1.12.4), qs
 Description: Facilities for running simulations from ordinary
     differential equation ('ODE') models, such as pharmacometrics and other
     compartmental models.  A compilation manager translates the ODE model
@@ -55,7 +55,7 @@ Description: Facilities for running simulations from ordinary
     Section 6.3, Appendix A, and Appendix D in the "R Administration and
     Installation" manual. Also the code is mostly released under GPL.  The
     'VODE' and 'LSODA' are in the public domain.  The information is available
-    in the inst/COPYRIGHTS. 
+    in the inst/COPYRIGHTS.
 BugReports: https://github.com/nlmixr2/rxode2/issues/
 NeedsCompilation: yes
 VignetteBuilder: knitr
@@ -70,7 +70,7 @@ Encoding: UTF-8
 LazyData: true
 Language: en-US
 Config/testthat/edition: 3
-Packaged: 2023-04-22 01:33:04 UTC; matt
+Packaged: 2023-10-06 23:05:56 UTC; matt
 Author: Matthew L. Fidler [aut, cre] (<https://orcid.org/0000-0001-8538-6691>),
   Melissa Hallow [aut],
   Wenping Wang [aut],
@@ -96,4 +96,4 @@ Author: Matthew L. Fidler [aut, cre] (<https://orcid.org/0000-0001-8538-6691>),
   Yu Feng [ctb],
   Bill Denney [ctb] (<https://orcid.org/0000-0002-5759-428X>)
 Repository: CRAN
-Date/Publication: 2023-04-22 07:40:02 UTC
+Date/Publication: 2023-10-07 05:00:02 UTC
