@@ -16,8 +16,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // etTrans
-List etTrans(List inData, const RObject& obj, bool addCmt, bool dropUnits, bool allTimeVar, bool keepDosingOnly, Nullable<LogicalVector> combineDvid, CharacterVector keep);
-RcppExport SEXP _rxode2_etTrans(SEXP inDataSEXP, SEXP objSEXP, SEXP addCmtSEXP, SEXP dropUnitsSEXP, SEXP allTimeVarSEXP, SEXP keepDosingOnlySEXP, SEXP combineDvidSEXP, SEXP keepSEXP) {
+List etTrans(List inData, const RObject& obj, bool addCmt, bool dropUnits, bool allTimeVar, bool keepDosingOnly, Nullable<LogicalVector> combineDvid, CharacterVector keep, bool addlKeepsCov, bool addlDropSs, bool ssAtDoseTime);
+RcppExport SEXP _rxode2_etTrans(SEXP inDataSEXP, SEXP objSEXP, SEXP addCmtSEXP, SEXP dropUnitsSEXP, SEXP allTimeVarSEXP, SEXP keepDosingOnlySEXP, SEXP combineDvidSEXP, SEXP keepSEXP, SEXP addlKeepsCovSEXP, SEXP addlDropSsSEXP, SEXP ssAtDoseTimeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -29,7 +29,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type keepDosingOnly(keepDosingOnlySEXP);
     Rcpp::traits::input_parameter< Nullable<LogicalVector> >::type combineDvid(combineDvidSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type keep(keepSEXP);
-    rcpp_result_gen = Rcpp::wrap(etTrans(inData, obj, addCmt, dropUnits, allTimeVar, keepDosingOnly, combineDvid, keep));
+    Rcpp::traits::input_parameter< bool >::type addlKeepsCov(addlKeepsCovSEXP);
+    Rcpp::traits::input_parameter< bool >::type addlDropSs(addlDropSsSEXP);
+    Rcpp::traits::input_parameter< bool >::type ssAtDoseTime(ssAtDoseTimeSEXP);
+    rcpp_result_gen = Rcpp::wrap(etTrans(inData, obj, addCmt, dropUnits, allTimeVar, keepDosingOnly, combineDvid, keep, addlKeepsCov, addlDropSs, ssAtDoseTime));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -64,7 +67,7 @@ RcppExport SEXP _rxode2_rxExpandGrid_(SEXP c1SEXP, SEXP c2SEXP, SEXP typeSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -99,7 +102,7 @@ RcppExport SEXP _rxode2_rxExpandSens_(SEXP stateSEXP, SEXP calcSensSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -135,28 +138,29 @@ RcppExport SEXP _rxode2_rxExpandSens2_(SEXP stateSEXP, SEXP s1SEXP, SEXP s2SEXP)
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
 }
 // rxExpandFEta_
-List rxExpandFEta_(CharacterVector state, int neta, int pred);
-static SEXP _rxode2_rxExpandFEta__try(SEXP stateSEXP, SEXP netaSEXP, SEXP predSEXP) {
+List rxExpandFEta_(CharacterVector state, int neta, int pred, bool isTheta);
+static SEXP _rxode2_rxExpandFEta__try(SEXP stateSEXP, SEXP netaSEXP, SEXP predSEXP, SEXP isThetaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< CharacterVector >::type state(stateSEXP);
     Rcpp::traits::input_parameter< int >::type neta(netaSEXP);
     Rcpp::traits::input_parameter< int >::type pred(predSEXP);
-    rcpp_result_gen = Rcpp::wrap(rxExpandFEta_(state, neta, pred));
+    Rcpp::traits::input_parameter< bool >::type isTheta(isThetaSEXP);
+    rcpp_result_gen = Rcpp::wrap(rxExpandFEta_(state, neta, pred, isTheta));
     return rcpp_result_gen;
 END_RCPP_RETURN_ERROR
 }
-RcppExport SEXP _rxode2_rxExpandFEta_(SEXP stateSEXP, SEXP netaSEXP, SEXP predSEXP) {
+RcppExport SEXP _rxode2_rxExpandFEta_(SEXP stateSEXP, SEXP netaSEXP, SEXP predSEXP, SEXP isThetaSEXP) {
     SEXP rcpp_result_gen;
     {
         Rcpp::RNGScope rcpp_rngScope_gen;
-        rcpp_result_gen = PROTECT(_rxode2_rxExpandFEta__try(stateSEXP, netaSEXP, predSEXP));
+        rcpp_result_gen = PROTECT(_rxode2_rxExpandFEta__try(stateSEXP, netaSEXP, predSEXP, isThetaSEXP));
     }
     Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
     if (rcpp_isInterrupt_gen) {
@@ -171,7 +175,7 @@ RcppExport SEXP _rxode2_rxExpandFEta_(SEXP stateSEXP, SEXP netaSEXP, SEXP predSE
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -205,7 +209,7 @@ RcppExport SEXP _rxode2_rxRepR0_(SEXP netaSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -241,7 +245,7 @@ RcppExport SEXP _rxode2_rxExpandNesting(SEXP objSEXP, SEXP nestingInfoSEXP, SEXP
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -287,7 +291,7 @@ RcppExport SEXP _rxode2_rxIs(SEXP objSEXP, SEXP clsSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -321,7 +325,7 @@ RcppExport SEXP _rxode2_getRxFn(SEXP nameSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -355,7 +359,7 @@ RcppExport SEXP _rxode2_dynLoad(SEXP dllSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -389,7 +393,7 @@ RcppExport SEXP _rxode2_rxModelVars_(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -424,7 +428,7 @@ RcppExport SEXP _rxode2_rxState(SEXP objSEXP, SEXP stateSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -458,7 +462,7 @@ RcppExport SEXP _rxode2_rxParams_(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -492,7 +496,7 @@ RcppExport SEXP _rxode2_rxDfdy(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -526,7 +530,7 @@ RcppExport SEXP _rxode2_rxLhs(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -566,7 +570,7 @@ RcppExport SEXP _rxode2_rxInits(SEXP objSEXP, SEXP vecSEXP, SEXP reqSEXP, SEXP d
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -601,7 +605,7 @@ RcppExport SEXP _rxode2_rxSetupIni(SEXP objSEXP, SEXP initsSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -637,7 +641,7 @@ RcppExport SEXP _rxode2_rxSetupScale(SEXP objSEXP, SEXP scaleSEXP, SEXP extraArg
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -670,7 +674,7 @@ RcppExport SEXP _rxode2_atolRtolFactor_(SEXP factorSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -731,7 +735,7 @@ RcppExport SEXP _rxode2_rxSimThetaOmega(SEXP paramsSEXP, SEXP omegaSEXP, SEXP om
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -764,7 +768,7 @@ RcppExport SEXP _rxode2_rxSolveFree() {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -805,7 +809,7 @@ RcppExport SEXP _rxode2_rxSolve_(SEXP objSEXP, SEXP rxControlSEXP, SEXP specPara
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -839,7 +843,7 @@ RcppExport SEXP _rxode2_rxSolveDollarNames(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -875,7 +879,7 @@ RcppExport SEXP _rxode2_rxSolveGet(SEXP objSEXP, SEXP argSEXP, SEXP exactSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -911,7 +915,7 @@ RcppExport SEXP _rxode2_rxSolveUpdate(SEXP objSEXP, SEXP argSEXP, SEXP valueSEXP
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -952,7 +956,7 @@ RcppExport SEXP _rxode2_rxSolveSEXP(SEXP objSSEXP, SEXP rxControlSSEXP, SEXP spe
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -985,7 +989,7 @@ RcppExport SEXP _rxode2_rxRmModelLib_(SEXP strSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1019,7 +1023,7 @@ RcppExport SEXP _rxode2_rxGetrxode2(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1053,7 +1057,7 @@ RcppExport SEXP _rxode2_rxIsCurrent(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1086,7 +1090,7 @@ RcppExport SEXP _rxode2_rxAssignPtr(SEXP objectSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1120,7 +1124,7 @@ RcppExport SEXP _rxode2_rxDll(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1154,7 +1158,7 @@ RcppExport SEXP _rxode2_rxC(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1188,7 +1192,7 @@ RcppExport SEXP _rxode2_rxIsLoaded(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1222,7 +1226,7 @@ RcppExport SEXP _rxode2_rxDynLoad(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1256,7 +1260,7 @@ RcppExport SEXP _rxode2_rxLock(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1290,7 +1294,7 @@ RcppExport SEXP _rxode2_rxUnlock(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1324,7 +1328,7 @@ RcppExport SEXP _rxode2_rxAllowUnload(SEXP allowSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1357,7 +1361,7 @@ RcppExport SEXP _rxode2_rxUnloadAll_() {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1391,7 +1395,7 @@ RcppExport SEXP _rxode2_rxDynUnload(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1425,7 +1429,7 @@ RcppExport SEXP _rxode2_rxDelete(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1459,7 +1463,7 @@ RcppExport SEXP _rxode2_setRstudio(SEXP isRstudioSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1493,7 +1497,7 @@ RcppExport SEXP _rxode2_setProgSupported(SEXP isSupportedSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1526,7 +1530,7 @@ RcppExport SEXP _rxode2_getProgSupported() {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1562,7 +1566,7 @@ RcppExport SEXP _rxode2_rxUpdateTrans_(SEXP retSEXP, SEXP prefixSEXP, SEXP libNa
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1596,7 +1600,7 @@ RcppExport SEXP _rxode2_dropUnitsRxSolve(SEXP xSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1630,7 +1634,7 @@ RcppExport SEXP _rxode2_rxSetSilentErr(SEXP silentSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1664,7 +1668,7 @@ RcppExport SEXP _rxode2_rxInv(SEXP matrixSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1701,7 +1705,7 @@ RcppExport SEXP _rxode2_rxSymInvChol(SEXP invObjOrMatrixSEXP, SEXP thetaSEXP, SE
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1737,7 +1741,7 @@ RcppExport SEXP _rxode2_rxSymInvCholEnvCalculate(SEXP objSEXP, SEXP whatSEXP, SE
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1782,7 +1786,7 @@ RcppExport SEXP _rxode2_isNullZero(SEXP objSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1816,7 +1820,123 @@ RcppExport SEXP _rxode2_rxErf(SEXP vSEXP) {
     if (rcpp_isError_gen) {
         SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
         UNPROTECT(1);
-        Rf_error(CHAR(rcpp_msgSEXP_gen));
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
+// binomProbsPredVec_
+NumericVector binomProbsPredVec_(int n, int m, int Y, int M, bool doP, double tol);
+static SEXP _rxode2_binomProbsPredVec__try(SEXP nSEXP, SEXP mSEXP, SEXP YSEXP, SEXP MSEXP, SEXP doPSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type m(mSEXP);
+    Rcpp::traits::input_parameter< int >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< int >::type M(MSEXP);
+    Rcpp::traits::input_parameter< bool >::type doP(doPSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(binomProbsPredVec_(n, m, Y, M, doP, tol));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_binomProbsPredVec_(SEXP nSEXP, SEXP mSEXP, SEXP YSEXP, SEXP MSEXP, SEXP doPSEXP, SEXP tolSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_binomProbsPredVec__try(nSEXP, mSEXP, YSEXP, MSEXP, doPSEXP, tolSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
+// binomProbs_
+NumericVector binomProbs_(NumericVector x, NumericVector probs, bool naRm, int nIn, int cont);
+static SEXP _rxode2_binomProbs__try(SEXP xSEXP, SEXP probsSEXP, SEXP naRmSEXP, SEXP nInSEXP, SEXP contSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type probs(probsSEXP);
+    Rcpp::traits::input_parameter< bool >::type naRm(naRmSEXP);
+    Rcpp::traits::input_parameter< int >::type nIn(nInSEXP);
+    Rcpp::traits::input_parameter< int >::type cont(contSEXP);
+    rcpp_result_gen = Rcpp::wrap(binomProbs_(x, probs, naRm, nIn, cont));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_binomProbs_(SEXP xSEXP, SEXP probsSEXP, SEXP naRmSEXP, SEXP nInSEXP, SEXP contSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_binomProbs__try(xSEXP, probsSEXP, naRmSEXP, nInSEXP, contSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
+// meanProbs_
+NumericVector meanProbs_(NumericVector x, NumericVector probs, bool naRm, bool useT, bool pred, int nIn);
+static SEXP _rxode2_meanProbs__try(SEXP xSEXP, SEXP probsSEXP, SEXP naRmSEXP, SEXP useTSEXP, SEXP predSEXP, SEXP nInSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type probs(probsSEXP);
+    Rcpp::traits::input_parameter< bool >::type naRm(naRmSEXP);
+    Rcpp::traits::input_parameter< bool >::type useT(useTSEXP);
+    Rcpp::traits::input_parameter< bool >::type pred(predSEXP);
+    Rcpp::traits::input_parameter< int >::type nIn(nInSEXP);
+    rcpp_result_gen = Rcpp::wrap(meanProbs_(x, probs, naRm, useT, pred, nIn));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_meanProbs_(SEXP xSEXP, SEXP probsSEXP, SEXP naRmSEXP, SEXP useTSEXP, SEXP predSEXP, SEXP nInSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_meanProbs__try(xSEXP, probsSEXP, naRmSEXP, useTSEXP, predSEXP, nInSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        Rf_error("%s", CHAR(rcpp_msgSEXP_gen));
     }
     UNPROTECT(1);
     return rcpp_result_gen;
@@ -1829,7 +1949,7 @@ static int _rxode2_RcppExport_validate(const char* sig) {
         signatures.insert("List(*rxExpandGrid_)(RObject&,RObject&,RObject&)");
         signatures.insert("List(*rxExpandSens_)(CharacterVector,CharacterVector)");
         signatures.insert("List(*rxExpandSens2_)(CharacterVector,CharacterVector,CharacterVector)");
-        signatures.insert("List(*rxExpandFEta_)(CharacterVector,int,int)");
+        signatures.insert("List(*rxExpandFEta_)(CharacterVector,int,int,bool)");
         signatures.insert("std::string(*rxRepR0_)(int)");
         signatures.insert("List(*rxExpandNesting)(const RObject&,List&,bool)");
         signatures.insert("bool(*rxIs)(const RObject&,std::string)");
@@ -1876,6 +1996,9 @@ static int _rxode2_RcppExport_validate(const char* sig) {
         signatures.insert("RObject(*rxSymInvCholEnvCalculate)(List,std::string,Nullable<NumericVector>)");
         signatures.insert("LogicalVector(*isNullZero)(RObject)");
         signatures.insert("NumericVector(*rxErf)(NumericVector)");
+        signatures.insert("NumericVector(*binomProbsPredVec_)(int,int,int,int,bool,double)");
+        signatures.insert("NumericVector(*binomProbs_)(NumericVector,NumericVector,bool,int,int)");
+        signatures.insert("NumericVector(*meanProbs_)(NumericVector,NumericVector,bool,bool,bool,int)");
     }
     return signatures.find(sig) != signatures.end();
 }
@@ -1932,6 +2055,9 @@ RcppExport SEXP _rxode2_RcppExport_registerCCallable() {
     R_RegisterCCallable("rxode2", "_rxode2_rxSymInvCholEnvCalculate", (DL_FUNC)_rxode2_rxSymInvCholEnvCalculate_try);
     R_RegisterCCallable("rxode2", "_rxode2_isNullZero", (DL_FUNC)_rxode2_isNullZero_try);
     R_RegisterCCallable("rxode2", "_rxode2_rxErf", (DL_FUNC)_rxode2_rxErf_try);
+    R_RegisterCCallable("rxode2", "_rxode2_binomProbsPredVec_", (DL_FUNC)_rxode2_binomProbsPredVec__try);
+    R_RegisterCCallable("rxode2", "_rxode2_binomProbs_", (DL_FUNC)_rxode2_binomProbs__try);
+    R_RegisterCCallable("rxode2", "_rxode2_meanProbs_", (DL_FUNC)_rxode2_meanProbs__try);
     R_RegisterCCallable("rxode2", "_rxode2_RcppExport_validate", (DL_FUNC)_rxode2_RcppExport_validate);
     return R_NilValue;
 }

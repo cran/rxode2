@@ -1,4 +1,4 @@
-#'  This copies the rxode2 UI object so it can be modified
+#' This copies the rxode2 UI object so it can be modified
 #'
 #' @param ui Original UI object
 #' @return Copied UI object
@@ -19,15 +19,15 @@
 #' Expand the quoted lines to include relevant lines from UI
 #'
 #' @param cur This is the current piped in `rxUi` interface
-#' 
+#'
 #' @param iniDf This is the ini data frame from the prior ui
 #'
 #' @param charExpression character vector of the current expression
-#' 
+#'
 #' @return `NULL` if there is no lines to add OR a list of the lines
 #'   from the `cur` UI removing parameters that are not in the
 #'   destination `ini()`
-#' 
+#'
 #' @author Matthew L Fidler
 #' @noRd
 .quoteExpandRxUi <- function(cur, iniDf, charExpression) {
@@ -121,15 +121,15 @@
 #' This expands a list of expressions
 #'
 #' @param lines These are the expressions as a list
-#' 
+#'
 #' @param bracketsOrCs This is the indicator of the bracket lines ie
 #'   `{}` or concatenations ie `c()`, that are expanded
-#' 
+#'
 #' @param iniDf initial conditions from the previous/parent rxUi
-#' 
+#'
 #' @return Single list of expressions; `a=b` becomes `a<-b` in this
 #'   expression
-#' 
+#'
 #' @author Matthew L. Fidler
 #' @noRd
 .quoteExpandBracketsOrCs <- function(lines, bracketsOrCs, envir=envir, iniDf=NULL) {
@@ -141,9 +141,22 @@
     .cur <- NULL
     if (length(.bracketExpression) == 1) {
       # evaulate expression
-      .cur <- eval(.bracketExpression, envir=envir)
-      if (length(.cur) > 1) {
-        if (identical(.cur[[1]], quote(`{`))) {
+      .cur <- try(eval(.bracketExpression, envir=envir), silent=TRUE)
+      if (inherits(.cur, "try-error")) {
+      } else if (length(.cur) > 1) {
+        if (inherits(.cur, "character")) {
+          if (is.null(names(.cur))) {
+            .cur <- lapply(.cur, function(x) {
+              str2lang(x)
+            })
+          } else {
+            .cur <- lapply(names(.cur), function(x) {
+              str2lang(paste0(x, "<-", .cur[[x]]))
+            })
+          }
+          .cur <- as.call(c(list(quote(`{`)),.cur))
+          .bracketExpression <- .cur
+        } else if (identical(.cur[[1]], quote(`{`))) {
           .bracketExpression <- .cur
         }
       }
@@ -199,7 +212,7 @@
       } else if (inherits(.cur, "character") && length(.cur) == 1) {
         .unlistedBrackets <- try(str2lang(.cur), silent=TRUE)
         if (inherits(.unlistedBrackets, "try-error")) {
-          stop("vectors and list need to named numeric expression", call.=FALSE)
+          stop("vectors and list need to be named numeric expression", call.=FALSE)
         }
         if (identical(.unlistedBrackets[[1]], quote(`=`))) {
           .unlistedBrackets[[1]] <- quote(`<-`)
@@ -207,7 +220,7 @@
         .unlistedBrackets <- list(.unlistedBrackets)
       } else {
         .ini <- .quoteExpandRxUi(.cur, iniDf=iniDf, charExpression=deparse1(.bracketExpression))
-        if (is.null(.ini)) stop("vectors and list need to named numeric expression", call.=FALSE)
+        if (is.null(.ini)) stop("vectors and list need to be named numeric expression", call.=FALSE)
         .expandedForm <- c(.expandedForm, .ini)
       }
     }
@@ -234,7 +247,7 @@
 #' @param callInfo Call information
 #'
 #' @param envir Environment for evaluation (if needed)
-#' 
+#'
 #' @param iniDf The parent model `iniDf` when piping in a `ini` block
 #'   (`NULL` otherwise)
 #'
@@ -262,7 +275,7 @@
           .nsEnv$.quoteCallInfoLinesAppend <- eval(call("quote", .append))
         }
         return(NULL)
-      } else if (.name %in% c("envir",  "auto", "iniDf")) {
+      } else if (.name %in% c("envir",  "auto", "iniDf", "cov")) {
         return(NULL)
       } else if (.name != "") {
         # Changed named items to
@@ -282,16 +295,37 @@
     } else if (identical(.quoted[[1]], quote(`as.formula`))) {
       .quoted <- .quoted[[2]]
     } else if (identical(.quoted[[1]], quote(`~`))) {
-      .quoted[[3]] <- .iniSimplifyFixUnfix(.quoted[[3]])
-      if (identical(.quoted[[3]], quote(`fix`)) ||
-            identical(.quoted[[3]], quote(`unfix`))) {
-        .quoted <- as.call(list(quote(`<-`), .quoted[[2]], .quoted[[3]]))
+      if (length(.quoted) == 3L) {
+        .quoted[[3]] <- .iniSimplifyFixUnfix(.quoted[[3]])
+        if (identical(.quoted[[3]], quote(`fix`)) ||
+              identical(.quoted[[3]], quote(`unfix`))) {
+          .quoted <- as.call(list(quote(`<-`), .quoted[[2]], .quoted[[3]]))
+        }
+      }
+    } else if (identical(.quoted[[1]], quote(`$`))) {
+      .tmp <- try(eval(.quoted), silent=TRUE)
+      if (!inherits(.tmp, "try-error")) {
+        .quoted <- .tmp
+        if (inherits(.quoted, "character")) {
+          .quoted <- str2lang(.quoted)
+        }
       }
     }
     .quoted
   })
   .w <- which(.bracket)
   .ret <- .quoteExpandBracketsOrCs(.ret, .w, envir=envir, iniDf=iniDf)
+  .ret <- lapply(seq_along(.ret), function(i) {
+    if (identical(.ret[[i]][[1]], quote(`$`))) {
+      .r <- eval(.ret[[i]], envir=envir)
+      if (inherits(.r, "character")) {
+        .r <- str2lang(.r)
+      }
+      return(.r)
+    }
+    .ret[[i]]
+  })
+
   .ret[vapply(seq_along(.ret), function(i) {
     !is.null(.ret[[i]])
   }, logical(1), USE.NAMES=FALSE)]

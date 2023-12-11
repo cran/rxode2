@@ -12,7 +12,6 @@
 // NONMEM nTHETA=20
 // NONMEM nETA=30
 // NONMEM nSIGMA=10
-
 #define NPARS 60
 #include <RcppArmadillo.h>
 #include "nearPD.h"
@@ -43,17 +42,14 @@ void resetSolveLinB();
 using namespace Rcpp;
 using namespace arma;
 
-typedef void (*seedEng_t)(uint32_t ncores);
+typedef void (*seedEng_t)(int ncores);
 extern seedEng_t seedEng;
-
 
 #include "cbindThetaOmega.h"
 #include <rxode2parseHandleEvid.h>
 #include "rxThreadData.h"
 //#include "seed.h"
 
-extern "C" uint64_t dtwiddle(const void *p, int i);
-extern "C" void calcNradix(int *nbyte, int *nradix, int *spare, uint64_t *maxD, uint64_t *minD);
 extern "C" void RSprintf(const char *format, ...);
 extern "C" int getRxThreads(const int64_t n, const bool throttle);
 extern "C" double *global_InfusionRate(unsigned int mx);
@@ -67,31 +63,16 @@ extern "C" int getThrottle();
 extern "C" int getRxThreads(const int64_t n, const bool throttle);
 extern "C" void rxode2_assign_fn_pointers_(const char *mv);
 extern "C" void setSilentErr(int silent);
+extern "C" SEXP _rxode2parse_assignUdf(SEXP in);
+extern "C" SEXP _rxode2parse_udfEnvSet(SEXP udf);
+extern "C" SEXP _rxode2parse_udfReset();
+extern "C" SEXP _rxode2parse_rxC(SEXP in);
 
 extern "C" {
-
   typedef SEXP (*_rxode2parse_getForder_type)(void);
   extern _rxode2parse_getForder_type getForder;
   typedef int (*_rxode2parse_useForder_type)(void);
   extern _rxode2parse_useForder_type useForder;
-}
-
-// https://github.com/Rdatatable/data.table/blob/588e0725320eacc5d8fc296ee9da4967cee198af/src/forder.c#L193-L211
-// range_d is modified because it DOES NOT count na/inf because rxode2 assumes times cannot be NA, NaN, -Inf, Inf
-// Also can integrate with prior range information (like prior integer range)
-static void range_d(double *x, int n, uint64_t *out_min, uint64_t *out_max)
-// return range of finite numbers (excluding NA, NaN, -Inf, +Inf), a count of NA and a count of Inf|-Inf|NaN
-{
-  uint64_t min=*out_min, max=*out_max;
-  int i=0;
-  max = min = dtwiddle(x, i++);
-  for(; i<n; i++) {
-    uint64_t tmp = dtwiddle(x, i);
-    if (tmp>max) max=tmp;
-    else if (tmp<min) min=tmp;
-  }
-  *out_min = min;
-  *out_max = max;
 }
 
 #include "../inst/include/rxode2_as.h"
@@ -103,7 +84,10 @@ LogicalVector rxSolveFree();
 List etTrans(List inData, const RObject &obj, bool addCmt=false,
              bool dropUnits=false, bool allTimeVar=false,
              bool keepDosingOnly=false, Nullable<LogicalVector> combineDvid=R_NilValue,
-             CharacterVector keep = CharacterVector(0));
+             CharacterVector keep = CharacterVector(0),
+             bool addlKeepsCov=false,
+             bool addlDropSs = true,
+             bool ssAtDoseTime = true);
 extern "C" SEXP _rxode2_et_(SEXP x1, SEXP x2);
 
 RObject et_(List input, List et__) {
@@ -749,7 +733,7 @@ List rxModelVars_character(const RObject &obj){
     if (sobj == ""){
       // Blank rxode2 model
       return rxModelVars_blank();
-    } else if (fileExists(sobj)){
+    } else if (fileExists(sobj)) {
       // From file
       Function f = getRxFn(".rxModelVarsCharacter");
       return f(obj);
@@ -1313,12 +1297,13 @@ struct rx_globals {
   double *gRate;
   double *gDur;
   double *gall_times;
-  double *gall_times2;
+  double *gall_timesS;
   int *gix;
   double *gdv;
   double *glimit;
   int *gcens;
   double *gamt;
+  double *gamtS;
   double *gii;
   double *glhs;
   double *gcov;
@@ -1353,14 +1338,30 @@ struct rx_globals {
   double *gomega = NULL;
   int nOmega = 0;
   int *ordId = NULL;
-  int *nradix = NULL;
-  uint8_t *** keys = NULL;
-  uint8_t * UGRP = NULL;
-  int * TMP = NULL;
   bool zeroTheta = false;
   bool zeroOmega = false;
   bool zeroSigma = false;
   int *gindLin = NULL;
+
+  // extra dosing information
+  int ** pendingDoses = NULL;
+  int *  nPendingDoses = NULL;
+  int *  nAllocPendingDoses = NULL;
+  int ** ignoredDoses = NULL;
+  int *  nIgnoredDoses = NULL;
+  int *  nAllocIgnoredDoses = NULL;
+
+  // new dosing information
+
+  int    **extraDoseTimeIdx = NULL;
+  double **extraDoseTime    = NULL;
+  int    **extraDoseEvid    = NULL;
+  double **extraDoseDose    = NULL;
+  int     *extraDoseN       = NULL;
+  int     *extraDoseAllocN  = NULL;
+
+  // time per thread
+  double *timeThread = NULL;
 };
 
 
@@ -1418,6 +1419,27 @@ extern "C" void setIndPointersByThread(rx_solving_options_ind *ind) {
     ind->tlastS = getTlastSThread();
     ind->tfirstS = getTfirstSThread();
     ind->curDoseS = getCurDoseSThread();
+
+    ind->ignoredDoses = _globals.ignoredDoses[omp_get_thread_num()];
+    ind->ignoredDosesN = &(_globals.nIgnoredDoses[omp_get_thread_num()]);
+    ind->ignoredDosesN[0] = 0; // reset
+    ind->ignoredDosesAllocN = &(_globals.nAllocIgnoredDoses[omp_get_thread_num()]);
+
+    ind->pendingDoses = _globals.pendingDoses[omp_get_thread_num()];
+    ind->pendingDosesN = &(_globals.nPendingDoses[omp_get_thread_num()]);
+    ind->pendingDosesN[0] = 0; // reset
+    ind->pendingDosesAllocN = &(_globals.nAllocPendingDoses[omp_get_thread_num()]);
+
+    ind->extraDoseN = &(_globals.extraDoseN[omp_get_thread_num()]);
+    ind->extraDoseN[0] = 0; //reset
+    ind->extraDoseAllocN = &(_globals.extraDoseAllocN[omp_get_thread_num()]);
+    ind->extraDoseTimeIdx = _globals.extraDoseTimeIdx[omp_get_thread_num()];
+    ind->extraDoseTime = _globals.extraDoseTime[omp_get_thread_num()];
+    ind->extraDoseEvid = _globals.extraDoseEvid[omp_get_thread_num()];
+    ind->extraDoseDose = _globals.extraDoseDose[omp_get_thread_num()];
+    ind->idxExtra = 0;
+    ind->extraSorted = 0;
+
     ind->on = _globals.gon + ncmt*omp_get_thread_num();
     ind->solveSave = _globals.gSolveSave + op->neq*omp_get_thread_num();
     ind->solveLast = _globals.gSolveLast + op->neq*omp_get_thread_num();
@@ -1437,6 +1459,7 @@ extern "C" void setIndPointersByThread(rx_solving_options_ind *ind) {
     ind->solveLast = NULL;
     ind->solveLast2 = NULL;
   }
+  ind->timeThread = _globals.timeThread + rx->maxAllTimes*omp_get_thread_num();
   ind->llikSave = _globals.gLlikSave + op->nLlik*rxLlikSaveSize*omp_get_thread_num();
   ind->lhs = _globals.glhs+op->nlhs*omp_get_thread_num();
 }
@@ -2121,15 +2144,22 @@ List rxSimThetaOmega(const Nullable<NumericVector> &params    = R_NilValue,
       }
       if (_globals.gsigma != NULL) free(_globals.gsigma);
       rx->neps = sigma0.n_rows;
-      _globals.gsigma = (double*)malloc((rx->neps * rx->neps + 2 * rx->neps)* sizeof(double));
-      std::copy(&sigma0[0], &sigma0[0] + rx->neps * rx->neps, _globals.gsigma + 2 * rx->neps);
+      if (rx->neps > 0) {
+        _globals.gsigma = (double*)malloc((rx->neps * rx->neps + 2 * rx->neps)* sizeof(double));
+        std::copy(&sigma0[0], &sigma0[0] + rx->neps * rx->neps,
+                  _globals.gsigma + 2 * rx->neps);
+      } else {
+        _globals.gsigma = NULL;
+      }
       _globals.nSigma = 0;
     }
     arma::vec in = as<arma::vec>(sigmaLower);
     arma::vec lowerSigmaV = fillVec(in, sigma0.n_rows);
     arma::vec upperSigmaV = fillVec(in, sigma0.n_rows);
-    std::copy(&lowerSigmaV[0], &lowerSigmaV[0] + rx->neps, _globals.gsigma);
-    std::copy(&upperSigmaV[0], &upperSigmaV[0] + rx->neps, _globals.gsigma + rx->neps);
+    if (rx->neps > 0) {
+      std::copy(&lowerSigmaV[0], &lowerSigmaV[0] + rx->neps, _globals.gsigma);
+      std::copy(&upperSigmaV[0], &upperSigmaV[0] + rx->neps, _globals.gsigma + rx->neps);
+    }
     // structure of _globals.gsigma is
     // lower
     // upper
@@ -2453,6 +2483,7 @@ void resetFkeep();
 //' @export
 // [[Rcpp::export]]
 LogicalVector rxSolveFree(){
+  _rxode2parse_udfReset();
   resetFkeep();
   rx_solve* rx = getRxSolve_();
   // Free the solve id order
@@ -2460,42 +2491,15 @@ LogicalVector rxSolveFree(){
   rx->par_sample=NULL;
   if (_globals.ordId != NULL) free(_globals.ordId);
   _globals.ordId = rx->ordId = NULL;
-  if (_globals.nradix != NULL) free(_globals.nradix);
-  _globals.nradix=NULL;
   // Free the omega info
   if (_globals.gomega != NULL) free(_globals.gomega);
   _globals.gomega = NULL;
   if (_globals.gsigma != NULL) free(_globals.gsigma);
   _globals.gsigma = NULL;
-  // Free the allocated keys
-  if (_globals.keys != NULL) {
-    int i=0;
-    while (_globals.keys[i] != NULL){
-      int j = 0;
-      while(_globals.keys[i][j] != NULL){
-        free(_globals.keys[i][j]);
-        _globals.keys[i][j++] = NULL;
-      }
-      free(_globals.keys[i]);
-      _globals.keys[i++] = NULL;
-    }
-    free(_globals.keys);
-    _globals.keys=NULL;
-  }
-
-  if (_globals.TMP != NULL) {
-    free(_globals.TMP);
-  }
-  _globals.TMP = NULL;
 
   _globals.zeroTheta = false;
   _globals.zeroOmega = false;
   _globals.zeroSigma = false;
-
-  if (_globals.UGRP != NULL) {
-    free(_globals.UGRP);
-  }
-  _globals.UGRP = rx->UGRP = NULL;
 
   if (_globals.ordId != NULL) {
     free(_globals.ordId);
@@ -2511,6 +2515,87 @@ LogicalVector rxSolveFree(){
     rxSolveFreeObj=R_NilValue;
   }
   if (_globals.gindLin != NULL) R_Free(_globals.gindLin);
+
+  if (_globals.pendingDoses != NULL) {
+    int i=0;
+    while (_globals.pendingDoses[i] != NULL) {
+      free(_globals.pendingDoses[i]);
+      _globals.pendingDoses[i] = NULL;
+      i++;
+    }
+    free(_globals.pendingDoses);
+    _globals.pendingDoses = NULL;
+  }
+
+  if (_globals.ignoredDoses != NULL) {
+    int i=0;
+    while (_globals.ignoredDoses[i] != NULL){
+      free(_globals.ignoredDoses[i]);
+      _globals.ignoredDoses[i] = NULL;
+      i++;
+    }
+    free(_globals.ignoredDoses);
+    _globals.ignoredDoses=NULL;
+  }
+
+  if (_globals.extraDoseTimeIdx != NULL) {
+    int i=0;
+    while (_globals.extraDoseTimeIdx[i] != NULL){
+      free(_globals.extraDoseTimeIdx[i]);
+      _globals.extraDoseTimeIdx[i] = NULL;
+      i++;
+    }
+    free(_globals.extraDoseTimeIdx);
+    _globals.extraDoseTimeIdx=NULL;
+  }
+
+  if (_globals.extraDoseTime != NULL) {
+    int i=0;
+    while (_globals.extraDoseTime[i] != NULL){
+      free(_globals.extraDoseTime[i]);
+      _globals.extraDoseTime[i] = NULL;
+      i++;
+    }
+    free(_globals.extraDoseTime);
+    _globals.extraDoseTime=NULL;
+  }
+
+  if (_globals.extraDoseEvid != NULL) {
+    int i=0;
+    while (_globals.extraDoseEvid[i] != NULL){
+      free(_globals.extraDoseEvid[i]);
+      _globals.extraDoseEvid[i] = NULL;
+      i++;
+    }
+    free(_globals.extraDoseEvid);
+    _globals.extraDoseEvid=NULL;
+  }
+
+  if (_globals.extraDoseDose != NULL) {
+    int i=0;
+    while (_globals.extraDoseDose[i] != NULL){
+      free(_globals.extraDoseDose[i]);
+      _globals.extraDoseDose[i] = NULL;
+      i++;
+    }
+    free(_globals.extraDoseDose);
+    _globals.extraDoseDose=NULL;
+  }
+  if (_globals.extraDoseN != NULL) free(_globals.extraDoseN);
+  _globals.extraDoseN = NULL;
+  if (_globals.extraDoseAllocN != NULL) free(_globals.extraDoseAllocN);
+  _globals.extraDoseAllocN = NULL;
+
+  if (_globals.nPendingDoses != NULL) free(_globals.nPendingDoses);
+  _globals.nPendingDoses=NULL;
+  if (_globals.nAllocPendingDoses != NULL) free(_globals.nAllocPendingDoses);
+  _globals.nAllocPendingDoses=NULL;
+  if (_globals.nIgnoredDoses != NULL) free(_globals.nIgnoredDoses);
+  _globals.nIgnoredDoses=NULL;
+  if (_globals.nAllocIgnoredDoses != NULL) free(_globals.nAllocIgnoredDoses);
+  _globals.nAllocIgnoredDoses=NULL;
+  if (_globals.gall_timesS != NULL) free(_globals.gall_timesS);
+  _globals.gall_timesS = NULL;
   rxOptionsFree(); // f77 losda free
   rxOptionsIni();// realloc f77 lsoda cache
   rxClearFuns(); // Assign all the global ODE solving functions to NULL pointers
@@ -2548,6 +2633,19 @@ extern "C" SEXP get_fkeepLevels(int col) {
   List cur = keepFcovType[col];
   return wrap(cur[1]);
 }
+
+extern "C" SEXP assign_fkeepAttr(int col, SEXP in) {
+  List cur = keepFcovType[col];
+  List attr = cur[2];
+  RObject curRO = as<RObject>(in);
+  CharacterVector attrN = attr.names();
+  for (unsigned int i = 0; i < attr.size(); i++) {
+    std::string curAttr = as<std::string>(attrN[i]);
+    curRO.attr(curAttr) = attr[i];
+  }
+  return wrap(curRO);
+}
+
 
 extern "C" SEXP get_fkeepChar(int col, double val) {
   List cur = keepFcovType[col];
@@ -2629,6 +2727,8 @@ struct rxSolve_t {
   CharacterVector idLevels;
   bool convertInt = false;
   bool throttle = false;
+  int maxItemsPerId = 0;
+  bool hasICov = false;
 };
 
 SEXP rxSolve_(const RObject &obj, const List &rxControl, const Nullable<CharacterVector> &specParams,
@@ -2756,9 +2856,15 @@ static inline void rxSolve_ev1Update(const RObject &obj,
     int nobs = asInt(etE["nobs"], "nobs");
     if (nobs == 0){
       // KEEP/DROP?
+      if (rxSolveDat->hasICov) {
+        Rf_warningcall(R_NilValue, "'iCov' ignored when there are no samples/observations in the input dataset");
+      }
       List ev1a = etTrans(as<List>(ev1), obj, rxSolveDat->hasCmt,
                           false, false, true, R_NilValue,
-                          rxControl[Rxc_keepF]);
+                          rxControl[Rxc_keepF],
+                          rxControl[Rxc_addlKeepsCov],
+                          rxControl[Rxc_addlDropSs],
+                          rxControl[Rxc_ssAtDoseTime]);
       rxSolveDat->labelID=true;
       CharacterVector tmpC = ev1a.attr("class");
       List tmpL = tmpC.attr(".rxode2.lst");
@@ -2832,7 +2938,8 @@ static inline void rxSolve_ev1Update(const RObject &obj,
   if (rxIs(ev1, "data.frame") && !rxIs(ev1, "rxEtTrans")){
     ev1 = as<List>(etTrans(as<List>(ev1), obj, rxSolveDat->hasCmt,
                            false, false, true, R_NilValue,
-                           rxControl[Rxc_keepF]));
+                           rxControl[Rxc_keepF], rxControl[Rxc_addlKeepsCov],
+                           rxControl[Rxc_addlDropSs], rxControl[Rxc_ssAtDoseTime]));
     rxSolveDat->labelID=true;
     CharacterVector tmpC = ev1.attr("class");
     List tmpL = tmpC.attr(".rxode2.lst");
@@ -2914,6 +3021,7 @@ static inline void rxSolve_ev1Update(const RObject &obj,
       }
     }
   }
+  // Rcpp::print(ev1);
   _rxModels[".lastEv1"] = ev1;
 }
 
@@ -3370,7 +3478,6 @@ static inline void rxSolve_datSetupHmax(const RObject &obj, const List &rxContro
 
     NumericVector time0 = dataf[rxcTime];
     // Get the range
-    range_d(REAL(dataf[rxcTime]), time0.size(), &(rx->minD), &(rx->maxD));
 
     if (rxIs(time0, "units")){
       rxSolveDat->addTimeUnits=true;
@@ -3385,10 +3492,9 @@ static inline void rxSolve_datSetupHmax(const RObject &obj, const List &rxContro
     }
     rxOptionsIniEnsure(ntot);
     if (_globals.gall_times != NULL) free(_globals.gall_times);
-    _globals.gall_times = (double*)calloc(6*time0.size(), sizeof(double));
+    _globals.gall_times = (double*)calloc(5*time0.size(), sizeof(double));
     std::copy(time0.begin(), time0.end(), &_globals.gall_times[0]);
-    _globals.gall_times2 = _globals.gall_times + time0.size();
-    _globals.gdv = _globals.gall_times2 + time0.size(); // Perhaps allocate zero size if missing?
+    _globals.gdv = _globals.gall_times + time0.size(); // Perhaps allocate zero size if missing?
     _globals.gamt = _globals.gdv + time0.size();
     _globals.gii = _globals.gamt + time0.size();
     _globals.glimit=_globals.gii + time0.size();
@@ -3479,9 +3585,9 @@ static inline void rxSolve_datSetupHmax(const RObject &obj, const List &rxContro
           setupRxInd(ind, 1);
         }
         // Setup the pointers.
-        ind->id             = nsub+1;
-        ind->idReal         = id[i];
-        ind->all_times   = &_globals.gall_times[i];
+        ind->id               = nsub+1;
+        ind->idReal           = id[i];
+        ind->all_times        = &_globals.gall_times[i];
         ind->dv = &_globals.gdv[i];
         ind->limit = &_globals.glimit[i];
         ind->cens = &_globals.gcens[i];
@@ -3871,8 +3977,24 @@ static inline void rxSolve_normalizeParms(const RObject &obj, const List &rxCont
       rx_solving_options_ind indS;
       int linCmt = INTEGER(rxSolveDat->mv[RxMv_flags])[RxMvFlag_linCmt];
       int nIndSim = rx->nIndSim;
-      for (unsigned int simNum = rx->nsim; simNum--;){
-        for (unsigned int id = rx->nsub; id--;){
+      if (rx->needSort != 0 && rx->nsim > 1) {
+        if (_globals.gall_timesS != NULL) free(_globals.gall_timesS);
+        _globals.gall_timesS = (double*)malloc((2*(rx->nsim-1)*rx->nall)* sizeof(double));
+        if (_globals.gall_timesS == NULL) {
+          rxSolveFree();
+          stop(_("ran out of memory"));
+        }
+        _globals.gamtS= _globals.gall_timesS + (rx->nsim-1)*rx->nall;
+        for (int iii = 0; iii < rx->nsim-1; ++iii) {
+          std::copy(_globals.gamt, _globals.gamt + rx->nall,
+                    _globals.gamtS + iii*rx->nall);
+          std::copy(_globals.gall_times, _globals.gall_times + rx->nall,
+                    _globals.gall_timesS + iii*rx->nall);
+        }
+      }
+      for (unsigned int simNum = rx->nsim; simNum--;) {
+        unsigned int cIdx2 = rx->nall;
+        for (unsigned int id = rx->nsub; id--;) {
           unsigned int cid = id+simNum*rx->nsub;
           ind = &(rx->subjects[cid]);
           ind->linCmt = linCmt;
@@ -3899,12 +4021,18 @@ static inline void rxSolve_normalizeParms(const RObject &obj, const List &rxCont
             ind->idose = &(indS.idose[0]);
             ind->ndoses = indS.ndoses;
             ind->nevid2 = indS.nevid2;
-            ind->dose = &(indS.dose[0]);
             ind->ii   = &(indS.ii[0]);
             ind->evid =&(indS.evid[0]);
-            ind->all_times = &(indS.all_times[0]);
             ind->id=id+1;
             ind->idReal = indS.idReal;
+            if (rx->needSort == 0) {
+              ind->dose = &(indS.dose[0]);
+              ind->all_times = &(indS.all_times[0]);
+            } else {
+              cIdx2 -= ind->n_all_times;
+              ind->all_times = &_globals.gall_timesS[(simNum-1)*rx->nall + cIdx2];
+              ind->dose = &_globals.gamtS[(simNum-1)*rx->nall + cIdx2];
+            }
           }
           int eLen = op->neq*ind->n_all_times;
           ind->solve = &_globals.gsolve[curSolve];
@@ -3912,7 +4040,6 @@ static inline void rxSolve_normalizeParms(const RObject &obj, const List &rxCont
           curSimIni += nIndSim;
           curSolve += (op->neq + op->nlin)*ind->n_all_times;
           ind->ix = &_globals.gix[curIdx];
-          std::iota(ind->ix,ind->ix+ind->n_all_times,0);
           curEvent += eLen;
           curIdx += ind->n_all_times;
           if (rx->sample) {
@@ -3927,49 +4054,6 @@ static inline void rxSolve_normalizeParms(const RObject &obj, const List &rxCont
     rxSolveFree();
     stop(_("Something is wrong"));
   }
-  // Get the data range required for radix sort
-  // This is adapted from forder:
-  ////////////////////////////////////////////////////////////////////////////////
-  // https://github.com/Rdatatable/data.table/blob/master/src/forder.c
-  // in data.table keyAlloc=(ncol+n_cplx)*8+1 which translates to 9
-  // Since the key is constant we can pre-allocate with stack instead key[9]
-  // NA, NaN, and -Inf +Inf not supported
-  int nbyte=0, nradix=0, spare=0;
-  calcNradix(&nbyte, &nradix, &spare, &(rx->maxD), &(rx->minD));
-  if (_globals.nradix != NULL) free(_globals.nradix);
-  rx->nradix = _globals.nradix = (int*)malloc(sizeof(int));//nbyte-1 + (rx->spare==0); // lost
-  std::fill_n(rx->nradix, 1, nradix);
-  ////////////////////////////////////////////////////////////////////////////////
-  if (_globals.keys!=NULL) {
-    int i=0;
-    while (_globals.keys[i] != NULL){
-      int j = 0;
-      while(_globals.keys[i][j] != NULL){
-        free(_globals.keys[i][j]);
-        _globals.keys[i][j++] = NULL;
-      }
-      free(_globals.keys[i]);
-      _globals.keys[i++] = NULL;
-    }
-    free(_globals.keys);
-  }
-  rx->keys = _globals.keys = NULL;
-  rx->keys = _globals.keys = (uint8_t ***)calloc(2, sizeof(uint8_t **)); // lost
-  rx->keys[1] = NULL;
-  // In rxode2 the keyAlloc size IS 9
-  rx->keys[0] = (uint8_t **)calloc(10, sizeof(uint8_t *));
-  for (int j = 0; j < 10; j++) rx->keys[0][j] = NULL;
-  for (int b = 0; b < nbyte; b++){
-    rx->keys[0][b] = (uint8_t *)calloc(rx->maxAllTimes+1, sizeof(uint8_t));
-  }
-  // Use same variables from data.table
-  if (_globals.TMP != NULL) free(_globals.TMP);
-  _globals.TMP = NULL;
-  rx->TMP = _globals.TMP =  (int *)malloc(UINT16_MAX*sizeof(int)); // used by counting sort (my_n<=65536) in radix_r()
-  if (_globals.UGRP != NULL) free(_globals.UGRP);
-  _globals.UGRP = NULL;
-  rx->UGRP = _globals.UGRP = (uint8_t *) malloc(256); // TODO: align TMP and UGRP to cache lines (and do the same for stack allocations too)
-  // Now there is a key per core
 }
 
 // This creates the final dataset from the currently solved object.
@@ -4346,7 +4430,6 @@ static inline SEXP rxSolve_finalize(const RObject &obj,
 #ifdef rxSolveT
   clock_t _lastT0 = clock();
 #endif
-
   rxSolveSaveRxSolve(rxSolveDat);
   rx_solve* rx = getRxSolve_();
   // if (rxSolveDat->throttle){
@@ -4467,15 +4550,12 @@ static inline void iniRx(rx_solve* rx) {
   rx->limit = 0;
   rx->safeZero = 1;
   rx->useStdPow = 0;
+  rx->ss2cancelAllPending = false;
   rx->sumType = 1; // pairwise
   rx->prodType = 1; // long double
   rx->sensType = 4; // advan
   rx->hasFactors = 0;
-  rx->keys = NULL; // keys per thread
-  rx->TMP = NULL;
   rx->ordId = NULL;
-  rx->UGRP = NULL;
-  rx->nradix = NULL;
   rx->ypNA = NULL;
   rx->sample = false;
   rx->par_sample = NULL;
@@ -4619,6 +4699,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
   rxSolve_t rxSolveDat0;
   rxSolve_t* rxSolveDat = &rxSolveDat0;
   RObject object;
+  rxSolveDat->hasICov = !Rf_isNull(rxControl[Rxc_iCov]);
   rxSolveDat->updateObject = asBool(rxControl[Rxc_updateObject], "updateObject");
   rxSolveDat->isRxSolve = rxIs(obj, "rxSolve");
   rxSolveDat->isEnvironment = rxIs(obj, "environment");
@@ -4640,7 +4721,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
   }
   getRxModels();
   bool didNesting=false;
-  if (rxSolveDat->updateObject && !rxSolveDat->isRxSolve && !rxSolveDat->isEnvironment){
+  if (rxSolveDat->updateObject && !rxSolveDat->isRxSolve && !rxSolveDat->isEnvironment) {
     if (rxIs(rxCurObj, "rxSolve")){
       object = rxCurObj;
       rxSolveDat->isRxSolve = true;
@@ -4683,6 +4764,16 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       rxSolveFreeObj = object;
     }
   }
+
+  _rxode2parse_udfEnvSet(rxSolveDat->mv[RxMv_udf]);
+  LogicalVector recompileUdf = _rxode2parse_assignUdf(rxSolveDat->mv[RxMv_udf]);
+
+  if (recompileUdf[0]) {
+    Function rxode2 = getRxFn("rxode2");
+    object = rxode2(object);
+    rxSolveDat->mv = rxModelVars(object);
+    rxSolveFreeObj = object;
+  }
   if (rxSolveDat->isRxSolve || rxSolveDat->isEnvironment){
     rx_solve* rx = getRxSolve_();
     iniRx(rx);
@@ -4715,6 +4806,8 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     rx->sensType = asInt(rxControl[Rxc_sensType], "sensType");
     rx->maxwhile = asInt(rxControl[Rxc_maxwhile], "maxwhile");
     rx_solving_options* op = rx->op;
+    op->naTimeInputWarn = 0;
+    op->naTimeInput = asInt(rxControl[Rxc_naTimeHandle], "naTimeHandle");
 #ifdef rxSolveT
     RSprintf("Time2: %f\n", ((double)(clock() - _lastT0))/CLOCKS_PER_SEC);
     _lastT0 = clock();
@@ -4745,9 +4838,10 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     rx->istateReset = asInt(rxControl[Rxc_istateReset], "istateReset");
     rx->safeZero = asInt(rxControl[Rxc_safeZero], "safeZero");
     rx->useStdPow = asInt(rxControl[Rxc_useStdPow], "useStdPow");
+    rx->ss2cancelAllPending = asInt(rxControl[Rxc_ss2cancelAllPending], "ss2cancelAllPending");
     op->stiff = method;
     rxSolveDat->throttle = false;
-    if (method != 2 || rx->needSort != 0){
+    if (method != 2){
       op->cores = 1;//getRxThreads(1, false);
     } else {
       op->cores = asInt(rxControl[Rxc_cores], "cores");
@@ -4795,7 +4889,222 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       }
     }
     if (op->cores == 0) op->cores = 1;
-    seedEng(op->cores);
+    if (op->cores != 1 && op->naTimeInput == rxode2naTimeInputError) {
+      warning(_("since throwing warning with NA time, change to single threaded"));
+      op->cores=1;
+    }
+    seedEng((int)(op->cores));
+    if (_globals.pendingDoses != NULL) {
+      int i=0;
+      while (_globals.pendingDoses[i] != NULL){
+        free(_globals.pendingDoses[i]);
+        _globals.pendingDoses[i++] = NULL;
+      }
+      free(_globals.pendingDoses);
+      _globals.pendingDoses=NULL;
+    }
+    if (_globals.nIgnoredDoses != NULL) {
+      if (_globals.ignoredDoses != NULL) {
+        int i=0;
+        while (_globals.ignoredDoses[i] != NULL){
+          free(_globals.ignoredDoses[i]);
+          _globals.ignoredDoses[i++] = NULL;
+        }
+        free(_globals.ignoredDoses);
+        _globals.ignoredDoses=NULL;
+      }
+    }
+    if (_globals.extraDoseTimeIdx != NULL) {
+      int i=0;
+      while (_globals.extraDoseTimeIdx[i] != NULL){
+        free(_globals.extraDoseTimeIdx[i]);
+        _globals.extraDoseTimeIdx[i++] = NULL;
+      }
+      free(_globals.extraDoseTimeIdx);
+      _globals.extraDoseTimeIdx=NULL;
+    }
+
+    if (_globals.extraDoseTime != NULL) {
+      int i=0;
+      while (_globals.extraDoseTime[i] != NULL){
+        free(_globals.extraDoseTime[i]);
+        _globals.extraDoseTime[i++] = NULL;
+      }
+      free(_globals.extraDoseTime);
+      _globals.extraDoseTime=NULL;
+    }
+
+    if (_globals.extraDoseEvid != NULL) {
+      int i=0;
+      while (_globals.extraDoseEvid[i] != NULL){
+        free(_globals.extraDoseEvid[i]);
+        _globals.extraDoseEvid[i++] = NULL;
+      }
+      free(_globals.extraDoseEvid);
+      _globals.extraDoseEvid=NULL;
+    }
+
+    if (_globals.extraDoseDose != NULL) {
+      int i=0;
+      while (_globals.extraDoseDose[i] != NULL){
+        free(_globals.extraDoseDose[i]);
+        _globals.extraDoseDose[i++] = NULL;
+      }
+      free(_globals.extraDoseDose);
+      _globals.extraDoseDose=NULL;
+    }
+    if (_globals.extraDoseN != NULL) free(_globals.extraDoseN);
+    _globals.extraDoseN = NULL;
+    int *tmpI = (int*)malloc((op->cores)* sizeof(int));
+    if (tmpI == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.extraDoseN = tmpI;
+
+    if (_globals.extraDoseAllocN != NULL) free(_globals.extraDoseAllocN);
+    _globals.extraDoseAllocN = NULL;
+    tmpI = (int*)malloc((op->cores)* sizeof(int));
+    if (tmpI == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.extraDoseAllocN = tmpI;
+
+    if (_globals.nPendingDoses != NULL) free(_globals.nPendingDoses);
+    tmpI = (int*)malloc((op->cores)* sizeof(int));
+    if (tmpI == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.nPendingDoses = tmpI;
+
+    if (_globals.nAllocPendingDoses != NULL) free(_globals.nAllocPendingDoses);
+    tmpI = (int*)malloc((op->cores)* sizeof(int));
+    if (tmpI == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.nAllocPendingDoses = tmpI;
+
+    if (_globals.nIgnoredDoses != NULL) free(_globals.nIgnoredDoses);
+    tmpI = (int*)malloc((op->cores)* sizeof(int));
+    if (tmpI == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.nIgnoredDoses = tmpI;
+
+
+    if (_globals.nAllocIgnoredDoses != NULL) free(_globals.nAllocIgnoredDoses);
+    tmpI = (int*)malloc((op->cores)* sizeof(int));
+    if (tmpI == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.nAllocIgnoredDoses = tmpI;
+
+
+    int **tmpII = (int**)malloc((op->cores+1)* sizeof(int*));
+    if (tmpII == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.pendingDoses = tmpII;
+
+    tmpII = (int**)malloc((op->cores+1)* sizeof(int*));
+    if (tmpII == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.ignoredDoses = tmpII;
+
+    tmpII = (int**)malloc((op->cores+1)* sizeof(int*));
+    if (tmpII == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.extraDoseTimeIdx = tmpII;
+
+    tmpII = (int**)malloc((op->cores+1)* sizeof(int*));
+    if (tmpII == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.extraDoseEvid = tmpII;
+
+    double **tmpDD = (double**)malloc((op->cores+1)* sizeof(double*));
+    if (tmpDD == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.extraDoseTime = tmpDD;
+
+    tmpDD = (double**)malloc((op->cores+1)* sizeof(double*));
+    if (tmpDD == NULL) {
+      rxSolveFree();
+      stop(_("ran out of memory"));
+    }
+    _globals.extraDoseDose = tmpDD;
+
+    double *tmpD;
+    for (int i = 0; i < op->cores; i++) {
+      tmpI = (int*)malloc(EVID_EXTRA_SIZE* sizeof(int));
+      if (tmpI == NULL) {
+        rxSolveFree();
+        stop(_("ran out of memory"));
+      }
+      _globals.pendingDoses[i] = tmpI;
+
+      _globals.nPendingDoses[i] = 0;
+      _globals.nAllocPendingDoses[i] = EVID_EXTRA_SIZE;
+
+      tmpI = (int*)malloc(EVID_EXTRA_SIZE* sizeof(int));
+      if (tmpI == NULL) {
+        rxSolveFree();
+        stop(_("ran out of memory"));
+      }
+      _globals.ignoredDoses[i] =  tmpI;
+
+      _globals.nIgnoredDoses[i] = 0;
+      _globals.nAllocIgnoredDoses[i] = EVID_EXTRA_SIZE;
+      tmpI = (int*)malloc(EVID_EXTRA_SIZE* sizeof(int));
+      if (tmpI == NULL) {
+        rxSolveFree();
+        stop(_("ran out of memory"));
+      }
+      _globals.extraDoseTimeIdx[i] = tmpI;
+      tmpI = (int*)malloc(EVID_EXTRA_SIZE* sizeof(int));
+      if (tmpI == NULL) {
+        rxSolveFree();
+        stop(_("ran out of memory"));
+      }
+      _globals.extraDoseEvid[i] = tmpI;
+
+      tmpD = (double*)malloc(EVID_EXTRA_SIZE* sizeof(double));
+      if (tmpD == NULL) {
+        rxSolveFree();
+        stop(_("ran out of memory"));
+      }
+      _globals.extraDoseTime[i] = tmpD;
+
+      tmpD = (double*)malloc(EVID_EXTRA_SIZE* sizeof(double));
+      if (tmpD == NULL) {
+        rxSolveFree();
+        stop(_("ran out of memory"));
+      }
+      _globals.extraDoseDose[i] = tmpD;
+      _globals.extraDoseAllocN[i] = EVID_EXTRA_SIZE;
+      _globals.extraDoseN[i] = 0;
+    }
+    _globals.pendingDoses[op->cores]     = NULL;
+    _globals.ignoredDoses[op->cores]     = NULL;
+    _globals.extraDoseTimeIdx[op->cores] = NULL;
+    _globals.extraDoseEvid[op->cores]    = NULL;
+    _globals.extraDoseTime[op->cores]    = NULL;
+    _globals.extraDoseDose[op->cores]    = NULL;
+
+
     // Now set up events and parameters
     RObject par0 = params;
     RObject ev0  = events;
@@ -4933,6 +5242,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       List evT = cls.attr(".rxode2.lst");
       evT.attr("class") = R_NilValue;
       rxSolveDat->covUnits = evT[RxTrans_covUnits];
+      rxSolveDat->maxItemsPerId = evT[RxTrans_maxItemsPerId];
     }
     rxSolveDat->par1ini = rxSolveDat->par1;
     // This will update par1 with simulated values
@@ -5128,8 +5438,9 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     int n6 = scaleC.size();
     int nIndSim = rx->nIndSim;
     int n7 =  nIndSim * rx->nsub * rx->nsim;
+    int n8 = rx->maxAllTimes*op->cores;
     if (_globals.gsolve != NULL) free(_globals.gsolve);
-    _globals.gsolve = (double*)calloc(n0+nLin+3*nsave+n2+ n4+n5_c+n6+ n7 +
+    _globals.gsolve = (double*)calloc(n0+nLin+3*nsave+n2+ n4+n5_c+n6+ n7 + n8 +
                                       5*op->neq + 8*n3a_c + nllik_c,
                                       sizeof(double));// [n0]
 #ifdef rxSolveT
@@ -5169,6 +5480,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     _globals.gTfirstS  = _globals.gTlastS + n3a_c; // [n3a]
     _globals.gCurDoseS = _globals.gTfirstS + n3a_c; // [n3a]
     _globals.gIndSim   = _globals.gCurDoseS + n3a_c;// [n7]
+    _globals.timeThread = _globals.gIndSim + n7;
     std::fill_n(rx->ypNA, op->neq, NA_REAL);
 
     std::fill_n(&_globals.gatol2[0],op->neq, atolNV[0]);
@@ -5191,7 +5503,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     _lastT0 = clock();
 #endif // rxSolveT
     if (_globals.gon != NULL) free(_globals.gon);
-    _globals.gon = (int*)calloc(n3a_c +n3 + 4*rxSolveDat->nSize + 2*rx->nall*rx->nsim, sizeof(int)); // [n3a_c]
+    _globals.gon = (int*)calloc(n3a_c +n3 + 4*rxSolveDat->nSize + 1*rx->nall*rx->nsim, sizeof(int)); // [n3a_c]
 #ifdef rxSolveT
     RSprintf("Time12e (int alloc %d):  %f\n", n1+n3 + 4*rxSolveDat->nSize, ((double)(clock() - _lastT0))/CLOCKS_PER_SEC);
     _lastT0 = clock();
@@ -5202,7 +5514,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     _globals.slvr_counter = _globals.grc + rxSolveDat->nSize; //[nSize]
     _globals.dadt_counter = _globals.slvr_counter + rxSolveDat->nSize; // [nSize]
     _globals.jac_counter = _globals.dadt_counter + rxSolveDat->nSize; // [nSize]
-    _globals.gix=_globals.jac_counter+rxSolveDat->nSize; // rx->nall*rx->nsim
+    _globals.gix = _globals.jac_counter+rxSolveDat->nSize; // rx->nall*rx->nsim
 
 #ifdef rxSolveT
     RSprintf("Time13: %f\n", ((double)(clock() - _lastT0))/CLOCKS_PER_SEC);
@@ -5852,6 +6164,15 @@ void rxAssignPtr(SEXP object = R_NilValue){
   }
 }
 
+extern "C" void updateExtraDoseGlobals(rx_solving_options_ind* ind) {
+  _globals.ignoredDoses[omp_get_thread_num()] = ind->ignoredDoses;
+  _globals.pendingDoses[omp_get_thread_num()] = ind->pendingDoses;
+  _globals.extraDoseTimeIdx[omp_get_thread_num()] = ind->extraDoseTimeIdx;
+  _globals.extraDoseTime[omp_get_thread_num()] = ind->extraDoseTime;
+  _globals.extraDoseEvid[omp_get_thread_num()] = ind->extraDoseEvid;
+  _globals.extraDoseDose[omp_get_thread_num()] = ind->extraDoseDose;
+}
+
 extern "C" void rxAssignPtrC(SEXP obj){
   rxAssignPtr(obj);
 }
@@ -5929,7 +6250,11 @@ CharacterVector rxC(RObject obj){
     rets = as<std::string>(e["c"]);
   } else if (rxIs(obj, "rxDll")){
     rets = as<std::string>(as<List>(obj)["c"]);
-  } else if (rxIs(obj, "character")){
+  } else if (rxIs(obj, "character")) {
+    Nullable<CharacterVector> rxCp = _rxode2parse_rxC(obj);
+    if (!rxCp.isNull()) {
+      return as<CharacterVector>(rxCp);
+    }
     Function f = getRxFn("rxCompile.character");
     RObject newO = f(as<std::string>(obj));
     rets = rxDll(newO);

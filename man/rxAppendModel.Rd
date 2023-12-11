@@ -4,12 +4,12 @@
 \alias{rxAppendModel}
 \title{Append two rxui models together}
 \usage{
-rxAppendModel(model1, model2)
+rxAppendModel(..., common = TRUE)
 }
 \arguments{
-\item{model1}{rxUi model 1}
+\item{...}{models to append together}
 
-\item{model2}{rxUi model 2}
+\item{common}{boolean that determines if you need a common value to bind}
 }
 \value{
 New model with both models appended together
@@ -22,42 +22,43 @@ Append two rxui models together
 \donttest{
 
 ocmt <- function() {
-   ini({
-     tka <- exp(0.45) # Ka
-     tcl <- exp(1) # Cl
-     tv <- exp(3.45); # log V
-     ## the label("Label name") works with all models
-     add.sd <- 0.7
-   })
-   model({
-     ka <- tka
-     cl <- tcl
-     v <- tv
-     d/dt(depot) = -ka * depot
-     d/dt(center) = ka * depot - cl / v * center
-     cp = center / v
-     cp ~ add(add.sd)
-   })
- }
+  ini({
+    tka <- exp(0.45) # Ka
+    tcl <- exp(1) # Cl
+    tv <- exp(3.45); # log V
+    ## the label("Label name") works with all models
+    add.sd <- 0.7
+  })
+  model({
+    ka <- tka
+    cl <- tcl
+    v <- tv
+    d/dt(depot) <- -ka * depot
+    d/dt(center) <- ka * depot - cl / v * center
+    cp <- center / v
+    cp ~ add(add.sd)
+  })
+}
 
 idr <- function() {
   ini({
-     tkin <- log(1)
-     tkout <- log(1)
-     tic50 <- log(10)
-     gamma <- fix(1)
-     idr.sd <- 1
-   })
+    tkin <- log(1)
+    tkout <- log(1)
+    tic50 <- log(10)
+    gamma <- fix(1)
+    idr.sd <- 1
+  })
   model({
-     kin <- exp(tkin)
-     kout <- exp(tkout)
-     ic50 <- exp(tic50)
-     d/dt(eff) <- kin - kout*(1-ceff^gamma/(ic50^gamma+ceff^gamma))
-     eff ~ add(idr.sd)
+    kin <- exp(tkin)
+    kout <- exp(tkout)
+    ic50 <- exp(tic50)
+    d/dt(eff) <- kin - kout*(1-ceff^gamma/(ic50^gamma+ceff^gamma))
+    eff ~ add(idr.sd)
   })
 }
 
 rxAppendModel(ocmt \%>\% model(ceff=cp,append=TRUE), idr)
+
 }
 
 }

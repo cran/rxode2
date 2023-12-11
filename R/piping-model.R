@@ -1,20 +1,23 @@
-
 #' @export
 #' @rdname model
-model.function <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
+model.function <- function(x, ..., append=NULL, auto=getOption("rxode2.autoVarPiping", TRUE),
+                           cov=NULL, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   .ret <- rxUiDecompress(rxode2(x))
   if (length(.modelLines) == 0) return(.ret$modelFun)
-  .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
+  .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto,
+                         cov=cov, envir=envir)
 }
 
 #' @export
 #' @rdname model
-model.rxUi <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
+model.rxUi <- function(x, ..., append=NULL, auto=getOption("rxode2.autoVarPiping", TRUE),
+                       cov=NULL, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   .ret <- rxUiDecompress(.copyUi(x)) # copy so (as expected) old UI isn't affected by the call
   if (length(.modelLines) == 0) return(.ret$modelFun)
-  .ret <- .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
+  .ret <- .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto,
+                                 cov=cov, envir=envir)
   # need to adjust since the model function was from a rxui object
   .x <- rxUiDecompress(x)
   .ret <- rxUiDecompress(.ret)
@@ -29,12 +32,14 @@ model.rxUi <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
 
 #' @export
 #' @rdname model
-model.rxode2 <- function(x, ..., append=FALSE, auto=TRUE, envir=parent.frame()) {
+model.rxode2 <- function(x, ..., append=NULL, auto=getOption("rxode2.autoVarPiping", TRUE),
+                         cov=NULL, envir=parent.frame()) {
   .modelLines <- .quoteCallInfoLines(match.call(expand.dots = TRUE)[-(1:2)], envir=envir)
   x <- as.function(x)
-  .ret <- rxUiDecompress(rxode2(x))
+  .ret <- suppressMessages(rxUiDecompress(rxode2(x)))
   if (length(.modelLines) == 0) return(.ret$modelFun)
-  .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto, envir=envir)
+  .modelHandleModelLines(.modelLines, .ret, modifyIni=FALSE, append=append, auto=auto,
+                         cov=cov, envir=envir)
 }
 
 #' @export
@@ -51,22 +56,80 @@ model.rxModelVars <- model.rxode2
 #' @return New UI
 #' @author Matthew L. Fidler
 #' @export
-.modelHandleModelLines <- function(modelLines, rxui, modifyIni=FALSE, append=FALSE, auto=TRUE, envir) {
+.modelHandleModelLines <- function(modelLines, rxui, modifyIni=FALSE, append=NULL,
+                                   auto=getOption("rxode2.autoVarPiping", TRUE),
+                                   cov=NULL, envir) {
   checkmate::assertLogical(modifyIni, any.missing=FALSE, len=1)
   ## checkmate::assertLogical(append, any.missing=TRUE, len=1)
   checkmate::assertLogical(auto, any.missing=TRUE, len=1)
+  checkmate::assertCharacter(cov, pattern="^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$", null.ok=TRUE)
+  .varSelect$cov <- cov
   .doAppend <- FALSE
   rxui <- rxUiDecompress(rxui)
+  .ll <- length(rxui$lstExpr)
   if (!is.null(.nsEnv$.quoteCallInfoLinesAppend)) {
-    .ll <- length(rxui$lstExpr)
+    if (identical(.nsEnv$.quoteCallInfoLinesAppend, quote(Inf))) {
+      .nsEnv$.quoteCallInfoLinesAppend <- NULL
+      append <- TRUE
+    } else if (identical(.nsEnv$.quoteCallInfoLinesAppend, quote(-Inf))) {
+      .nsEnv$.quoteCallInfoLinesAppend <- NULL
+      append <- NA
+    } else if (identical(.nsEnv$.quoteCallInfoLinesAppend, quote(0))) {
+      .nsEnv$.quoteCallInfoLinesAppend <- NULL
+      append <- NA
+    } else if (checkmate::testIntegerish(.nsEnv$.quoteCallInfoLinesAppend, lower=.ll)) {
+      .nsEnv$.quoteCallInfoLinesAppend <- NULL
+      append <- TRUE
+    }
+  }
+  if (!is.null(.nsEnv$.quoteCallInfoLinesAppend)) {
+    if (checkmate::testIntegerish(.nsEnv$.quoteCallInfoLinesAppend, lower=0, upper=.ll)) {
+      .nsEnv$.quoteCallInfoLinesAppend <- .getLhs(rxui$lstExpr[[.nsEnv$.quoteCallInfoLinesAppend]])
+    } else if (checkmate::testCharacter(.nsEnv$.quoteCallInfoLinesAppend, len=1, any.missing=FALSE,
+                                        min.chars = 1)) {
+      .tmp <- try(str2lang(.nsEnv$.quoteCallInfoLinesAppend), silent=TRUE)
+      if (inherits(.tmp, "try-error")) {
+        stop("'append' must refer to a LHS model line when a character",
+             call. = FALSE)
+      }
+      .nsEnv$.quoteCallInfoLinesAppend <- .tmp
+    }
     .w <- which(vapply(seq_len(.ll),
                        function(i) {
                          .lhs <- .getLhs(rxui$lstExpr[[i]])
                          identical(.lhs, .nsEnv$.quoteCallInfoLinesAppend)
                        }, logical(1), USE.NAMES=FALSE))
-    if (length(.w) == 0) stop("cannot find '",
-                              deparse1(.nsEnv$.quoteCallInfoLinesAppend),
-                              "' in lhs model, cannot append")
+    if (length(.w) == 0) {
+      .var <- deparse1(.nsEnv$.quoteCallInfoLinesAppend)
+      .stop <- TRUE
+      if (!is.null(.asFunctionEnv$rx)) {
+        if (any(.asFunctionEnv$rx$lhs == .var)) {
+          .iniDf <- rxui$iniDf
+          .tmp <- .asFunctionEnv$rx
+          .cls <- class(.asFunctionEnv$rx)
+          class(.asFunctionEnv$rx) <- "rxode2"
+          .fun <- suppressMessages(as.function(.asFunctionEnv$rx))
+          class(.asFunctionEnv$rx) <- .cls
+          rxui <- suppressMessages(as.rxUi(.fun))
+          ini(rxui) <- .iniDf
+          rxui <- rxUiDecompress(rxui)
+          .ll <- length(rxui$lstExpr)
+          .w <- which(vapply(seq_len(.ll),
+                             function(i) {
+                               .lhs <- .getLhs(rxui$lstExpr[[i]])
+                               identical(.lhs, .nsEnv$.quoteCallInfoLinesAppend)
+                             }, logical(1), USE.NAMES=FALSE))
+          if (length(.w) == 0) {
+            .stop <- TRUE
+          } else {
+            .stop <- FALSE
+          }
+        }
+      }
+      if (.stop) {
+        stop("cannot find '", .var, "' in lhs model, cannot append", call.=FALSE)
+      }
+    }
     .w <- max(.w)
     if (.w == .ll) {
       assign("lstExpr", c(rxui$lstExpr, modelLines), envir=rxui)
@@ -75,7 +138,7 @@ model.rxModelVars <- model.rxode2
              envir=rxui)
     }
     .doAppend <- TRUE
-  } else if (is.logical(append) && length(append) == 1L && is.na(append)) {
+  } else if (is.logical(append) && length(append) == 1L && (is.na(append) || !append)) {
     assign("lstExpr", c(modelLines, rxui$lstExpr), envir=rxui)
     .doAppend <- TRUE
   } else if (isTRUE(append)) {
@@ -84,18 +147,27 @@ model.rxModelVars <- model.rxode2
   }
   if (.doAppend) {
     # in pre-pending or appending, lines are only added
-    .lhs <- character()
-    .rhs <- character()
+    .lhs <- character(0)
+    .rhs <- character(0)
+    .lhs0 <- c(rxui$mv0$lhs, rxui$mv0$state, rxui$allCovs, rxui$iniDf$name)
     for (x in modelLines) {
       .isTilde <- .isEndpoint(x)
       if (.isTilde || .isAssignment(x)) {
         .rhs <- unique(c(.getVariablesFromExpression(.getRhs(x), ignorePipe=.isTilde), .rhs))
         .lhs <- unique(c(.getVariablesFromExpression(.getLhs(x)), .lhs))
       }
-      .rhs <- setdiff(.rhs, c(.lhs, rxui$mv0$lhs, rxui$mv0$state, rxui$allCovs, rxui$iniDf$name))
+      .rhs <- setdiff(.rhs, c(.lhs, .lhs0))
       if (isTRUE(auto)) {
         for (v in .rhs) {
-          .addVariableToIniDf(v, rxui, promote=ifelse(.isTilde,NA, TRUE))
+          .isCov <- grepl(.varSelect$covariateExceptions, tolower(v))
+          .isTheta <- !.isCov && grepl(.varSelect$thetaModelReg, v)
+          .isEta <- !.isCov && grepl(.varSelect$etaModelReg, v)
+          if (.isTilde || .isTheta || .isEta) {
+            .addVariableToIniDf(v, rxui,
+                                promote=ifelse(.isTilde,NA,
+                                               TRUE))
+            .lhs <- c(.lhs, v)
+          }
         }
       }
     }
@@ -134,6 +206,14 @@ model.rxModelVars <- model.rxode2
     .matchesLangTemplate(expr, str2lang(". = ."))
 }
 
+.isTildeExpr <- function(expr) {
+  .matchesLangTemplate(expr, str2lang("~ ."))
+}
+
+.isIniDropExpression <- function(expr) {
+  .matchesLangTemplate(expr, str2lang("- ."))
+}
+
 # get the left hand side of an assignment or endpoint; returns NULL if the input
 # is not an assignment or endpoint
 .getLhs <- function(expr) {
@@ -156,7 +236,8 @@ model.rxModelVars <- model.rxode2
   ret <- NULL
   if (.isEndpoint(expr)) {
     lhs <- .getLhs(expr)
-    if (.matchesLangTemplate(lhs, str2lang("-."))) {
+    if (.matchesLangTemplate(lhs, str2lang("-.")) ||
+          .matchesLangTemplate(lhs, str2lang(". <- NULL"))) {
       # If it is a drop expression with a minus sign, grab the non-minus part
       ret <- lhs[[2]]
     }
@@ -166,7 +247,8 @@ model.rxModelVars <- model.rxode2
 
 .getModelLineEquivalentLhsExpressionDropDdt <- function(expr) {
   .expr3 <- NULL
-  if (.matchesLangTemplate(x = expr, template = str2lang("-d/dt(.name)"))) {
+  if (.matchesLangTemplate(x = expr, template = str2lang("-d/dt(.name)")) ||
+        .matchesLangTemplate(x = expr, template = str2lang("d/dt(.name) <- NULL"))) {
     .expr3 <- expr
     # remove the minus sign from the numerator
     .expr3[[2]] <- .expr3[[2]][[2]]
@@ -331,7 +413,7 @@ model.rxModelVars <- model.rxode2
 #'
 #' @param rxui rxode2 UI
 #'
-#' @param errorLine When TRUE,Should the error line be considered, or
+#' @param errorLine When TRUE, Should the error line be considered, or
 #'   consider the non-error line
 #'
 #' @param returnAllLines A boolean to determine if all line numbers
@@ -441,6 +523,48 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
   }
   NULL
 }
+#' This checks the different types of drop assignments
+#'
+#'
+#' @param prefix The prefix of the drop assignment
+#' @param line The line expression to check
+#' @return logical to say if this matches the prefix
+#' @author Matthew L. Fidler
+#' @noRd
+.isDropNullType <- function(prefix, line) {
+  .e1 <- str2lang(paste0(prefix, " <- NULL"))
+  .e2 <- str2lang(paste0(prefix, " = NULL"))
+  .e3 <- str2lang(paste0(prefix, " ~ NULL"))
+  if (.matchesLangTemplate(line, .e1)) return(TRUE)
+  if (.matchesLangTemplate(line, .e3)) return(TRUE)
+  if (.matchesLangTemplate(line, .e2)) return(TRUE)
+  FALSE
+}
+#' This changes NULL assignment line to a -drop line
+#'
+#' @param line Line to change if necessary
+#' @return Drop line normalized to be `-line` instead of  `line <- NULL`
+#' @author Matthew L. Fidler
+#' @noRd
+.changeDropNullLine <- function(line) {
+  if (.isDropNullType("d/dt(.name)", line)) {
+    .ret <- line[[2]]
+    .ret[[2]] <- as.call(list(quote(`-`), .ret[[2]]))
+    return(.ret)
+  }
+  if (.isDropNullType(".name", line) ||
+        .isDropNullType("lag(.name)", line) ||
+        .isDropNullType("alag(.name)", line) ||
+        .isDropNullType("f(.name)", line) ||
+        .isDropNullType("F(.name)", line) ||
+        .isDropNullType("rate(.name)", line) ||
+        .isDropNullType("dur(.name)", line) ||
+        .isDropNullType(".name(0)", line)
+        ) {
+    return(as.call(list(quote(`-`), line[[2]])))
+  }
+  line
+}
 
 #'  Modify the error lines/expression
 #'
@@ -455,6 +579,7 @@ attr(rxUiGet.mvFromExpression, "desc") <- "Calculate model variables from stored
   .err <- NULL
   .env <- environment()
   lapply(lines, function(line) {
+    line <- .changeDropNullLine(line)
     if (modifyIni && .isQuotedLineRhsModifiesEstimates(line, rxui)) {
       .iniHandleFixOrUnfix(line, rxui, envir=envir)
     } else {
@@ -640,18 +765,44 @@ attr(rxUiGet.errParams, "desc") <- "Get the error-associated variables"
   invisible()
 }
 
-.thetamodelVars <- rex::rex(or("tv", "t", "pop", "POP", "Pop", "TV", "T", "cov", "err", "eff"))
-.thetaModelReg <- rex::rex(or(
-  group(start, .thetamodelVars),
-  group(.thetamodelVars, end)))
+.varSelect <- new.env(parent=emptyenv())
+#' Set the variables for the model piping automatic covarite selection
+#'
+#' @param thetamodelVars This is the prefixes for the theta model
+#'   variables in a regular expression
+#' @param covariateExceptions This is a regular expression of
+#'   covariates that should always be covariates
+#' @param etaParts This is the list of eta prefixes/post-fixes that
+#'   identify a variable as a between subject variability
+#' @return Nothing, called for side effects
+#' @export
+#' @author Matthew L. Fidler
+#' @details
+#'
+#' This is called once at startup to set the defaults, though you can
+#' change this if you wish so that piping can work differently for
+#' your individual setup
+#'
+rxSetPipingAuto <- function(thetamodelVars=rex::rex(or("tv", "t", "pop", "POP", "Pop",
+                                                     "TV", "T", "cov", "err", "eff")),
+                          covariateExceptions = rex::rex(start, or("wt", "sex", "crcl", "kout"), end),
+                          etaParts=c("eta", "ETA", "Eta", "ppv", "PPV", "Ppv", "iiv", "Iiv",
+                                     "bsv", "Bsv", "BSV","bpv", "Bpv", "BPV", "psv", "PSV",
+                                     "Psv")
+                          ) {
+  .varSelect$thetamodelVars <- thetamodelVars
+  .varSelect$thetaModelReg <- rex::rex(or(
+    group(start, thetamodelVars),
+    group(thetamodelVars, end)))
+  .varSelect$covariateExceptions <- covariateExceptions
+  .varSelect$etaParts <- etaParts
+  .varSelect$etaModelReg <- rex::rex(or(group(start, or(etaParts)),
+                                        group(or(etaParts), end)))
+  .varSelect$covariateNames <- NULL
+  .varSelect$cov <- NULL
+}
 
-.covariateExceptions <- rex::rex(start, or("wt", "sex", "crcl"), end)
-
-.etaParts <- c(
-  "eta", "ETA", "Eta", "ppv", "PPV", "Ppv", "iiv", "Iiv", "bsv", "Bsv", "BSV",
-  "bpv", "Bpv", "BPV", "psv", "PSV", "Psv")
-
-.etaModelReg <- rex::rex(or(group(start, or(.etaParts)), group(or(.etaParts), end)))
+rxSetPipingAuto()
 
 .rxIniDfTemplate <-
   data.frame(
@@ -669,9 +820,7 @@ attr(rxUiGet.errParams, "desc") <- "Get the error-associated variables"
     err = NA_character_
   )
 
-.covariteNames <- NULL
 #' Assign covariates for piping
-#'
 #'
 #' @param covariates NULL (for no covariates), or the list of
 #'   covariates. nlmixr uses this function to set covariates if you
@@ -732,7 +881,7 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
   if (!is.null(covariates)) {
     checkmate::assertCharacter(covariates, any.missing=FALSE, unique=TRUE)
   }
-  assignInMyNamespace(".covariteNames", covariates)
+  .varSelect$covariateNames <-  covariates
 }
 #' Add a single variable from the initialization data frame
 #'
@@ -753,6 +902,28 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
 #' @author Matthew L. Fidler
 #' @noRd
 .addVariableToIniDf <- function(var, rxui, toEta=NA, value=1, promote=FALSE) {
+  if (var %in% c("pi", "M_E", "M_E", "E", "M_PI", "M_PI_2",
+                 "M_PI_4", "M_1_PI", "M_2_PI", "M_2PI", "M_SQRT_PI",
+                 "M_2_SQRTPI", "M_1_SQRT_2PI", "M_SQRT2", "M_SQRT_3",
+                 "M_SQRT_32", "M_SQRT_2dPI", "M_LN_SQRT_PI",
+                 "M_LN_SQRT_2PI", "M_LN_SQRT_PId2", "M_LOG10_2",
+                 "M_LOG2E", "M_LOG10E", "M_LN2", "M_LN10")) {
+    return(invisible())
+  }
+  if (!is.null(.varSelect$cov)) {
+    if (var %in% .varSelect$cov) {
+      if (rxode2.verbose.pipe) {
+        .minfo(paste0("add covariate {.code ", var, "} (as requested by cov option)"))
+      }
+      return(invisible())
+    }
+  }
+  .mv <- rxModelVars(rxui)
+  .ini <- .mv$ini
+  .ini <- .ini[which(!is.na(.ini))]
+  if (var %in% names(.ini)) {
+    return(invisible())
+  }
   .iniDf <- rxui$iniDf
   .isEta <- TRUE
   checkmate::assertLogical(toEta, len=1)
@@ -771,7 +942,7 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
   }
   checkmate::assertLogical(promote, len=1)
   if (is.na(toEta)) {
-    .isEta <- (regexpr(.etaModelReg, var)  != -1)
+    .isEta <- (regexpr(.varSelect$etaModelReg, var)  != -1)
   } else  {
     .isEta <- toEta
   }
@@ -807,13 +978,15 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
   } else {
     if (is.na(promote)) {
     } else if (!promote) {
-      if (regexpr(.covariateExceptions, tolower(var)) != -1 || regexpr(.thetaModelReg, var, perl=TRUE) == -1) {
+      if (regexpr(.varSelect$covariateExceptions, tolower(var)) != -1 ||
+            regexpr(.varSelect$thetaModelReg, var, perl=TRUE) == -1) {
         if (rxode2.verbose.pipe) {
           .minfo(paste0("add covariate {.code ", var, "}"))
         }
         return(invisible())
-      } else if (!is.null(.covariteNames)) {
-        if (var %in% .covariteNames) {
+      }
+      if (!is.null(.varSelect$covariateNames)) {
+        if (var %in% .varSelect$covariateNames) {
           if (rxode2.verbose.pipe) {
             .minfo(paste0("add covariate {.code ", var, "} (known covariate)"))
           }
@@ -821,7 +994,6 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
         }
       }
     }
-
     if (all(is.na(.iniDf$ntheta))) {
       .theta <- 1
     } else {
@@ -836,9 +1008,15 @@ rxSetCovariateNamesForPiping <- function(covariates=NULL) {
         .minfo(paste0("add residual parameter {.code ", var, "} and set estimate to {.number ", value, "}"))
       } else if (promote) {
         .minfo(paste0("promote {.code ", var, "} to population parameter with initial estimate {.number ", value, "}"))
-        .cov <- get("covariates", envir=rxui)
-        .cov <- .cov[.cov != var]
-        assign("covariates", .cov, envir=rxui)
+        # need to reassess model for mu2 enhancement
+        assign("iniDf", rbind(.iniDf, .extra), envir=rxui)
+        rxui2 <- rxui
+        model(rxui2) <- rxui$lstExpr
+        rxui2 <- rxUiDecompress(rxui2)
+        for (i in ls(envir=rxui2, all.names=TRUE)) {
+          assign(i, get(i, envir=rxui2), envir=rxui)
+        }
+        return(invisible())
       } else {
         .minfo(paste0("add population parameter {.code ", var, "} and set estimate to {.number ", value, "}"))
       }

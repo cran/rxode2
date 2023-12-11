@@ -1,49 +1,4 @@
-#' This updates the tolerances based on the sensitivity equations
-#'
-#' This assumes the normal ODE equations are the first equations and
-#' the ODE is expanded by the forward sensitivities or other type of
-#' sensitivity (like adjoint)
-#'
-#' @param rxControl Input list or rxControl type of list
-#' @param sensCmt Number of sensitivity compartments
-#' @param ncmt Number of compartments
-#' @return Updated rxControl where `$atol`, `$rtol`, `$ssAtol`
-#'   `$ssRtol` are updated with different sensitivities for the normal
-#'   ODEs (first) and a different sensitivity for the larger
-#'   compartments (sensitivities).
-#' @author Matthew L. Fidler
-#' @export
-#' @examples
-#'
-#' tmp <- rxControl()
-#'
-#' tmp2 <- rxControlUpdateSens(tmp, 3, 6)
-#'
-#' tmp2$atol
-#' tmp2$rtol
-#' tmp2$ssAtol
-#' tmp2$ssRtol
-rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
-  checkmate::assertIntegerish(sensCmt, lower=1, len=1)
-  checkmate::assertIntegerish(ncmt, lower=2, len=1)
-  if (sensCmt >= ncmt) {
-    stop("'sensCmt' must be lower than the number of compartments 'ncmt'",
-         call.=FALSE)
-  }
-  if (is.list(rxControl) && !inherits(rxControl, "rxControl")) {
-    rxControl <- do.call(rxode2::rxControl, rxControl)
-  }
-  if (!inherits(rxControl, "rxControl")) {
-    stop("'rxControl' must be a rxode2 control options list",
-         call.=FALSE)
-  }
-  rxControl$atol <- c(rep(rxControl$atol[1], ncmt - sensCmt), rep(rxControl$atolSens, sensCmt))
-  rxControl$rtol <- c(rep(rxControl$rtol[1], ncmt - sensCmt), rep(rxControl$rtolSens, sensCmt))
-  rxControl$ssAtol <- c(rep(rxControl$ssAtol[1], ncmt - sensCmt), rep(rxControl$ssAtolSens, sensCmt))
-  rxControl$ssRtol <- c(rep(rxControl$ssRtol[1], ncmt - sensCmt), rep(rxControl$ssRtolSens, sensCmt))
-  rxControl
-}
-#' Solving & Simulation of a ODE/solved system (a options) equation
+#' Options, Solving & Simulation of an ODE/solved system
 #'
 #' This uses rxode2 family of objects, file, or model specification to
 #' solve a ODE system.  There are many options for a solved rxode2
@@ -73,17 +28,15 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'     vector must be the same as the state variables (e.g., PK/PD
 #'     compartments);
 #'
-#' @inheritParams odeMethodToInt
-#'
 #' @param sigdig Specifies the "significant digits" that the ode
 #'   solving requests.  When specified this controls the relative and
 #'   absolute tolerances of the ODE solvers.  By default the tolerance
-#'   is \code{0.5*10^(-sigdig-2)} for regular ODEs. For the
-#'   sensitivity equations the default is \code{0.5*10^(-sigdig-1.5)}
+#'   is `0.5*10^(-sigdig-2)` for regular ODEs. For the
+#'   sensitivity equations the default is `0.5*10\^(-sigdig-1.5)`
 #'   (sensitivity changes only applicable for liblsoda).  This also
 #'   controls the `atol`/`rtol` of the steady state solutions. The
-#'   `ssAtol`/`ssRtol` is `0.5*10^(-sigdig)` and for the sensitivities
-#'   `0.5*10^(-sigdig+0.625)`.  By default
+#'   `ssAtol`/`ssRtol` is `0.5*10\^(-sigdig)` and for the sensitivities
+#'   `0.5*10\^(-sigdig+0.625)`.  By default
 #'   this is unspecified (`NULL`) and uses the standard `atol`/`rtol`.
 #'
 #' @param atol a numeric absolute tolerance (1e-8 by default) used
@@ -362,12 +315,12 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'
 #'   - `nlmixrSqrt` This is when the `params` and
 #'     `thetaMat` simulates the inverse cholesky decomposed matrix
-#'     with the `x^2` modeled along the diagonal.  This only works
+#'     with the `x\^2` modeled along the diagonal.  This only works
 #'      with a diagonal matrix.
 #'
 #'   - `nlmixrLog` This is when the `params` and
 #'     `thetaMat` simulates the inverse cholesky decomposed matrix
-#'      with the `exp(x^2)` along the diagonal.  This only works
+#'      with the `exp(x\^2)` along the diagonal.  This only works
 #'      with a diagonal matrix.
 #'
 #'   - `nlmixrIdentity` This is when the `params` and
@@ -417,12 +370,12 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'
 #'   - `nlmixrSqrt` This is when the `params` and
 #'     `thetaMat` simulates the inverse cholesky decomposed matrix
-#'     with the `x^2` modeled along the diagonal.  This only works
+#'     with the `x\^2` modeled along the diagonal.  This only works
 #'      with a diagonal matrix.
 #'
 #'   - `nlmixrLog` This is when the `params` and
 #'     `thetaMat` simulates the inverse cholesky decomposed matrix
-#'      with the `exp(x^2)` along the diagonal.  This only works
+#'      with the `exp(x\^2)` along the diagonal.  This only works
 #'      with a diagonal matrix.
 #'
 #'   - `nlmixrIdentity` This is when the `params` and
@@ -620,8 +573,40 @@ rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
 #'   though it won't hurt anything if you do (just may take up more
 #'   memory for larger allocations).
 #'
+#' @inheritParams odeMethodToInt
+#'
+#' @inheritParams rxode2parse::rxode2parse
+#'
 #' @param useStdPow This uses C's `pow` for exponentiation instead of
 #'   R's `R_pow` or `R_pow_di`.  By default this is `FALSE`
+#'
+#' @param ss2cancelAllPending When `TRUE` the `SS=2` event type
+#'   cancels all pending doses like `SS=1`.  When `FALSE` the pending
+#'   doses not canceled with `SS=2` (the infusions started before
+#'   `SS=2` occurred are canceled, though).
+#'
+#' @param addlKeepsCov This determines if the additional dosing items
+#'   repeats the dose only (`FALSE`) or keeps the covariates at the
+#'   record of the dose (`TRUE`)
+#'
+#' @param addlDropSs When there are steady state doses with an `addl`
+#'   specification the steady state flag is dropped with repeated
+#'   doses (when `TRUE`) or retained (when `FALSE`)
+#'
+#' @param ssAtDoseTime Boolean that when `TRUE` back calculates the
+#'   steady concentration at the actual time of dose, otherwise when
+#'   `FALSE` the doses are shifted
+#'
+#' @param naTimeHandle Determines what time of handling happens when
+#'   the time becomes `NA`: current options are:
+#'
+#'  - `ignore` this ignores the `NA` time input and passes it through.
+#'
+#'  - `warn` (default) this will produce a warning at the end of the
+#'     solve, but continues solving passing through the `NA` time
+#'
+#'  - `error` this will stop this solve if this is not a parallel
+#'     solved ODE (otherwise stopping can crash R)
 #'
 #' @return An \dQuote{rxSolve} solve object that stores the solved
 #'   value in a special data.frame or other type as determined by
@@ -732,7 +717,14 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
                     ssRtolSens=1.0e-6,
                     simVariability=NA,
                     nLlikAlloc=NULL,
-                    useStdPow=FALSE) {
+                    useStdPow=FALSE,
+                    naTimeHandle=c("ignore", "warn", "error"),
+                    addlKeepsCov=FALSE,
+                    addlDropSs=TRUE,
+                    ssAtDoseTime=TRUE,
+                    ss2cancelAllPending=FALSE,
+                    envir=parent.frame()) {
+  rxode2parse::.udfEnvSet(list(envir, parent.frame(1)))
   if (is.null(object)) {
     .xtra <- list(...)
     .nxtra <- names(.xtra)
@@ -800,6 +792,14 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
       covsInterpolation <- as.integer(covsInterpolation)
     } else {
       covsInterpolation <- c("linear"=0L, "locf"=1L, "nocb"=2L, "midpoint"=3L)[match.arg(covsInterpolation)]
+    }
+    if (missing(naTimeHandle) && !is.null(getOption("rxode2.naTimeHandle", NULL))) {
+      naTimeHandle <- getOption("rxode2.naTimeHandle")
+    }
+    if (checkmate::testIntegerish(naTimeHandle, len=1, lower=1, upper=3, any.missing=FALSE)) {
+      naTimeHandle <- as.integer(naTimeHandle)
+    } else {
+      naTimeHandle <- c("ignore"=1L, "warn"=2L, "error"=3L)[match.arg(naTimeHandle)]
     }
     if (any(names(.xtra) == "covs")) {
       stop("covariates can no longer be specified by 'covs' include them in the event dataset",
@@ -987,6 +987,10 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
     } else {
       checkmate::assertIntegerish(useStdPow, lower=0, upper=1, len=1, any.missing=FALSE)
     }
+    checkmate::assertLogical(addlKeepsCov, any.missing=FALSE, null.ok=FALSE, len=1)
+    checkmate::assertLogical(addlDropSs, any.missing=FALSE, null.ok=FALSE, len=1)
+    checkmate::assertLogical(ssAtDoseTime, any.missing=FALSE, null.ok=FALSE, len=1)
+    checkmate::assertLogical(ss2cancelAllPending, any.missing=FALSE, null.ok=FALSE, len=1)
     useStdPow <- as.integer(useStdPow)
     maxwhile <- as.integer(maxwhile)
     .zeros <- .xtra$.zeros
@@ -1117,7 +1121,13 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
       simVariability=simVariability,
       nLlikAlloc=nLlikAlloc,
       useStdPow=useStdPow,
+      naTimeHandle=naTimeHandle,
+      addlKeepsCov=addlKeepsCov,
+      addlDropSs=addlDropSs,
+      ssAtDoseTime=ssAtDoseTime,
+      ss2cancelAllPending=ss2cancelAllPending,
       .zeros=unique(.zeros)
+
     )
     class(.ret) <- "rxControl"
     return(.ret)
@@ -1128,17 +1138,46 @@ rxSolve <- function(object, params = NULL, events = NULL, inits = NULL,
 #' @rdname rxSolve
 #' @export
 rxSolve.function <- function(object, params = NULL, events = NULL, inits = NULL, ...,
-                             theta = NULL, eta = NULL) {
+                             theta = NULL, eta = NULL, envir=parent.frame()) {
+  rxode2parse::.udfEnvSet(list(envir, parent.frame(1)))
   .object <- rxode2(object)
   do.call("rxSolve", c(list(object=.object, params = params, events = events, inits = inits),
                        list(...),
-                       list(theta = theta, eta = eta)))
+                       list(theta = theta, eta = eta, envir=envir)))
+}
+
+.uiRxControl <- function(ui, params = NULL, events = NULL, inits = NULL, ...,
+                         theta = NULL, eta = NULL) {
+  .ctl <- rxControl()
+  if (exists("meta", envir=ui)) {
+    .meta <- get("meta", ui)
+  } else {
+    .meta <- new.env(parent=emptyenv())
+  }
+  .lst <- list(...)
+  .nlst <- names(.lst)
+  .w <- which(vapply(names(.ctl), function(x) {
+    !(x %in% .nlst) && exists(x, envir=.meta)
+  }, logical(1), USE.NAMES=FALSE))
+  .extra <- NULL
+  if (length(.w) > 0) {
+    .v <- names(.ctl)[.w]
+    .minfo(paste0("rxControl items read from fun: '",
+                  paste(.v, collapse="', '"), "'"))
+    .extra <- setNames(lapply(.v, function(x) {
+      get(x, envir=.meta)
+    }), .v)
+
+  }
+  do.call(rxSolve, c(list(NULL, params = NULL, events = NULL, inits = NULL),
+                     .lst, .extra,
+                     list(theta=theta, eta=eta)))
 }
 
 .rxSolveFromUi <- function(object, params = NULL, events = NULL, inits = NULL, ...,
                            theta = NULL, eta = NULL) {
-  .rxControl <- rxSolve(NULL, params = params, events = events, inits = inits, ...,
-                        theta = theta, eta = eta)
+  .rxControl <- .uiRxControl(object, params = params, events = events, inits = inits, ...,
+                             theta = theta, eta=eta)
   if (rxIs(params, "rx.event")) {
     if (!is.null(events)) {
       .tmp <- events
@@ -1151,6 +1190,19 @@ rxSolve.function <- function(object, params = NULL, events = NULL, inits = NULL,
   }
   if (is.null(params)) {
     params <- object$theta
+  } else if (inherits(params, "data.frame")) {
+    .theta <- object$theta
+    params <- as.data.frame(params)
+    for (.t in names(.theta)) {
+      if (!any(names(params) == .t)) {
+        params[[.t]] <- .theta[.t]
+      }
+    }
+  } else if (inherits(params, "numeric")) {
+    .theta <- object$theta
+    .n <- names(.theta)
+    .theta <- .theta[!(.n %in% names(params))]
+    params <- c(params, .theta)
   }
 
   if (is.null(.rxControl$thetaLower)) {
@@ -1160,13 +1212,36 @@ rxSolve.function <- function(object, params = NULL, events = NULL, inits = NULL,
     .rxControl$thetaUpper <- object$thetaUpper
   }
   if (is.null(.rxControl$omega)) {
-    .rxControl$omega <- object$omega
+    .omega <- object$omega
+    .rxControl$omega <- .omega
   } else if (is.logical(.rxControl$omega)) {
     if (is.na(.rxControl$omega)) {
       .omega <- object$omega
       params <- c(params, setNames(rep(0, dim(.omega)[1]), dimnames(.omega)[[2]]))
       .rxControl$omega <- NULL
     }
+  }
+  if (inherits(.rxControl$omega, "matrix")) {
+    .omega <- .rxControl$omega
+    .v <- vapply(dimnames(.omega)[[1]],
+                 function(v) {
+                   !(v %in% names(params))
+                 }, logical(1), USE.NAMES = FALSE)
+    if (length(.v) == 1L) {
+      if (!.v) .rxControl$omega <- NULL
+    } else {
+      .omega <- .omega[.v, .v]
+      if (all(dim(.omega) == c(0L, 0L))) {
+        .rxControl$omega <- NULL
+      } else {
+        .rxControl$omega <- .omega
+      }
+    }
+
+  }
+  if (inherits(.rxControl$omega, "matrix") &&
+        all(dim(.rxControl$omega) == c(0,0))) {
+    .rxControl$omega <- NULL
   }
   if (is.null(.rxControl$sigma)) {
     .rxControl$sigma <- object$simulationSigma
@@ -1179,7 +1254,33 @@ rxSolve.function <- function(object, params = NULL, events = NULL, inits = NULL,
       .rxControl$sigma <- NULL
     }
   }
-  .rx <- object$simulationModel
+  if (inherits(.rxControl$sigma, "matrix")) {
+    .sigma <- .rxControl$sigma
+    .v <- vapply(dimnames(.sigma)[[1]],
+                 function(v) {
+                   !(v %in% names(params))
+                 }, logical(1), USE.NAMES = FALSE)
+    if (length(.v) == 1L) {
+      if (!.v) .rxControl$sigma <- NULL
+    } else {
+      .sigma <- .sigma[.v, .v, drop = FALSE]
+      if (all(dim(.sigma) == c(0L, 0L))) {
+        .rxControl$sigma <- NULL
+      } else {
+        .rxControl$sigma <- .sigma
+      }
+    }
+
+  }
+  if (inherits(.rxControl$sigma, "matrix") &&
+        all(dim(.rxControl$sigma) == c(0,0))) {
+    .rxControl$sigma <- NULL
+  }
+  if (inherits(object, "rxode2tos")) {
+    .rx <- object
+  } else {
+    .rx <- object$simulationModel
+  }
   list(list(object=.rx, params = params, events = events, inits = inits),
                        .rxControl,
                        list(theta = theta, eta = eta))
@@ -1188,36 +1289,56 @@ rxSolve.function <- function(object, params = NULL, events = NULL, inits = NULL,
 #' @rdname rxSolve
 #' @export
 rxSolve.rxUi <- function(object, params = NULL, events = NULL, inits = NULL, ...,
-                         theta = NULL, eta = NULL) {
-  object <- rxUiDecompress(object)
+                         theta = NULL, eta = NULL, envir=parent.frame()) {
+  rxode2parse::.udfEnvSet(list(object$meta, envir, parent.frame(1)))
+  if (inherits(object, "rxUi")) {
+    object <- rxUiDecompress(object)
+  }
   .lst <- .rxSolveFromUi(object, params = params, events = events, inits = inits, ..., theta = theta, eta = eta)
   .lst <- do.call("c", .lst)
   .pred <- FALSE
+  .mv <- rxModelVars(object)
+  .hasIpred <- FALSE
+  if (any(.mv$lhs == "ipredSim")) {
+    .hasIpred <- TRUE
+  }
+  .hasSim <- FALSE
+  if (any(.mv$lhs == "sim")) {
+    .hasSim <- TRUE
+  }
   if (is.null(.lst$omega) && is.null(.lst$sigma)) {
     .pred <- TRUE
-    .lst$drop <- c(.lst$drop, "ipredSim")
+    if (!.hasIpred && any(rxModelVars(.lst[[1]])$lhs == "ipredSim")) {
+      .lst$drop <- c(.lst$drop, "ipredSim")
+    }
   }
-  .ret <- do.call("rxSolve", .lst)
+  .ret <- do.call("rxSolve.default", .lst)
   if (.pred) {
     .e <- attr(class(.ret), ".rxode2.env")
     .w <- which(names(.ret) == "sim")
-    names(.ret)[.w] <- "pred"
-    # don't break rxSolve, though maybe it should...
-    if (is.environment(.e)) {
-      .n2 <- .e$.check.names
-      .n2[.w] <- "pred"
-      .e$.check.names <- .n2
+    if (!.hasSim && length(.w) == 1L) {
+      names(.ret)[.w] <- "pred"
+      # don't break rxSolve, though maybe it should...
+      if (is.environment(.e)) {
+        .n2 <- .e$.check.names
+        .n2[.w] <- "pred"
+        .e$.check.names <- .n2
+      }
     }
   }
   .ret
 }
+#' @rdname rxSolve
+#' @export
+rxSolve.rxode2tos <- rxSolve.rxUi
 
 
 #nlmixr2.nlmixr2FitData <- nlmixr2.nlmixr2FitCore
 #' @rdname rxSolve
 #' @export
 rxSolve.nlmixr2FitData <- function(object, params = NULL, events = NULL, inits = NULL, ...,
-                                   theta = NULL, eta = NULL) {
+                                   theta = NULL, eta = NULL, envir=parent.frame()) {
+  rxode2parse::.udfEnvSet(list(envir, parent.frame(1)))
   .lst <- .rxSolveFromUi(object, params = params, events = events, inits = inits, ..., theta = theta, eta = eta)
   .rxControl <- .lst[[2]]
   .env <- object$env
@@ -1251,9 +1372,11 @@ rxSolve.nlmixr2FitCore <- rxSolve.nlmixr2FitData
 #' @rdname rxSolve
 #' @export
 rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, ...,
-                            theta = NULL, eta = NULL) {
+                            theta = NULL, eta = NULL, envir=parent.frame()) {
+  rxode2parse::.udfEnvSet(list(envir, parent.frame(1)))
   on.exit({
     .clearPipe()
+    .asFunctionEnv$rx <- NULL
   })
   .applyParams <- FALSE
   .rxParams <- NULL
@@ -1539,6 +1662,13 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
     .rx <- rxNorm(object)
     qs::qsave(list(.rx, .ctl, .nms, .xtra, params, events, inits, .setupOnly), file.path(rxTempDir(), "last-rxode2.qs"))
   }
+  if (inherits(object, "function") ||
+        inherits(object, "rxUi")) {
+    .lst <- c(list(object, params = params, events = events, inits = inits),
+              .ctl)
+
+    return(do.call(rxSolve, .lst))
+  }
   if (!any(class(object) %in% c("rxSolve", "rxode2", "character", "rxModelVars", "rxDll"))) {
     stop("Unsupported type of model trying to be solved")
   }
@@ -1614,6 +1744,7 @@ rxSolve.default <- function(object, params = NULL, events = NULL, inits = NULL, 
     }
     .minfo(sprintf("omega/sigma items treated as zero: '%s'", paste(.ctl$.zeros, collapse="', '")))
   }
+
   if (rxode2.debug) {
     .envReset$ret <- .collectWarnings(rxSolveSEXP(object, .ctl, .nms, .xtra,
                                                   params, events, inits,
@@ -1685,6 +1816,19 @@ update.rxSolve <- function(object, ...) {
 #' @rdname rxSolve
 #' @export
 predict.rxode2 <- function(object, ...) {
+  rxSolve(object, ...)
+}
+
+#' @rdname rxSolve
+#' @export
+predict.function <- function(object, ...) {
+  rxSolve(object, ...)
+}
+
+#' @rdname rxSolve
+#' @export
+predict.rxUi <- function(object, ...) {
+  rxode2parse::.udfEnvSet(list(object$meta, parent.frame(1)))
   rxSolve(object, ...)
 }
 
@@ -1769,6 +1913,7 @@ solve.rxEt <- solve.rxSolve
 
 #' @export
 `$.rxSolve` <- function(obj, arg, exact = FALSE) {
+  if (arg == "rxModelVars") return(rxModelVars(obj))
   return(.Call(`_rxode2_rxSolveGet`, obj, arg, exact))
 }
 
@@ -1934,8 +2079,9 @@ drop_units.rxSolve <- function(x) {
 
 #' @rdname rxSolve
 #' @export
-rxControl <- function(..., params = NULL, events = NULL, inits = NULL) {
-  rxSolve(object = NULL, params = params, events = events, inits = inits, ...)
+rxControl <- function(..., params = NULL, events = NULL, inits = NULL, envir=parent.frame()) {
+  rxSolve(object = NULL, params = params, events = events, inits = inits, ...,
+          envir=envir)
 }
 
 #' @export
@@ -1980,4 +2126,52 @@ odeMethodToInt <- function(method = c("liblsoda", "lsoda", "dop853", "indLin")) 
     method <- .methodIdx[match.arg(method)]
   }
   method
+}
+
+
+
+#' This updates the tolerances based on the sensitivity equations
+#'
+#' This assumes the normal ODE equations are the first equations and
+#' the ODE is expanded by the forward sensitivities or other type of
+#' sensitivity (like adjoint)
+#'
+#' @param rxControl Input list or rxControl type of list
+#' @param sensCmt Number of sensitivity compartments
+#' @param ncmt Number of compartments
+#' @return Updated rxControl where `$atol`, `$rtol`, `$ssAtol`
+#'   `$ssRtol` are updated with different sensitivities for the normal
+#'   ODEs (first) and a different sensitivity for the larger
+#'   compartments (sensitivities).
+#' @author Matthew L. Fidler
+#' @export
+#' @examples
+#'
+#' tmp <- rxControl()
+#'
+#' tmp2 <- rxControlUpdateSens(tmp, 3, 6)
+#'
+#' tmp2$atol
+#' tmp2$rtol
+#' tmp2$ssAtol
+#' tmp2$ssRtol
+rxControlUpdateSens <- function(rxControl, sensCmt=NULL, ncmt=NULL) {
+  checkmate::assertIntegerish(sensCmt, lower=1, len=1)
+  checkmate::assertIntegerish(ncmt, lower=2, len=1)
+  if (sensCmt >= ncmt) {
+    stop("'sensCmt' must be lower than the number of compartments 'ncmt'",
+         call.=FALSE)
+  }
+  if (is.list(rxControl) && !inherits(rxControl, "rxControl")) {
+    rxControl <- do.call(rxode2::rxControl, rxControl)
+  }
+  if (!inherits(rxControl, "rxControl")) {
+    stop("'rxControl' must be a rxode2 control options list",
+         call.=FALSE)
+  }
+  rxControl$atol <- c(rep(rxControl$atol[1], ncmt - sensCmt), rep(rxControl$atolSens, sensCmt))
+  rxControl$rtol <- c(rep(rxControl$rtol[1], ncmt - sensCmt), rep(rxControl$rtolSens, sensCmt))
+  rxControl$ssAtol <- c(rep(rxControl$ssAtol[1], ncmt - sensCmt), rep(rxControl$ssAtolSens, sensCmt))
+  rxControl$ssRtol <- c(rep(rxControl$ssRtol[1], ncmt - sensCmt), rep(rxControl$ssRtolSens, sensCmt))
+  rxControl
 }

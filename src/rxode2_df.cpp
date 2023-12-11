@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <climits>
+#include <cmath>
 #include "checkmate.h"
 #include <stdint.h>    // for uint64_t rather than unsigned long long
 #include "../inst/include/rxode2.h"
@@ -97,7 +98,7 @@ static inline void dfCountRowsForNmOutput(rx_solve *rx, int nsim, int nsub) {
       ntimes = ind->n_all_times;
       di = 0;
       for (int i = 0; i < ntimes; i++){
-        evid = ind->evid[ind->ix[i]];
+        evid = getEvid(ind, ind->ix[i]);
         if (evid == 9) continue; // not output in NONMEM
         if (isDose(evid)) {
           getWh(evid, &wh, &cmt, &wh100, &whI, &wh0);
@@ -122,6 +123,7 @@ static inline void dfCountRowsForNmOutput(rx_solve *rx, int nsim, int nsub) {
 
 extern "C" void _rxode2random_assignSolveOnly2(rx_solve rx, rx_solving_options op);
 
+extern "C" void printErr(int err, int id);
 extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
   _rxode2random_assignSolveOnly2(rx_global, op_global);
   rx_solve *rx;
@@ -216,6 +218,12 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
       Rf_errorcall(R_NilValue, _("'alag(.)'/'rate(.)'/'dur(.)' cannot depend on the state values"));
     }
     if (nidCols == 0){
+      for (int solveid = 0; solveid < rx->nsub * rx->nsim; solveid++){
+        rx_solving_options_ind *indE = &(rx->subjects[solveid]);
+        if (indE->err != 0) {
+          printErr(indE->err, indE->id);
+        }
+      }
       rxSolveFreeC();
       Rf_errorcall(R_NilValue, _("could not solve the system"));
     } else {
@@ -286,16 +294,18 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
        i++) {
     int curType = get_fkeepType(j);
     if (curType == 4) {
-      df[i] = NumericVector(rx->nr);
+      df[i] = assign_fkeepAttr(j, NumericVector(rx->nr));
     } else if (curType == 1) {
+      df[i] = assign_fkeepAttr(j, StringVector(rx->nr));
       df[i] = StringVector(rx->nr);
+    } else if (curType == 5) {
+      df[i] = assign_fkeepAttr(j, LogicalVector(rx->nr));
     } else {
       IntegerVector cur(rx->nr);
       if (curType == 2) {
         cur.attr("levels") = get_fkeepLevels(j);
-        cur.attr("class") = "factor";
       }
-      df[i] = cur;
+      df[i] = assign_fkeepAttr(j,cur);
     }
     j++;
   }
@@ -324,10 +334,10 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
           resetno++;
         }
         double curT = getTime_(ind->ix[ind->idx], ind);
-        evid = ind->evid[ind->ix[ind->idx]];
+        evid = getEvid(ind, ind->ix[ind->idx]);
         if (evid == 9) continue;
         if (isDose(evid)){
-          getWh(ind->evid[ind->ix[i]], &(ind->wh), &(ind->cmt), &(ind->wh100), &(ind->whI), &(ind->wh0));
+          getWh(getEvid(ind, ind->ix[i]), &(ind->wh), &(ind->cmt), &(ind->wh100), &(ind->whI), &(ind->wh0));
           switch (ind->whI) {
           case EVIDF_INF_RATE:
           case EVIDF_MODEL_DUR_ON:
@@ -589,7 +599,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                   for (int jjj = di; jjj < ind->ndoses; jjj++){
                     if (getDoseNumber(ind, jjj) == -curAmt){
                       int nWh = 0, nCmt = 0, nWh100 = 0, nWhI = 0, nWh0 = 0;
-                      getWh(ind->evid[ind->idose[jjj]], &nWh, &nCmt, &nWh100, &nWhI, &nWh0);
+                      getWh(getEvid(ind, ind->idose[jjj]), &nWh, &nCmt, &nWh100, &nWhI, &nWh0);
                       dullRate=0;
                       if (nWhI == whI && nCmt == cmt){
                         curDur = getTime_(ind->idose[jjj], ind) -
@@ -628,7 +638,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
                   for (int jjj = di; jjj < ind->ndoses; jjj++){
                     if (getDoseNumber(ind, jjj) == -curAmt){
                       int nWh = 0, nCmt = 0, nWh100 = 0, nWhI = 0, nWh0 = 0;
-                      getWh(ind->evid[ind->idose[jjj]], &nWh, &nCmt, &nWh100, &nWhI, &nWh0);
+                      getWh(getEvid(ind, ind->idose[jjj]), &nWh, &nCmt, &nWh100, &nWhI, &nWh0);
                       dullRate=0;
                       if (nWhI == whI && nCmt == cmt){
                         curDur = getTime_(ind->idose[jjj], ind) -
@@ -739,11 +749,25 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
               dfp[ii] = get_fkeep(j, curi + ind->ix[i], ind);
             } else if (TYPEOF(tmp) == STRSXP){
               SET_STRING_ELT(tmp, ii, get_fkeepChar(j, get_fkeep(j, curi + ind->ix[i], ind)));
+            } else if (TYPEOF(tmp) == LGLSXP) {
+              // Everything here is double
+              dfi = LOGICAL(tmp);
+              double curD = get_fkeep(j, curi + ind->ix[i], ind);
+              if (ISNA(curD) || std::isnan(curD)) {
+                dfi[ii] = NA_LOGICAL;
+              } else {
+                dfi[ii] = (int) (curD);
+              }
             } else {
               dfi = INTEGER(tmp);
               /* if (j == 0) RSprintf("j: %d, %d; %f\n", j, i, get_fkeep(j, curi + i)); */
               // is this ntimes = nAllTimes or nObs time for this subject...?
-              dfi[ii] = (int) (get_fkeep(j, curi + ind->ix[i], ind));
+              double curD = get_fkeep(j, curi + ind->ix[i], ind);
+              if (ISNA(curD) || std::isnan(curD)) {
+                dfi[ii] = NA_INTEGER;
+              } else {
+                dfi[ii] = (int) (curD);
+              }
             }
             jj++;
           }
@@ -944,7 +968,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
       jj++;kk++;
     }
     // Put in state names
-    CharacterVector stateNames2 = rxStateNames(op->modNamePtr); 
+    CharacterVector stateNames2 = rxStateNames(op->modNamePtr);
     if (nPrnState){
       for (j = 0; j < neq[0]; j++){
         if (!rmState[j]){

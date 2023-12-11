@@ -24,7 +24,8 @@ extern "C" {
   _rxode2_convertId_type _rxode2parse__convertId_;
 
   typedef SEXP (*_rxode2_etTransParse_type)(SEXP, SEXP, SEXP, SEXP, SEXP,
-                                            SEXP, SEXP, SEXP);
+                                            SEXP, SEXP, SEXP, SEXP, SEXP,
+                                            SEXP);
   _rxode2_etTransParse_type _rxode2_etTransParseP;
 
   typedef SEXP (*_rxode2_chin_type)(SEXP, SEXP);
@@ -72,6 +73,63 @@ extern "C" SEXP _rxode2_codeLoaded(void) {
   assignRxode2ParsePtrs();
   Function fun = as<Function>(rxode2parse[".codeLoaded"]);
   return fun();
+  END_RCPP
+}
+
+extern "C" SEXP _rxode2parse_rxC(SEXP in) {
+BEGIN_RCPP
+  if (TYPEOF(in) != STRSXP) return R_NilValue;
+  assignRxode2ParsePtrs();
+  Function fun = as<Function>(rxode2parse[".rxC"]);
+  return wrap(fun(in));
+END_RCPP
+}
+
+extern "C" SEXP _rxode2parse_assignUdf(SEXP in) {
+BEGIN_RCPP
+ if (Rf_length(in) == 0 || Rf_length(in) == 1) {
+   return wrap(LogicalVector::create(false));
+ }
+ if (TYPEOF(in) != INTSXP) {
+   return wrap(LogicalVector::create(false));
+ }
+ if (Rf_isNull(Rf_getAttrib(in, R_NamesSymbol))) {
+   return wrap(LogicalVector::create(false));
+ }
+ assignRxode2ParsePtrs();
+ Function fun = as<Function>(rxode2parse[".setupUdf"]);
+ LogicalVector needRecompile = fun(in);
+ return wrap(needRecompile);
+END_RCPP
+}
+
+extern "C" SEXP _rxode2parse_udfEnvSet(SEXP udf) {
+BEGIN_RCPP
+  if (Rf_isNull(udf)) {
+    return R_NilValue;
+  }
+  if (Rf_length(udf) == 0 || Rf_length(udf) == 1) {
+    return R_NilValue;
+  }
+ if (TYPEOF(udf) != INTSXP) {
+   return R_NilValue;
+ }
+ if (Rf_isNull(Rf_getAttrib(udf, R_NamesSymbol))) {
+   return R_NilValue;
+ }
+  assignRxode2ParsePtrs();
+  Function fun = as<Function>(rxode2parse[".udfEnvSetUdf"]);
+  fun(udf);
+  return R_NilValue;
+  END_RCPP
+}
+
+extern "C" SEXP _rxode2parse_udfReset() {
+  BEGIN_RCPP
+    assignRxode2ParsePtrs();
+  Function fun2 = as<Function>(rxode2parse[".udfEnvReset"]);
+  fun2();
+  return R_NilValue;
   END_RCPP
 }
 
