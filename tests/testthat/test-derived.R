@@ -1,5 +1,6 @@
-if (!.Call(`_rxode2_isIntel`)) {
+rxTest({
   test_that("v1 rate constants", {
+
     p1 <- rxDerived(v1 = 8, k = 0.5, digits = 3)
     expect_equal(
       p1,
@@ -81,4 +82,4 @@ if (!.Call(`_rxode2_isIntel`)) {
     row.names = c(NA, -1L)
     ))
   })
-}
+})

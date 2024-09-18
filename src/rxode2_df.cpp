@@ -31,9 +31,9 @@
 #include "checkmate.h"
 #include <stdint.h>    // for uint64_t rather than unsigned long long
 #include "../inst/include/rxode2.h"
-#include <rxode2parseVer.h>
-#include <rxode2parseHandleEvid.h>
-#include <rxode2parseGetTime.h>
+#include "../inst/include/rxode2parseVer.h"
+#include "../inst/include/rxode2parseHandleEvid.h"
+#include "../inst/include/rxode2parseGetTime.h"
 #include "par_solve.h"
 #include <Rcpp.h>
 #include "strncmp.h"
@@ -56,7 +56,7 @@ using namespace arma;
 extern t_update_inis update_inis;
 extern t_calc_lhs calc_lhs;
 
-extern "C" SEXP getDfLevels(const char *item, rx_solve *rx){
+extern "C" SEXP getDfLevels(const char *item, rx_solve *rx) {
   int totN = rx->factorNames.n;
   int base = 0, curLen= rx->factorNs[0], curG=0;
   curLen= rx->factorNs[0];
@@ -124,11 +124,8 @@ static inline void dfCountRowsForNmOutput(rx_solve *rx, int nsim, int nsub) {
   di = 0;
 }
 
-extern "C" void _rxode2random_assignSolveOnly2(rx_solve rx, rx_solving_options op);
-
 extern "C" void printErr(int err, int id);
 extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
-  _rxode2random_assignSolveOnly2(rx_global, op_global);
   rx_solve *rx;
   rx = &rx_global;
   rx_solving_options *op = &op_global;
@@ -202,7 +199,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
   // Multiple simulation data?
   int sm = 0;
   if (rx->nsim > 1) sm = 1;
-  int ncols =1+nPrnState+nlhs;
+  int ncols =1+nPrnState + nlhs;
   int ncols2 = add_cov*(ncov+ncov0)+nkeep;
   int doseCols = 0;
   int nevid2col = 0;
@@ -263,7 +260,27 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
   doseCols += nevid2col;
   CharacterVector paramNames = rxParamNames(op->modNamePtr);
   CharacterVector fkeepNames = get_fkeepn();
-  for (i = md + sm + ms + doseCols + 2*nmevid; i < ncols + doseCols + nidCols + 2*nmevid; i++){
+  // time comes in here
+  df[md + sm +ms + doseCols + 2*nmevid] = NumericVector(rx->nr);
+  CharacterVector lhsNames = rxLhsNames(op->modNamePtr);
+  // time
+  int i0 = md + sm + ms + doseCols + 2*nmevid;
+  df[i0] = NumericVector(rx->nr);
+  i0++;
+
+  // nlhs
+  for (i = i0; i < i0+nlhs; i++){
+    if (op->lhs_str[i-i0] == 1) {
+      // factor; from string expression
+      df[i] = getDfLevels(CHAR(STRING_ELT(lhsNames, i-i0)), rx);
+    } else {
+      df[i] = NumericVector(rx->nr);
+    }
+  }
+  i0+=nlhs;
+
+  // Rest is numeric
+  for (i = i0; i < ncols + doseCols + nidCols + 2*nmevid; i++){
     df[i] = NumericVector(rx->nr);
   }
   // These could be factors
@@ -355,7 +372,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
           }
           handleTlastInline(&curT, ind);
         }
-        if (updateErr){
+        if (updateErr) {
           for (j=0; j < errNcol; j++){
             // The error pointer is updated if needed
             par_ptr[svar[j]] = errs[errNrow*j+kk];
@@ -366,7 +383,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
             kk=min2(kk+1, errNrow-1);
           }
         }
-        if (nlhs){
+        if (nlhs) {
           calc_lhs(neq[1], curT, getSolve(i), ind->lhs);
         }
         if (subsetEvid == 1){
@@ -692,9 +709,27 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
           // LHS
           if (nlhs){
             for (j = 0; j < nlhs; j++){
-              dfp = REAL(VECTOR_ELT(df, jj));
-              dfp[ii] =ind->lhs[j];
-              jj++;
+              RObject curR = VECTOR_ELT(df, jj);
+              if (curR.hasAttribute("levels") && op->lhs_str[j] == 1) {
+                // factor; from string
+                IntegerVector cur = VECTOR_ELT(df, jj);
+                CharacterVector curL = cur.attr("levels");
+                dfi = INTEGER(cur);
+                int len = curL.size();
+                if (ISNA(ind->lhs[j])) {
+                  dfi[ii] = NA_INTEGER;
+                } else {
+                  dfi[ii] = (int)(ind->lhs[j]);
+                  if (dfi[ii] < 1 || dfi[ii] > len) {
+                    dfi[ii] = NA_INTEGER;
+                  }
+                }
+                jj++;
+              } else {
+                dfp = REAL(VECTOR_ELT(df, jj));
+                dfp[ii] =ind->lhs[j];
+                jj++;
+              }
             }
           }
           // States
@@ -749,13 +784,13 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
             if (TYPEOF(tmp) == REALSXP){
               dfp = REAL(tmp);
               // is this ntimes = nAllTimes or nObs time for this subject...?
-              dfp[ii] = get_fkeep(j, curi + ind->ix[i], ind);
+              dfp[ii] = get_fkeep(j, curi + ind->ix[i], ind, curi);
             } else if (TYPEOF(tmp) == STRSXP){
-              SET_STRING_ELT(tmp, ii, get_fkeepChar(j, get_fkeep(j, curi + ind->ix[i], ind)));
+              SET_STRING_ELT(tmp, ii, get_fkeepChar(j, get_fkeep(j, curi + ind->ix[i], ind, curi)));
             } else if (TYPEOF(tmp) == LGLSXP) {
               // Everything here is double
               dfi = LOGICAL(tmp);
-              double curD = get_fkeep(j, curi + ind->ix[i], ind);
+              double curD = get_fkeep(j, curi + ind->ix[i], ind, curi);
               if (ISNA(curD) || std::isnan(curD)) {
                 dfi[ii] = NA_LOGICAL;
               } else {
@@ -765,7 +800,7 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
               dfi = INTEGER(tmp);
               /* if (j == 0) RSprintf("j: %d, %d; %f\n", j, i, get_fkeep(j, curi + i)); */
               // is this ntimes = nAllTimes or nObs time for this subject...?
-              double curD = get_fkeep(j, curi + ind->ix[i], ind);
+              double curD = get_fkeep(j, curi + ind->ix[i], ind, curi);
               if (ISNA(curD) || std::isnan(curD)) {
                 dfi[ii] = NA_INTEGER;
               } else {
@@ -858,7 +893,6 @@ extern "C" SEXP rxode2_df(int doDose0, int doTBS) {
   jj++;
 
   // Put in LHS names
-  CharacterVector lhsNames = rxLhsNames(op->modNamePtr);
   for (i = 0; i < nlhs; i++){
     sexp_colnames[jj] = STRING_ELT(lhsNames,i);
     jj++;

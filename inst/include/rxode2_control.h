@@ -1,7 +1,7 @@
 #pragma once
 #ifndef __rxode2_control_H__
 #define __rxode2_control_H__
-#include <rxode2parse_control.h>
+#include "rxode2parse_control.h"
 #define Rxc_scale 0
 #define Rxc_method 1
 #define Rxc_atol 2
@@ -96,5 +96,9 @@
 #define Rxc_addlDropSs 91
 #define Rxc_ssAtDoseTime 92
 #define Rxc_ss2cancelAllPending 93
-#define Rxc__zeros 94
+#define Rxc_naInterpolation 94
+#define Rxc_keepInterpolation 95
+#define Rxc_safeLog 96
+#define Rxc_safePow 97
+#define Rxc__zeros 98
 #endif // __rxode2_control_H__

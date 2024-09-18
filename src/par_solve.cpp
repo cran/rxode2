@@ -9,14 +9,17 @@
 #include <time.h>
 #include <string>
 #include "strncmp.h"
-//#include "seed.h"
-#include <timsort.h>
+#include "timsort.h"
 #include "../inst/include/rxode2.h"
-#include <rxode2parseHandleEvid.h>
-#include <rxode2parseGetTime.h>
+#include "../inst/include/rxode2parseHandleEvid.h"
+#include "../inst/include/rxode2parseGetTime.h"
 #define SORT gfx::timsort
 #define isSameTimeOp(xout, xp) (op->stiff == 0 ? isSameTimeDop(xout, xp) : isSameTime(xout, xp))
 // dop853 is same time
+
+extern "C" uint32_t getRxSeed1(int ncores);
+extern "C" void setSeedEng1(uint32_t seed);
+extern "C" void setRxSeedFinal(uint32_t seed);
 
 extern "C" {
 #include "dop853.h"
@@ -445,14 +448,6 @@ t_calc_lhs calc_lhs = NULL;
 
 t_update_inis update_inis = NULL;
 
-extern "C" t_calc_lhs getRxLhs() {
-  return calc_lhs;
-}
-
-extern "C" t_update_inis getUpdateInis() {
-  return update_inis;
-}
-
 t_dydt_lsoda_dum dydt_lsoda_dum = NULL;
 
 t_dydt_liblsoda dydt_liblsoda = NULL;
@@ -523,34 +518,6 @@ double *global_rwork(unsigned int mx){
   return global_rworkp;
 }
 
-extern "C" void _rxode2random_assignSolveOnly2(rx_solve rx,
-                                               rx_solving_options op) {
-  static void (*fun)(rx_solve,
-                     rx_solving_options)=NULL;
-  if (fun == NULL) {
-    fun = (void (*)(rx_solve,
-                    rx_solving_options))  R_GetCCallable("rxode2random","_rxode2random_assignSolveOnly");
-  }
-  fun(rx, op);
-}
-
-extern "C" {
-  typedef void (*_rxode__assignFuns2_t)(rx_solve rx,
-                                        rx_solving_options op,
-                                        t_F f,
-                                        t_LAG lag,
-                                        t_RATE rate,
-                                        t_DUR dur,
-                                        t_calc_mtime mtime,
-                                        t_ME me,
-                                        t_IndF indf,
-                                        t_getTime gettime,
-                                        t_locateTimeIndex timeindex,
-                                        t_handle_evidL handleEvid,
-                                        t_getDur getdur);
-}
-
-
 extern "C" int _locateTimeIndex(double obs_time,  rx_solving_options_ind *ind);
 
 void rxUpdateFuns(SEXP trans){
@@ -609,21 +576,6 @@ void rxUpdateFuns(SEXP trans){
   rx->op = op;
   char s_assignFuns2[300];
   snprintf(s_assignFuns2, 300, "%s2", s_assignFuns);
-  _rxode__assignFuns2_t f2 = (_rxode__assignFuns2_t) R_GetCCallable(lib, s_assignFuns2);
-  f2(rx_global,
-     op_global,
-     AMT,
-     LAG,
-     RATE,
-     DUR,
-     calc_mtime,
-     ME,
-     IndF,
-     getTime,
-     _locateTimeIndex,
-     handle_evidL,
-     _getDur);
-  _rxode2random_assignSolveOnly2(rx_global, op_global);
 }
 
 extern "C" void rxClearFuns(){
@@ -2199,14 +2151,17 @@ extern "C" void par_indLin(rx_solve *rx){
   // It was buggy due to Rprint.  Use REprint instead since Rprint calls the interrupt every so often....
   int abort = 0;
   // FIXME parallel
+  uint32_t seed0 = getRxSeed1(1);
   for (int solveid = 0; solveid < nsim*nsub; solveid++){
     if (abort == 0){
+      setSeedEng1(seed0 + solveid - 1 );
       ind_indLin(rx, solveid, update_inis, ME, IndF);
       if (displayProgress){ // Can only abort if it is long enough to display progress.
         curTick = par_progress(solveid, nsim*nsub, curTick, 1, t0, 0);
       }
     }
   }
+  setRxSeedFinal(seed0 + nsim*nsub);
   if (abort == 1){
     op->abort = 1;
     /* yp0 = NULL; */
@@ -2342,15 +2297,6 @@ extern "C" void ind_liblsoda0(rx_solve *rx, rx_solving_options *op, struct lsoda
   ind->solveTime += ((double)(clock() - t0))/CLOCKS_PER_SEC;
 }
 
-typedef uint32_t (*getRxSeed1_t)(int ncores);
-extern getRxSeed1_t getRxSeed1;
-
-typedef void (*setSeedEng1_t)(uint32_t seed);
-extern setSeedEng1_t setSeedEng1;
-
-typedef void (*setRxSeedFinal_t)(uint32_t seed);
-extern setRxSeedFinal_t setRxSeedFinal;
-
 extern "C" void ind_liblsoda(rx_solve *rx, int solveid,
                              t_dydt_liblsoda dydt, t_update_inis u_inis){
   rx_solving_options *op = &op_global;
@@ -2479,11 +2425,13 @@ extern "C" void par_liblsoda(rx_solve *rx){
   // http://permalink.gmane.org/gmane.comp.lang.r.devel/27627
   // It was buggy due to Rprint.  Use REprint instead since Rprint calls the interrupt every so often....
   int abort = 0;
+  uint32_t seed0 = getRxSeed1(cores);
 #ifdef _OPENMP
 #pragma omp parallel for num_threads(op->cores)
 #endif
   for (int solveid = 0; solveid < nsim*nsub; solveid++){
     if (abort == 0){
+      setSeedEng1(seed0 + rx->ordId[solveid] - 1);
       ind_liblsoda0(rx, op, opt, solveid, dydt_liblsoda, update_inis);
       if (displayProgress){
 #pragma omp critical
@@ -2500,6 +2448,7 @@ extern "C" void par_liblsoda(rx_solve *rx){
       }
     }
   }
+  setRxSeedFinal(seed0 + nsim*nsub);
   if (abort == 1){
     op->abort = 1;
     /* yp0 = NULL; */
@@ -2762,17 +2711,22 @@ extern "C" void par_lsoda(rx_solve *rx){
 
   int curTick = 0;
   int abort = 0;
+  uint32_t seed0 = getRxSeed1(1);
   for (int solveid = 0; solveid < nsim*nsub; solveid++){
-    ind_lsoda0(rx, &op_global, solveid, neq, rwork, lrw, iwork, liw, jt,
-               dydt_lsoda_dum, update_inis, jdum_lsoda);
-    if (displayProgress){ // Can only abort if it is long enough to display progress.
-      curTick = par_progress(solveid, nsim*nsub, curTick, 1, t0, 0);
-      if (checkInterrupt()){
-        abort =1;
-        break;
+    if (abort == 0){
+      setSeedEng1(seed0 + solveid - 1 );
+      ind_lsoda0(rx, &op_global, solveid, neq, rwork, lrw, iwork, liw, jt,
+                 dydt_lsoda_dum, update_inis, jdum_lsoda);
+      if (displayProgress){ // Can only abort if it is long enough to display progress.
+        curTick = par_progress(solveid, nsim*nsub, curTick, 1, t0, 0);
+        if (checkInterrupt()){
+          abort =1;
+          break;
+        }
       }
     }
   }
+  setRxSeedFinal(seed0 + nsim*nsub);
   if (abort == 1){
     op_global.abort = 1;
   } else {
@@ -2989,8 +2943,10 @@ void par_dop(rx_solve *rx){
 
   int curTick = 0;
   int abort = 0;
+  uint32_t seed0 = getRxSeed1(1);
   for (int solveid = 0; solveid < nsim*nsub; solveid++){
     if (abort == 0){
+      setSeedEng1(seed0 + solveid - 1 );
       ind_dop0(rx, &op_global, solveid, neq, dydt, update_inis);
       if (displayProgress && abort == 0){
         if (checkInterrupt()) abort =1;
@@ -2998,6 +2954,7 @@ void par_dop(rx_solve *rx){
       if (displayProgress) curTick = par_progress(solveid, nsim*nsub, curTick, 1, t0, 0);
     }
   }
+  setRxSeedFinal(seed0 + nsim*nsub);
   if (abort == 1){
     op->abort = 1;
   } else {

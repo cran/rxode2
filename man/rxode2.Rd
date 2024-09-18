@@ -234,14 +234,6 @@ mod <- rxode2(\{
 }\if{html}{\out{</div>}}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{## using C compiler: ‘gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0’
-## In file included from /usr/share/R/include/R.h:71,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2parse.h:33,
-##                  from /home/matt/src/rxode2/inst/include/rxode2.h:9,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2_model_shared.h:3,
-##                  from rx_36fd6c4312c660ddf5390102e91a4bb3_.c:117:
-## /usr/share/R/include/R_ext/Complex.h:80:6: warning: ISO C99 doesn’t support unnamed structs/unions [-Wpedantic]
-##    80 |     \};
-##       |      ^
 }\if{html}{\out{</div>}}
 \itemize{
 \item Inside a \code{rxode2("")} string statement:
@@ -260,14 +252,6 @@ mod <- rxode2(\{
 }\if{html}{\out{</div>}}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{## using C compiler: ‘gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0’
-## In file included from /usr/share/R/include/R.h:71,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2parse.h:33,
-##                  from /home/matt/src/rxode2/inst/include/rxode2.h:9,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2_model_shared.h:3,
-##                  from rx_4fdd80e5dd5fd33d1951b83e06f7ad84_.c:117:
-## /usr/share/R/include/R_ext/Complex.h:80:6: warning: ISO C99 doesn’t support unnamed structs/unions [-Wpedantic]
-##    80 |     \};
-##       |      ^
 }\if{html}{\out{</div>}}
 \itemize{
 \item In a file name to be loaded by rxode2:
@@ -348,16 +332,8 @@ compilation model.
 }\if{html}{\out{</div>}}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{## using C compiler: ‘gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0’
-## In file included from /usr/share/R/include/R.h:71,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2parse.h:33,
-##                  from /home/matt/src/rxode2/inst/include/rxode2.h:9,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2_model_shared.h:3,
-##                  from rx_bbee652505e8bddf28c7e688baef12d9_.c:117:
-## /usr/share/R/include/R_ext/Complex.h:80:6: warning: ISO C99 doesn’t support unnamed structs/unions [-Wpedantic]
-##    80 |     \};
-##       |      ^
 
-## rxode2 2.1.2.9000 model named rx_bbee652505e8bddf28c7e688baef12d9 model (ready). 
+## rxode2 3.0.0 model named rx_632db1954a006dfe249974d0974ba18b model (ready). 
 ## x$state: depot, center
 ## x$stateExtra: cp
 ## x$params: tka, tcl, tv, add.sd, eta.ka, eta.cl, eta.v, rxerr.cp
@@ -369,16 +345,8 @@ mod$simulationIniModel
 }\if{html}{\out{</div>}}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{## using C compiler: ‘gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0’
-## In file included from /usr/share/R/include/R.h:71,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2parse.h:33,
-##                  from /home/matt/src/rxode2/inst/include/rxode2.h:9,
-##                  from /home/matt/R/x86_64-pc-linux-gnu-library/4.3/rxode2parse/include/rxode2_model_shared.h:3,
-##                  from rx_fe01e26500a95dd1ba4d8972bc71bc7a_.c:117:
-## /usr/share/R/include/R_ext/Complex.h:80:6: warning: ISO C99 doesn’t support unnamed structs/unions [-Wpedantic]
-##    80 |     \};
-##       |      ^
 
-## rxode2 2.1.2.9000 model named rx_fe01e26500a95dd1ba4d8972bc71bc7a model (ready). 
+## rxode2 3.0.0 model named rx_7e1fb9007822c2542d741c71c9c37dd4 model (ready). 
 ## x$state: depot, center
 ## x$stateExtra: cp
 ## x$params: tka, tcl, tv, add.sd, eta.ka, eta.cl, eta.v, rxerr.cp
@@ -403,7 +371,7 @@ printing statements (for debugging/testing).
 Assignment statements can be:
 \itemize{
 \item \strong{simple} assignments, where the left hand is an identifier (i.e.,
-variable)
+variable). This includes string assignments
 \item special \strong{time-derivative} assignments, where the left hand
 specifies the change of the amount in the corresponding state
 variable (compartment) with respect to time e.g., \code{d/dt(depot)}:
@@ -424,6 +392,11 @@ compartment can be specified as \code{df(y)/dy(dy) = 1}. There may be
 some advantage to obtaining the solution or specifying the Jacobian
 for very stiff ODE systems. However, for the few stiff systems we
 tried with LSODA, this actually slightly slowed down the solving.
+\item Special \strong{string value declarations} which tell what values a
+string variable will take within a \code{rxode2} solving structure. These
+values will then cause a factor to be created for this variable on
+solving the \code{rxode2} model. As such, they are declared in much the
+same way as \code{R}, that is: \code{labels(a) <- c("a1", "a2")}.
 }
 
 Note that assignment can be done by \code{=}, \verb{<-} or \code{~}.
@@ -444,6 +417,12 @@ parameters are in a certain order instead of ordering the parameters
 by the order they are parsed. This is useful for keeping the
 parameter order the same when using 2 different ODE models. These
 are specified by \code{param(par1, par2,...)}
+\item \strong{Variable interpolation statements}, which tells the interpolation
+for specific covariates. These include \code{locf(cov1, cov2, ...)} for
+last observation carried forward, \code{nocb(cov1, cov2, ...)} for next
+observation carried backward, \code{linear(cov1, cov2, ...)} for linear
+interpolation and \code{midpoint(cov1, cov2, ...)} for midpoint
+interpolation.
 }
 
 An example model is shown below:
@@ -500,7 +479,12 @@ assigned, or used as a state but can be accessed in the rxode2 code:
 \item \code{dvid}
 \item \code{addl}
 \item \code{ss}
+\item \code{amt}
+\item \code{dur}
 \item \code{rate}
+\item \code{Rprintf}
+\item \code{print}
+\item \code{printf}
 \item \code{id}
 }
 
@@ -610,11 +594,15 @@ table:\tabular{lll}{
    rxgeom \tab Generate one deviate from the geometric distribution for each observation \tab  \cr
    rxpois \tab Generate one deviate from the poission distribution for each observation \tab  \cr
    rxt \tab Generate one deviate from the t distribtuion for each observation \tab  \cr
-   tad() or tad(x) \tab Time after dose (tad()) or time after dose for a compartment tad(cmt) \tab  \cr
-   tafd() or tafd(x) \tab Time after first dose (tafd()) or time after first dose for a compartment tafd(cmt) \tab  \cr
+   tad() or tad(x) \tab Time after dose (tad()) or time after dose for a compartment tad(cmt); no dose=NA \tab  \cr
+   tad0() or tad0(x) \tab Time after dose (tad0()) or time after dose for a compartment tad0(cmt); no dose=0 \tab  \cr
+   tafd() or tafd(x) \tab Time after first dose (tafd()) or time after first dose for a compartment tafd(cmt); no dose=NA \tab  \cr
+   tafd0() or tafd0(x) \tab Time after first dose (tafd()) or time after first dose for a compartment tafd(cmt); no dose=NA \tab  \cr
    dosenum() \tab Dose Number \tab  \cr
-   tlast() or tlast(cmt) \tab Time of Last dose; This takes into consideration any lag time, so if there is a dose at time 3 and a lag of 1, the time of last dose would be 4. tlast(cmt) calculates the time since last dose of a compartment \tab  \cr
-   tfirst() or tfirst(cmt) \tab Time since first dose or time since first dose of a compartment \tab  \cr
+   tlast() or tlast(cmt) \tab Time of Last dose; This takes into consideration any lag time, so if there is a dose at time 3 and a lag of 1, the time of last dose would be 4. tlast(cmt) calculates the time since last dose of a compartment; no dose=NA \tab  \cr
+   tlast0() or tlast0(cmt) \tab Time of Last dose; This takes into consideration any lag time, so if there is a dose at time 3 and a lag of 1, the time of last dose would be 4. tlast(cmt) calculates the time since last dose of a compartment; no dose=0 \tab  \cr
+   tfirst() or tfirst(cmt) \tab Time since first dose or time since first dose of a compartment; no dose=NA \tab  \cr
+   tfirst0() or tfirst0(cmt) \tab Time since first dose or time since first dose of a compartment; no dose=0 \tab  \cr
    prod(…) \tab product of terms; This uses PreciseSums so the product will not have as much floating point errors (though it will take longer) \tab  \cr
    sum(…) \tab sum of terms; This uses PreciseSums so the product will not have as much floating point errors (though it will take longer) \tab  \cr
    max(…) \tab maximum of a group of numbers \tab  \cr
@@ -1042,6 +1030,63 @@ In general all the that are supported are in the following table
 }
 \section{Creating rxode2 models}{
 NA
+}
+
+\section{Note on strings in rxode2}{
+Strings are converted to double values inside of \code{rxode2}, hence you can
+refer to them as an integer corresponding to the string value or the
+string value itself. For covariates these are calculated on the fly
+based on your data and you should likely not try this, though you should
+be aware. For strings defined in the model, this is fixed and both could
+be used.
+
+For example:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{if (APGAR == 10 || APGAR == 8 || APGAR == 9) \{
+    tAPGAR <- "High"
+  \} else if (APGAR == 1 || APGAR == 2 || APGAR == 3) \{
+    tAPGAR <- "Low"
+  \} else if (APGAR == 4 || APGAR == 5 || APGAR == 6 || APGAR == 7) \{
+    tAPGAR <- "Med"
+  \} else \{
+    tAPGAR<- "Med"
+  \}
+}\if{html}{\out{</div>}}
+
+Could also be replaced by:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{if (APGAR == 10 || APGAR == 8 || APGAR == 9) \{
+    tAPGAR <- "High"
+  \} else if (APGAR == 1 || APGAR == 2 || APGAR == 3) \{
+    tAPGAR <- "Low"
+  \} else if (APGAR == 4 || APGAR == 5 || APGAR == 6 || APGAR == 7) \{
+    tAPGAR <- "Med"
+  \} else \{
+    tAPGAR<- 3
+  \}
+}\if{html}{\out{</div>}}
+
+Since \code{"Med"} is already defined
+
+If you wanted you can pre-declare what levels it has (and the order) to
+give you better control of this:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{levels(tAPGAR) <- c("Med", "Low", "High")
+if (APGAR == 10 || APGAR == 8 || APGAR == 9) \{
+    tAPGAR <- 3
+  \} else if (APGAR == 1 || APGAR == 2 || APGAR == 3) \{
+    tAPGAR <- 2
+  \} else if (APGAR == 4 || APGAR == 5 || APGAR == 6 || APGAR == 7) \{
+    tAPGAR <- 1
+  \} else \{
+    tAPGAR<- 1
+  \}
+}\if{html}{\out{</div>}}
+
+You can see that the number changed since the declaration change the
+numbers in each variable for \code{tAPGAR}. These \code{levels()} statements need
+to be declared before the variable occurs to ensure the numbering is
+consistent with what is declared.
 }
 
 \examples{

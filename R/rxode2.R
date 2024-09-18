@@ -83,7 +83,7 @@ NA_LOGICAL <- NA # nolint
 #'   print on every step (except ME/indLin), otherwise when `FALSE`
 #'   print only when calculating the `d/dt`
 #'
-#' @inheritParams rxode2parse::rxode2parse
+#' @inheritParams rxode2parse
 #'
 #' @details
 #'
@@ -254,8 +254,8 @@ NA_LOGICAL <- NA # nolint
 #' @concept Pharmacokinetics (PK)
 #' @concept Pharmacodynamics (PD)
 #' @useDynLib rxode2, .registration=TRUE
+#' @eval .rxodeBuildCode()
 #' @importFrom PreciseSums fsum
-#' @importFrom rxode2parse rxode2parse
 #' @importFrom Rcpp evalCpp
 #' @importFrom checkmate qassert
 #' @importFrom utils getFromNamespace assignInMyNamespace download.file head sessionInfo compareVersion packageVersion
@@ -277,10 +277,14 @@ rxode2 <- # nolint
            verbose = FALSE,
            fullPrint=getOption("rxode2.fullPrint", FALSE),
            envir=parent.frame()) {
-    rxode2parse::.udfEnvSet(envir)
+    if (!missing(wd) && missing(modName)) {
+      stop("working directory specified, but modName not declared, need to specify modName to create rxode2 c-files as a sub-directory of `wd`",
+              call.=FALSE)
+    }
+    .udfEnvSet(envir)
     assignInMyNamespace(".rxFullPrint", fullPrint)
     rxSuppressMsg()
-    rxode2parse::rxParseSuppressMsg()
+    rxParseSuppressMsg()
     .modelName <- try(as.character(substitute(model)), silent=TRUE)
     if (inherits(.modelName, "try-error")) .modelName <- NULL
     if (!missing(modName)) {
@@ -415,7 +419,7 @@ rxode2 <- # nolint
           .rx$.clearME()
         })
         .rx$.rxWithWd(wd, {
-          rxode2parse::.extraC(extraC)
+          rxode2::.extraC(extraC)
           if (missing.modName) {
             .rxDll <- .rx$rxCompile(.mv,
                                     debug = debug,
@@ -436,7 +440,7 @@ rxode2 <- # nolint
         })
       })
     }))
-    rxode2parse::.extraC(extraC)
+    rxode2::.extraC(extraC)
     .env$compile()
     .env$get.modelVars <- eval(bquote(function() {
       with(.(.env), {
@@ -1048,7 +1052,7 @@ rxMd5 <- function(model, # Model File
       rxode2.calculate.sensitivity)
     .ret <- c(
       .ret, .tmp, .rxIndLinStrategy, .rxIndLinState,
-      .linCmtSens, rxode2parse::.udfMd5Info(), .rxFullPrint
+      .linCmtSens, .udfMd5Info(), .rxFullPrint
     )
     if (is.null(.md5Rx)) {
       .tmp <- getLoadedDLLs()$rxode2
@@ -1264,7 +1268,7 @@ rxCompile <- function(model, dir, prefix, force = FALSE, modName = NULL,
 
 .getIncludeDir <- function() {
   .cache <- R_user_dir("rxode2", "cache")
-  .parseInclude <- system.file("include", package = "rxode2parse")
+  .parseInclude <- system.file("include", package = "rxode2")
   if (dir.exists(.cache)) {
     .include <- .normalizePath(file.path(.cache, "include"))
     if (!dir.exists(.include)) {
@@ -1464,14 +1468,14 @@ rxCompile.rxModelVars <- function(model, # Model
           "#rxode2 Makevars\nPKG_CFLAGS=-O%s %s -I\"%s\" -I\"%s\"\nPKG_LIBS=$(BLAS_LIBS) $(LAPACK_LIBS) $(FLIBS)\n",
           getOption("rxode2.compile.O", "2"),
           .defs, .getIncludeDir(),
-          system.file("include", package = "rxode2parse")
+          system.file("include", package = "rxode2")
         )
         ## .ret <- paste(.ret, "-g")
         sink(.Makevars)
         cat(.ret)
         sink()
         sink(.normalizePath(file.path(.dir, "extraC.h")))
-        cat(rxode2parse::.extraCnow())
+        cat(rxode2::.extraCnow())
         sink()
         try(dyn.unload(.cDllFile), silent = TRUE)
         try(unlink(.cDllFile))

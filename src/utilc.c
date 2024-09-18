@@ -596,11 +596,23 @@ double probitInv(double alpha, double low, double high) {
   return _powerDi(alpha, 1.0, 6, low, high);
 }
 
-SEXP _probit(SEXP xS, SEXP lowS, SEXP highS) {
+SEXP _rxode2_powerD(SEXP xS, SEXP lowS, SEXP highS, SEXP lambdaS, SEXP yjS, SEXP inverseS) {
   int typex = TYPEOF(xS);
   int typelow = TYPEOF(lowS);
   int typehigh = TYPEOF(highS);
-  double low, high;
+  int typelambda = TYPEOF(lambdaS);
+  int inverse = INTEGER(inverseS)[0];
+  int yj = INTEGER(yjS)[0];
+  double low, high, lambda;
+  if (Rf_length(inverseS) != 1) {
+    Rf_errorcall(R_NilValue, _("'inverse' must be an logical of length 1"));
+  }
+  if (Rf_length(yjS) != 1) {
+    Rf_errorcall(R_NilValue, _("'yj' must be an integer of length 1"));
+  }
+  if (Rf_length(lambdaS) != 1){
+    Rf_errorcall(R_NilValue, _("'lambda' must be a numeric of length 1"));
+  }
   if (Rf_length(lowS) != 1){
     Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
   }
@@ -624,6 +636,13 @@ SEXP _probit(SEXP xS, SEXP lowS, SEXP highS) {
   if (high <= low) {
     Rf_errorcall(R_NilValue, _("'high' must be greater than 'low'"));
   }
+  if (typelambda == INTSXP) {
+    lambda = (double)(INTEGER(lambdaS)[0]);
+  } else if (typelambda == REALSXP) {
+    lambda = REAL(lambdaS)[0];
+  } else {
+    Rf_errorcall(R_NilValue, _("'lambda' must be a numeric of length 1"));
+  }
   int lenx = Rf_length(xS);
   double *xD = NULL;
   int *xI = NULL;
@@ -636,175 +655,199 @@ SEXP _probit(SEXP xS, SEXP lowS, SEXP highS) {
   }
   SEXP ret = PROTECT(Rf_allocVector(REALSXP, lenx));
   double *retD = REAL(ret);
-  if (isD){
-    for (int i = lenx; i--;){
-      retD[i] = probit(xD[i], low, high);
+  if (inverse) {
+    if (isD) {
+      for (int i = lenx; i--;){
+        retD[i] = _powerDi(xD[i], lambda, yj, low, high);
+      }
+    } else {
+      for (int i = lenx; i--;){
+        retD[i] = _powerDi((double)(xI[i]), lambda, yj, low, high);
+      }
     }
   } else {
-    for (int i = lenx; i--;){
-      retD[i] = probit((double)(xI[i]), low, high);
+    if (isD) {
+      for (int i = lenx; i--;){
+        retD[i] = _powerD(xD[i], lambda, yj, low, high);
+      }
+    } else {
+      for (int i = lenx; i--;){
+        retD[i] = _powerD((double)(xI[i]), lambda, yj, low, high);
+      }
     }
   }
   UNPROTECT(1);
   return ret;
 }
 
-SEXP _probitInv(SEXP xS, SEXP lowS, SEXP highS) {
-  int typex = TYPEOF(xS);
-  int typelow = TYPEOF(lowS);
-  int typehigh = TYPEOF(highS);
-  double low, high;
-  if (Rf_length(lowS) != 1){
-    Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
+SEXP _vecDF(SEXP cv, SEXP n_) {
+  int n=0;
+  int typ = TYPEOF(n_);
+  if (typ == REALSXP) {
+    n = (int)(REAL(n_)[0]);
+  } else if (typ == INTSXP) {
+    n = INTEGER(n_)[0];
   }
-  if (Rf_length(highS) != 1){
-    Rf_errorcall(R_NilValue, _("'high' must be a numeric of length 1"));
-  }
-  if (typelow == INTSXP){
-    low = (double)(INTEGER(lowS)[0]);
-  } else if (typelow == REALSXP) {
-    low = REAL(lowS)[0];
-  } else {
-    Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
-  }
-  if (typehigh == INTSXP){
-    high = (double)(INTEGER(highS)[0]);
-  } else if (typehigh == REALSXP) {
-    high = REAL(highS)[0];
-  } else {
-    Rf_errorcall(R_NilValue, _("'high' must be a numeric of length 1"));
-  }
-  if (high <= low) {
-    Rf_errorcall(R_NilValue, _("'high' must be greater than 'low'"));
-  }
-  int lenx = Rf_length(xS);
-  double *xD = NULL;
-  int *xI = NULL;
-  int isD=0;
-  if (typex == REALSXP){
-    isD=1;
-    xD = REAL(xS);
-  } else if (typex == INTSXP){
-    xI = INTEGER(xS);
-  }
-  SEXP ret = PROTECT(Rf_allocVector(REALSXP, lenx));
-  double *retD = REAL(ret);
-  if (isD){
-    for (int i = lenx; i--;){
-      retD[i] = probitInv(xD[i], low, high);
+  if (n <= 0) Rf_errorcall(R_NilValue, _("'n' must be greater than 0"));
+  int pro = 0;
+  int len = Rf_length(cv);
+  SEXP ret = PROTECT(Rf_allocVector(VECSXP, len)); pro++;
+  SEXP retN = PROTECT(Rf_allocVector(STRSXP, len)); pro++;
+  SEXP cvN = Rf_getAttrib(cv, R_NamesSymbol);
+  for (int i = len; i--;) {
+    SEXP tmp = PROTECT(Rf_allocVector(REALSXP, n)); pro++;
+    for (int j = n; j--;) {
+      REAL(tmp)[j] = REAL(cv)[i];
     }
-  } else {
-    for (int i = lenx; i--;){
-      retD[i] = probitInv((double)(xI[i]), low, high);
-    }
+    SET_VECTOR_ELT(ret, i, tmp);
+    SET_STRING_ELT(retN, i, STRING_ELT(cvN, i));
   }
-  UNPROTECT(1);
+  SEXP sexp_rownames = PROTECT(Rf_allocVector(INTSXP,2)); pro++;
+  INTEGER(sexp_rownames)[0] = NA_INTEGER;
+  INTEGER(sexp_rownames)[1] = -n;
+  Rf_setAttrib(ret, R_RowNamesSymbol, sexp_rownames);
+  SEXP sexp_class = PROTECT(Rf_allocVector(STRSXP, 1)); pro++;
+  SET_STRING_ELT(sexp_class,0,Rf_mkChar("data.frame"));
+  Rf_setAttrib(ret, R_ClassSymbol, sexp_class);
+  Rf_setAttrib(ret, R_NamesSymbol, retN);
+  UNPROTECT(pro);
   return ret;
 }
 
-SEXP _logit(SEXP xS, SEXP lowS, SEXP highS) {
-  int typex = TYPEOF(xS);
-  int typelow = TYPEOF(lowS);
-  int typehigh = TYPEOF(highS);
-  double low, high;
-  if (Rf_length(lowS) != 1){
-    Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
+SEXP _cbindOme(SEXP et_, SEXP mat_, SEXP n_) {
+  int n = INTEGER(n_)[0];
+  if (n <= 0) Rf_errorcall(R_NilValue, _("'n' must be greater than 0"));
+
+  int len1 = Rf_length(et_);
+  int len1a = 0;
+  if (len1 > 0) {
+    len1a = Rf_length(VECTOR_ELT(et_,0));
   }
-  if (Rf_length(highS) != 1){
-    Rf_errorcall(R_NilValue, _("'high' must be a numeric of length 1"));
-  }
-  if (typelow == INTSXP){
-    low = (double)(INTEGER(lowS)[0]);
-  } else if (typelow == REALSXP) {
-    low = REAL(lowS)[0];
+  SEXP etN = Rf_getAttrib(et_, R_NamesSymbol);
+
+  SEXP matD;
+  SEXP matDN;
+  int len2;
+  int lenOut;
+  int lenItem;
+  int isNullEt = Rf_isNull(et_) || Rf_length(et_) == 0;
+  if (!Rf_isNull(mat_) && !isNullEt) {
+    matD = Rf_getAttrib(mat_, Rf_install("dim"));
+    matDN = VECTOR_ELT(Rf_getAttrib(mat_, R_DimNamesSymbol), 1);
+    len2 = INTEGER(matD)[1];
+    lenOut = INTEGER(matD)[0];
+    lenItem = lenOut/len1a;
+  } else if (!isNullEt) {
+    len2 = 0;
+    lenOut = n*len1a;
+    lenItem = n;
   } else {
-    Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
+    matD = Rf_getAttrib(mat_, Rf_install("dim"));;
+    matDN = VECTOR_ELT(Rf_getAttrib(mat_, R_DimNamesSymbol), 1);
+    len2 = INTEGER(matD)[1];
+    lenOut = INTEGER(matD)[0];
+    lenItem = n;
   }
-  if (typehigh == INTSXP){
-    high = (double)(INTEGER(highS)[0]);
-  } else if (typehigh == REALSXP) {
-    high = REAL(highS)[0];
-  } else {
-    Rf_errorcall(R_NilValue, _("'high' must be a numeric of length 1"));
-  }
-  if (high <= low) {
-    Rf_errorcall(R_NilValue, _("'high' must be greater than 'low'"));
-  }
-  int lenx = Rf_length(xS);
-  double *xD = NULL;
-  int *xI = NULL;
-  int isD=0;
-  if (typex == REALSXP){
-    isD=1;
-    xD = REAL(xS);
-  } else if (typex == INTSXP){
-    xI = INTEGER(xS);
-  }
-  SEXP ret = PROTECT(Rf_allocVector(REALSXP, lenx));
-  double *retD = REAL(ret);
-  if (isD){
-    for (int i = lenx; i--;){
-      retD[i] = logit(xD[i], low, high);
+  int pro = 0;
+  SEXP ret = PROTECT(Rf_allocVector(VECSXP, len1+len2)); pro++;
+  SEXP retN = PROTECT(Rf_allocVector(STRSXP, len1+len2)); pro++;
+  for (int i = len1; i--; ) {
+    SEXP tmp = PROTECT(Rf_allocVector(REALSXP, lenOut)); pro++;
+    SEXP in = VECTOR_ELT(et_, i);
+    int l = lenOut;
+    for (int j = len1a; j--;) {
+      for (int k = lenItem; k--; ) {
+        REAL(tmp)[--l] = REAL(in)[j];
+      }
     }
-  } else {
-    for (int i = lenx; i--;){
-      retD[i] = logit((double)(xI[i]), low, high);
-    }
+    SET_VECTOR_ELT(ret, i, tmp);
+    SET_STRING_ELT(retN, i, STRING_ELT(etN, i));
   }
-  UNPROTECT(1);
+  for (int i = len2; i--; ) {
+    SEXP tmp = PROTECT(Rf_allocVector(REALSXP, lenOut)); pro++;
+    memcpy(&(REAL(tmp)[0]), &(REAL(mat_)[lenOut*i]), lenOut*sizeof(double));
+    SET_VECTOR_ELT(ret, i+len1, tmp);
+    SET_STRING_ELT(retN, i+len1, STRING_ELT(matDN, i));
+  }
+  SEXP sexp_rownames = PROTECT(Rf_allocVector(INTSXP,2)); pro++;
+  INTEGER(sexp_rownames)[0] = NA_INTEGER;
+  INTEGER(sexp_rownames)[1] = -lenOut;
+  Rf_setAttrib(ret, R_RowNamesSymbol, sexp_rownames);
+  SEXP sexp_class = PROTECT(Rf_allocVector(STRSXP, 1)); pro++;
+  SET_STRING_ELT(sexp_class,0,Rf_mkChar("data.frame"));
+  Rf_setAttrib(ret, R_ClassSymbol, sexp_class);
+  Rf_setAttrib(ret, R_NamesSymbol, retN);
+  UNPROTECT(pro);
   return ret;
 }
 
+double phi(double q) {
+  return pnorm(q, 0.0, 1.0, 1, 0);
+}
 
-SEXP _expit(SEXP xS, SEXP lowS, SEXP highS) {
-  int typex = TYPEOF(xS);
-  int typelow = TYPEOF(lowS);
-  int typehigh = TYPEOF(highS);
-  double low, high;
-  if (Rf_length(lowS) != 1){
-    Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
-  }
-  if (Rf_length(highS) != 1){
-    Rf_errorcall(R_NilValue, _("'high' must be a numeric of length 1"));
-  }
-  if (typelow == INTSXP){
-    low = (double)(INTEGER(lowS)[0]);
-  } else if (typelow == REALSXP) {
-    low = REAL(lowS)[0];
-  } else {
-    Rf_errorcall(R_NilValue, _("'low' must be a numeric of length 1"));
-  }
-  if (typehigh == INTSXP){
-    high = (double)(INTEGER(highS)[0]);
-  } else if (typehigh == REALSXP) {
-    high = REAL(highS)[0];
-  } else {
-    Rf_errorcall(R_NilValue, _("'high' must be a numeric of length 1"));
-  }
-  if (high <= low) {
-    Rf_errorcall(R_NilValue, _("'high' must be greater than 'low'"));
-  }
-  int lenx = Rf_length(xS);
-  double *xD = NULL;
-  int *xI = NULL;
-  int isD=0;
-  if (typex == REALSXP){
-    isD=1;
-    xD = REAL(xS);
-  } else if (typex == INTSXP){
-    xI = INTEGER(xS);
-  }
-  SEXP ret = PROTECT(Rf_allocVector(REALSXP, lenx));
-  double *retD = REAL(ret);
-  if (isD){
-    for (int i = lenx; i--;){
-      retD[i] = expit(xD[i], low, high);
+SEXP _rxode2_phi(SEXP q) {
+  int type = TYPEOF(q);
+  SEXP ret;
+  int pro = 0;
+  if (type == REALSXP) {
+    int len = Rf_length(q);
+    ret= PROTECT(Rf_allocVector(REALSXP, len));pro++;
+    double *retD = REAL(ret);
+    double *inD = REAL(q);
+    for (int j = len; j--;){
+      retD[j] = phi(inD[j]);
+    }
+  } else if (type == INTSXP){
+    int len = Rf_length(q);
+    ret= PROTECT(Rf_allocVector(REALSXP, len));pro++;
+    double *retD = REAL(ret);
+    int *inD = INTEGER(q);
+    for (int j = len; j--;){
+      retD[j] = phi((double)(inD[j]));
     }
   } else {
-    for (int i = lenx; i--;){
-      retD[i] = expit((double)(xI[i]), low, high);
-    }
+    Rf_errorcall(R_NilValue, _("'phi' requires numeric values"));
+  }
+  UNPROTECT(pro);
+  return ret;
+}
+
+#include "../inst/include/rxode2parseHandleEvid.h"
+SEXP _rxode2_getWh(SEXP in) {
+  int wh, cmt, wh100, whI, wh0;
+  getWh(INTEGER(in)[0], &wh, &cmt, &wh100, &whI, &wh0);
+  SEXP ret = PROTECT(Rf_allocVector(INTSXP, 5));
+  int *retI = INTEGER(ret);
+  SEXP retN = PROTECT(Rf_allocVector(STRSXP, 5));
+  retI[0] = wh;
+  SET_STRING_ELT(retN, 0,Rf_mkChar("wh"));
+  retI[1] = cmt;
+  SET_STRING_ELT(retN, 1,Rf_mkChar("cmt"));
+  retI[2] = wh100;
+  SET_STRING_ELT(retN, 2,Rf_mkChar("wh100"));
+  retI[3] = whI;
+  SET_STRING_ELT(retN, 3,Rf_mkChar("whI"));
+  retI[4] = wh0;
+  SET_STRING_ELT(retN, 4,Rf_mkChar("wh0"));
+  Rf_setAttrib(ret, R_NamesSymbol, retN);
+  UNPROTECT(2);
+  return ret;
+}
+
+SEXP _rxode2_getClassicEvid(SEXP cmtS, SEXP amtS, SEXP rateS,
+                            SEXP durS, SEXP iiS, SEXP evidS, SEXP ssS) {
+  int *cmt= INTEGER(cmtS);
+  double *amt = REAL(amtS);
+  double *dur = REAL(durS);
+  double *rate = REAL(rateS);
+  double *ii = REAL(iiS);
+  int *evid = INTEGER(evidS);
+  double *ss = REAL(ssS);
+  SEXP retS = PROTECT(Rf_allocVector(INTSXP, Rf_length(cmtS)));
+  int *ret = INTEGER(retS);
+  for (int i = Rf_length(cmtS); i--;) {
+    ret[i] = getEvidClassic(cmt[i], amt[i], rate[i], dur[i], ii[i], evid[i], ss[i]);
   }
   UNPROTECT(1);
-  return ret;
+  return retS;
 }
