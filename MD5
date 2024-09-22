@@ -1,6 +1,6 @@
-9e8ad2eaa1eb521070ebb849e675f42a *DESCRIPTION
+a915015eea89fdb607c0003cc6292bfa *DESCRIPTION
 c9dfeaf3595374267fbcaed5bb0281a6 *NAMESPACE
-2e71baf5a99b58c1e1e8b9338c58a30c *NEWS.md
+8972016dd1d7938e24a7ad5144c4507c *NEWS.md
 e07eb8059da406242535c6015fa3c08a *R/000.R
 ee8a66f3184475e5dd8998b05cf7db96 *R/CTS.R
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
@@ -67,7 +67,7 @@ ad6cd2d1f8122b9e210e434597df2f71 *R/rxUiBlessed.R
 859540f240be0d2b1ee18eb355bdafa1 *R/rxValidate.R
 af3ffb8abea2f37f52a4a003c552634c *R/rxode-options.R
 9ccf6f56539d6773ed84adca75dbb1f4 *R/rxode2.R
-8bcd5a61e85f3ca710db0329340ec06f *R/rxode2_md5.R
+a69b39c61f464ea0412410905e0fbc01 *R/rxode2_md5.R
 9df80f1316ab6f05db4872684d4d9a62 *R/rxrandom.R
 6ca2c65f2ed9c332725f718ac9048743 *R/rxsolve.R
 81860635d712c7b8ae84ff51ea996d0d *R/str.R
@@ -100,8 +100,8 @@ db46b8f9ac8d9c2a3a996b292f554113 *inst/COPYRIGHTS
 d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
-f4d54c07aeca5d55a776a6e8542e1aa1 *inst/doc/rxode2-syntax.Rmd
-d70e67a893693edc78339e6f6eebd2d0 *inst/doc/rxode2-syntax.html
+8080bb72687763adae3540339de4c066 *inst/doc/rxode2-syntax.Rmd
+818f6ebc1619f692204656d00c288251 *inst/doc/rxode2-syntax.html
 9f60fb1362ff4dbfd60c7519e0738437 *inst/include/rxode2.h
 13f0192225d8bb522d686908a2f7ae90 *inst/include/rxode2_RcppExports.h
 44158d0c42a8f775edeca9165440f5fa *inst/include/rxode2_as.h
@@ -113,7 +113,7 @@ ab2f0a881015225b1da79a2bec9b8481 *inst/include/rxode2parseGetTime.h
 dae00d3d63f671297bb27cd6567a4ca0 *inst/include/rxode2parseHandleEvid.h
 2b032c79542dbd3de3cc786ed44cbd8c *inst/include/rxode2parseSbuf.h
 ca9f789e6251233f3efd619372e40414 *inst/include/rxode2parseStruct.h
-8c85ef0c4ff609d2975ce67ecb5f35b5 *inst/include/rxode2parseVer.h
+cbc2137e205b775170f9ebed56853c03 *inst/include/rxode2parseVer.h
 7dca98f0fee066454f11d9861128c9f2 *inst/include/rxode2parse_control.h
 13263c07abdc4934626bbda786999bff *inst/include/rxode2ptr.h
 8e5949d8fd97e2c2cffba29ba8df2ae4 *inst/include/rxode2random_fillVec.h
@@ -264,7 +264,7 @@ f111c62836c6866a0ee8f8ab0ed0bd05 *man/rLKJ1.Rd
 861aa26ae48646377b168094d1011da5 *man/rmdhunks/rxode2-cmt-assign.Rmd
 4465316e5b91ae8398a8a6833b3c791e *man/rmdhunks/rxode2-cmt-preassign-1.Rmd
 a943458d4cfb8deedec0cf79f909b6f2 *man/rmdhunks/rxode2-cmt-preassign-2.Rmd
-6f6001b63aeaac8ccd8d18b626382b6a *man/rmdhunks/rxode2-create-models.Rmd
+8d1310f41d5b1e98e8ea7720103c8396 *man/rmdhunks/rxode2-create-models.Rmd
 05b3258e1e1715ab44b0b78625fe6073 *man/rmdhunks/rxode2-intro-chunk.Rmd
 842d4be9db3ec537dae5b357116c8440 *man/rmdhunks/rxode2-syntax-hunk.Rmd
 eb9764d09d3a836e48f962d265cc222f *man/rxAllowUnload.Rd
@@ -467,7 +467,7 @@ b442f6ce6d4f1c91efa40afc89a76334 *src/etTran.cpp
 09b93692d45d61f31662514dd07c3600 *src/fnorm.c
 fa297af4dd59587a0228143ab61fc5a3 *src/forder.cpp
 7efd3f3c7f773c3e48b0bade2969391a *src/genModelVars.c
-37e0d3574d548e4d864c8904fa73f97f *src/genModelVars.h
+0571380835cb2941447de2cd1bcfc02b *src/genModelVars.h
 0791ff39c0246ab61df11ad74b783212 *src/getOption.c
 d069b15dc9974469b45d9cbdc60a0715 *src/getOption.h
 9f5ca6055a064a8e8ab3d6354aa97ab5 *src/handle_evid.c
@@ -565,7 +565,7 @@ ce89d3dd5027828e1ebe35d36c4c0e04 *tests/testthat/etTrans1.qs
 6e1d1492322048f229293230cf1ae79c *tests/testthat/keep-756.qs
 5476fd6ede563ed35c71b85c7d8a4c4f *tests/testthat/model_default.txt
 e2ef40a42610b8ca487468c0bce097dd *tests/testthat/si.qs
-dbab423cf83d5cc869f6597f1aa9e22a *tests/testthat/test-000-modelVars.R
+2bfb16039f528e19d43019ba9f2866da *tests/testthat/test-000-modelVars.R
 39c0a615faa3b73b5818cad2a801aa5c *tests/testthat/test-001-sum.R
 39538b498a6912f9ea890f668ad3af6e *tests/testthat/test-100-cmt.R
 ab21eb4ccd403080c80f093e0689c4a2 *tests/testthat/test-alag.R
@@ -673,7 +673,7 @@ e92522caf2048540b35d5fa1fe4b5bf4 *tests/testthat/test-omegaCubeConvert.R
 0cf62cd1fab34a8f035a099973c01df9 *tests/testthat/test-param-order.R
 45012b8a76fbbd7400d9177844e5f9bf *tests/testthat/test-parsing.R
 3d7a3e6da2391a4f7df214672e38a81c *tests/testthat/test-pheno.R
-2bb6b0aa424666737ce28494fce36eb5 *tests/testthat/test-phi.R
+676bbab23a64673f1712f71ab586d204 *tests/testthat/test-phi.R
 9201fdde847c13429d7a40525ea9347f *tests/testthat/test-pipeline.R
 15e4cde7a8836221b881c4417f9a4dc9 *tests/testthat/test-piping-ini.R
 2937ad15260c75d9c550c146435cd75a *tests/testthat/test-plot.R
@@ -775,4 +775,4 @@ b7d6aa4514e3ada441455fdbb22d0b06 *tests/testthat/test-zzzz-plot.R
 318bfde14d161ba78ee6a16bfaeaa7c9 *tests/testthat/test-zzzzz.R
 58905f9ace6c23f8942c7c3ca5ac18a8 *vignettes/eventTable-output-notebook-01.png
 d8ca241ce9e35ce9e437710e934cc859 *vignettes/eventTable-output-notebook-02.png
-f4d54c07aeca5d55a776a6e8542e1aa1 *vignettes/rxode2-syntax.Rmd
+8080bb72687763adae3540339de4c066 *vignettes/rxode2-syntax.Rmd
