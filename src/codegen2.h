@@ -150,6 +150,7 @@ sAppendN(&sbOut, "  va_end(valist);\n", 18);
 sAppendN(&sbOut, "  return _prodPS(input, p, n, type);\n", 37);
 sAppendN(&sbOut, "}\n", 2);
 sAppendN(&sbOut, "double _udf(const char *funName, double *input, int n, ...) {\n", 62);
+sAppendN(&sbOut, "  if (n == -42) Rf_error(\"%s\", \"this has a ui user function that cannot be called directly\");\n", 94);
 sAppendN(&sbOut, "  va_list valist;\n", 18);
 sAppendN(&sbOut, "  va_start(valist, n);\n", 23);
 sAppendN(&sbOut, "  for (unsigned int i = 0; i < n; i++){\n", 40);

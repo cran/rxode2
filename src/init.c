@@ -86,6 +86,9 @@ SEXP _rxode2_rxRmvnSEXP(SEXP, SEXP, SEXP, SEXP, SEXP,
                         SEXP, SEXP, SEXP, SEXP, SEXP,
                         SEXP, SEXP);
 
+SEXP _rxode2_itostr(SEXP, SEXP);
+SEXP _rxode2_itoletter(SEXP, SEXP);
+
 SEXP _cbindOme(SEXP et_, SEXP mat_, SEXP n_);
 
 SEXP _rxode2_nestingInfo_(SEXP omega, SEXP data);
@@ -399,7 +402,7 @@ SEXP _rxode2_rxode2Ptr(void) {
   SEXP rxode2getIndDv = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndDv, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2getIndYj = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndYj, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2getIndLimit = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndLimit, R_NilValue, R_NilValue)); pro++;
-  SEXP rxode2getIndCens = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndLimit, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2getIndCens = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndCens, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2getIndIdx = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndIdx, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2getOpNeq = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getOpNeq, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2setOpNeq =  PROTECT(R_MakeExternalPtrFn((DL_FUNC)&setOpNeq, R_NilValue, R_NilValue)); pro++;
@@ -536,6 +539,8 @@ SEXP _rxode2_powerD(SEXP, SEXP, SEXP, SEXP, SEXP,
                     SEXP);
 void R_init_rxode2(DllInfo *info){
   R_CallMethodDef callMethods[]  = {
+    {"_rxode2_itoletter", (DL_FUNC) &_rxode2_itoletter, 2},
+    {"_rxode2_itostr", (DL_FUNC) &_rxode2_itostr, 2},
     {"_rxode2_powerD", (DL_FUNC) &_rxode2_powerD, 6},
     {"_rxode2_rxode2Ptr", (DL_FUNC) &_rxode2_rxode2Ptr, 0},
     {"_rxode2_iniDparserPtr", (DL_FUNC) &_rxode2_iniDparserPtr, 1},
