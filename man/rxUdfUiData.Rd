@@ -23,6 +23,7 @@ rxUdfUiData()
 \seealso{
 Other User functions: 
 \code{\link{linMod}()},
+\code{\link{rxUdfUiControl}()},
 \code{\link{rxUdfUiEst}()},
 \code{\link{rxUdfUiIniLhs}()},
 \code{\link{rxUdfUiMv}()},

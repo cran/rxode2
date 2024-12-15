@@ -210,21 +210,22 @@ rxTest({
 
     expect_equal(
       rxToSE(transit(n, mtt, bio)),
-      "exp(log((bio)*(podo()))+log(n + 1)-log(mtt)+(n)*((log(n+1)-log(mtt))+log(t-tlast()))-((n+1)/(mtt))*(t-tlast())-lgamma(1+n))")
+      "exp(log((bio)*(podo0()))+log(n + 1)-log(mtt)+(n)*((log(n+1)-log(mtt))+log(t-tlast0()))-((n+1)/(mtt))*(t-tlast0())-lgamma(1+n))")
 
     expect_equal(
       rxToSE(transit(n, mtt)),
-      "exp(log(podo())+(log(n+1)-log(mtt))+(n)*((log(n+1)-log(mtt))+ log(t-tlast()))-((n + 1)/(mtt))*(t-tlast())-lgamma(1+n))")
+      "exp(log(podo0())+(log(n+1)-log(mtt))+(n)*((log(n+1)-log(mtt))+ log(t-tlast0()))-((n + 1)/(mtt))*(t-tlast0())-lgamma(1+n))")
 
     tmp <- rxode("d/dt(depot) <- transit(n, mtt, bio)-ka*depot\nd/dt(center)=ka*depot-kel*center")
+
     tmp2 <- rxS(tmp)
     tmp3 <- tmp2$rx__d_dt_depot__
-    expect_equal(rxFromSE(tmp3), "-ka*depot+exp(n*(-log(mtt)+log1p(n)+log(t-tlast(depot)))-(t-tlast(depot))*(1+n)/mtt-log(mtt)+log(bio*podo(depot))+log1p(n)-lgamma1p(n))")
+    expect_equal(rxFromSE(tmp3), "-ka*depot+exp(n*(-log(mtt)+log1p(n)+log(t-tlast0(depot)))-(1+n)*(t-tlast0(depot))/mtt-log(mtt)+log(bio*podo0(depot))+log1p(n)-lgamma1p(n))")
 
     tmp <- rxode("d/dt(depot) <- transit(n, mtt) - ka*depot\nd/dt(center)=ka*depot-kel*center")
     tmp2 <- rxS(tmp)
     tmp3 <- tmp2$rx__d_dt_depot__
-    expect_equal(rxFromSE(tmp3), "-ka*depot+exp(n*(-log(mtt)+log1p(n)+log(t-tlast(depot)))-(t-tlast(depot))*(1+n)/mtt-log(mtt)+log1p(n)+log(podo(depot))-lgamma1p(n))")
+    expect_equal(rxFromSE(tmp3), "-ka*depot+exp(n*(-log(mtt)+log1p(n)+log(t-tlast0(depot)))-(1+n)*(t-tlast0(depot))/mtt-log(mtt)+log1p(n)+log(podo0(depot))-lgamma1p(n))")
 
   })
 
@@ -257,6 +258,68 @@ rxTest({
       rxFromSE("(2*a + b)*Subs(Derivative(rxTBS(_xi_1, b, c, d, f), _xi_1), (_xi_1), (a*b + a^2))"),
       "(2*a+b)*rxTBSd(a*b+Rx_pow_di(a,2),b,c,d,f)"
     )
+  })
+
+  test_that("NN Activation functions derivatives", {
+
+    expect_equal(rxFromSE("Derivative(ReLU(x), x)"), "dReLU(x)")
+    expect_equal(rxFromSE("Derivative(dReLU(x), x)"), "0")
+
+    expect_equal(rxFromSE("Derivative(GELU(x), x)"), "dGELU(x)")
+    expect_equal(rxFromSE("Derivative(dGELU(x), x)"), "d2GELU(x)")
+    expect_equal(rxFromSE("Derivative(d2GELU(x), x)"), "d3GELU(x)")
+    expect_equal(rxFromSE("Derivative(d3GELU(x), x)"), "d4GELU(x)")
+
+    expect_equal(rxToSE("d4GELU(x)"), "exp(-(x)^2/2)*(7*(x)^2 - 4 - (x)^4)/sqrt(2*pi)")
+
+    expect_equal(rxFromSE("Derivative(ELU(x, alpha), x)"), "dELU(x, alpha)")
+    expect_equal(rxFromSE("Derivative(ELU(x, alpha), alpha)"), "dELUa(x, alpha)")
+
+    expect_equal(rxFromSE("Derivative(dELU(x, alpha), x)"), "d2ELU(x, alpha)")
+    expect_equal(rxFromSE("Derivative(dELU(x, alpha), alpha)"), "d2aELU(x, alpha)")
+
+    expect_equal(rxFromSE("Derivative(dELUa(x, alpha), x)"), "d2ELUa(x, alpha)")
+    expect_equal(rxFromSE("Derivative(dELUa(x, alpha), alpha)"), "0")
+
+    expect_equal(rxFromSE("Derivative(d2ELUa(x, alpha), x)"), "d2ELUa(x, alpha)")
+    expect_equal(rxFromSE("Derivative(d2ELUa(x, alpha), alpha)"), "0")
+
+    expect_equal(rxFromSE("Derivative(d2aELU(x, alpha), x)"), "d2aELU(x, alpha)")
+    expect_equal(rxFromSE("Derivative(d2aELU(x, alpha), alpha)"), "0")
+
+    expect_equal(rxFromSE("Derivative(softplus(x), x)"),   "dsoftplus(x)")
+    expect_equal(rxFromSE("Derivative(dsoftplus(x), x)"),  "d2softplus(x)")
+    expect_equal(rxFromSE("Derivative(d2softplus(x), x)"), "d3softplus(x)")
+    expect_equal(rxFromSE("Derivative(d3softplus(x), x)"), "d4softplus(x)")
+
+    expect_equal(rxToSE("d4softplus(x)"),
+                 "6.0*exp(-3.0*(x))/(((1.0 + exp(-(x))))^4) - 6.0*exp(-2.0*(x))/(((1.0 + exp(-(x))))^3) + exp(-(x))/(((1.0 + exp(-(x))))^2)")
+
+    expect_equal(rxFromSE("Derivative(SELU(x), x)"), "dSELU(x)")
+
+    expect_equal(rxToSE("dSELU(x)"),
+                 "(rxGt(x, 0)*1.0507009873554804934193349852946 + 1.0507009873554804934193349852946*1.6732632423543772848170429916717*exp(x)*rxLeq(x, 0))")
+
+    expect_equal(rxFromSE("Derivative(lReLU(x), x)"), "dlReLU(x)")
+    expect_equal(rxFromSE("Derivative(dlReLU(x), x)"), "0")
+
+    expect_equal(rxFromSE("Derivative(PReLU(x, alpha), x)"), "dPReLU(x,alpha)")
+    expect_equal(rxFromSE("Derivative(PReLU(x, alpha), alpha)"), "dPReLUa(x,alpha)")
+
+    expect_equal(rxFromSE("Derivative(dPReLU(x, alpha), x)"), "0")
+    expect_equal(rxFromSE("Derivative(dPReLU(x, alpha), alpha)"), "dPReLUa1(x,alpha)")
+
+    expect_equal(rxFromSE("Derivative(dPReLUa(x, alpha), x)"), "dPReLUa1(x,alpha)")
+    expect_equal(rxFromSE("Derivative(dPReLUa(x, alpha), alpha)"), "0")
+
+    expect_equal(rxFromSE("Derivative(dPReLUa1(x, alpha), x)"), "0")
+    expect_equal(rxFromSE("Derivative(dPReLUa1(x, alpha), alpha)"), "0")
+
+    expect_equal(rxFromSE("Derivative(Swish(x), x)"), "dSwish(x)")
+
+    expect_equal(rxToSE("dSwish(x)"),
+                 "((x)*exp(-(x))/(1.0 + exp(-(x)))^2 + 1.0/(1.0 + exp(-(x)))")
+
   })
 
   test_that("logic tests", {
@@ -455,6 +518,13 @@ rxTest({
     expect_equal(rxToSE("tad(matt)"), "(t-tlast(matt))")
     expect_error(rxToSE("tad(matt,f)"))
     expect_error(rxToSE("tad(matt+f)"))
+  })
+
+  test_that("tad0()", {
+    expect_equal(rxToSE("tad0()"), "(t-tlast0())")
+    expect_equal(rxToSE("tad0(matt)"), "(t-tlast0(matt))")
+    expect_error(rxToSE("tad0(matt,f)"))
+    expect_error(rxToSE("tad0(matt+f)"))
   })
 
   test_that("tafd()", {

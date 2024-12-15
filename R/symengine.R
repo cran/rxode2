@@ -142,11 +142,15 @@ regIfOrElse <- rex::rex(or(regIf, regElse))
   "probit" = NA,
   "probitInv" = NA,
   "tlast" = NA,
+  "tlast0" = NA,
   "tfirst" = NA,
+  "tfirst0" = NA,
   "lag" = NA,
   "lead" = NA,
   "dose" =NA,
   "podo" =NA,
+  "dose0" =NA,
+  "podo0" =NA,
   "dabs" = 1,
   "dabs2" = 1,
   "abs1" = 1,
@@ -239,7 +243,36 @@ regIfOrElse <- rex::rex(or(regIf, regElse))
   "llikXCauchyDscale"=4,
   "llikXNorm"=4,
   "llikXNormDmean"=4,
-  "llikXNormDsd"=4
+  "llikXNormDsd"=4,
+  "ReLU"=1,
+  "dReLU"=1,
+  "GELU"=1,
+  "dGELU"=1,
+  "d2GELU"=1,
+  "d3GELU"=1,
+  "d4GELU"=1,
+  "ELU"=2,
+  "dELU"=2,
+  "d2ELU"=2,
+  "d2aELU"=2,
+  "dELUa"=2,
+  "d2ELUa"=2,
+  "softplus"=1,
+  "dsoftplus"=1,
+  "d2softplus"=1,
+  "d3softplus"=1,
+  "d4softplus"=1,
+  "SELU"=1,
+  "dSELU"=1,
+  "lReLU"=1,
+  "dlReLU"=1,
+  "PReLU"=2,
+  "dPReLU"=2,
+  "d2PReLU"=2,
+  "dPReLUa"=2,
+  "dPReLUa1"=2,
+  "Swish"=1,
+  "dSwish"=1
 )
 
 .rxOnly <- c(
@@ -633,7 +666,7 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
 }
 
 .rxToSEDualVarFunction <- c("tlast", "tlast0", "tad", "tad0", "tafd", "tafd0",
-                            "dose", "podo")
+                            "dose", "podo", "dose0", "podo0")
 
 #' Change rxode2 syntax to symengine syntax for symbols and numbers
 #'
@@ -688,7 +721,6 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
     }
   }
 }
-
 
 .rxToSECurlyBrace <- function(x, envir = NULL, progress = FALSE, isEnv=TRUE) {
   .x2 <- x[-1]
@@ -1062,6 +1094,9 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
     if (identical(x[[1]], quote(`podo`))) {
       return(paste0("podo(", .rxLastAssignedDdt, ")"))
     }
+    if (identical(x[[1]], quote(`podo0`))) {
+      return(paste0("podo0(", .rxLastAssignedDdt, ")"))
+    }
   } else if (.len == 2L) {
     if (length(x[[2]]) != 1) {
       stop(as.character(x[[1]]), "() must be used with a state", call. = FALSE)
@@ -1168,6 +1203,77 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
   }
 }
 
+.rxToSEd4GELU <- function(x, envir=NULL, progress=FALSE, isEnv=TRUE) {
+  if (length(x) == 2) {
+    if (isEnv) {
+      .lastCall <- envir$..curCall
+      envir$..curCall <- c(envir$..curCall, "d4GELU")
+    }
+    .x <- .rxToSE(x[[2]], envir = envir)
+    if (isEnv) envir$..curCall <- .lastCall
+    return(
+      paste0("exp(-(", .x, ")^2/2)*(7*(", .x, ")^2 - 4 - (", .x, ")^4)/sqrt(2*pi)")
+    )
+  } else {
+    stop("'d4GELU' can only take 1 argument", call. = FALSE)
+  }
+}
+
+.rxToSEd4softplus <- function(x, envir=NULL, progress=FALSE, isEnv=TRUE) {
+  if (length(x) == 2) {
+    if (isEnv) {
+      .lastCall <- envir$..curCall
+      envir$..curCall <- c(envir$..curCall, "d4softplus")
+    }
+    .x <- .rxToSE(x[[2]], envir = envir)
+    if (isEnv) envir$..curCall <- .lastCall
+    .ex1 <- paste0("(1.0 + exp(-(", .x, ")))")
+    return(
+      paste0("6.0*exp(-3.0*(", .x, "))/((", .ex1,
+             ")^4) - 6.0*exp(-2.0*(", .x, "))/((", .ex1,
+             ")^3) + exp(-(", .x, "))/((", .ex1, ")^2)")
+    )
+  } else {
+    stop("'d4softplus' can only take 1 argument", call. = FALSE)
+  }
+}
+
+.rxToSEdSELU <- function(x, envir=NULL, progress=FALSE, isEnv=TRUE) {
+  if (length(x) == 2) {
+    if (isEnv) {
+      .lastCall <- envir$..curCall
+      envir$..curCall <- c(envir$..curCall, "dSELU")
+    }
+    .x <- .rxToSE(x[[2]], envir = envir)
+    if (isEnv) envir$..curCall <- .lastCall
+    return(
+      paste0("(rxGt(", .x, ", 0)*1.0507009873554804934193349852946 + 1.0507009873554804934193349852946*1.6732632423543772848170429916717*exp(", .x, ")*rxLeq(", .x, ", 0))")
+    )
+  } else {
+    stop("'dSELU' can only take 1 argument", call. = FALSE)
+  }
+
+}
+
+.rxToSEdSwish <- function(x, envir=NULL, progress=FALSE, isEnv=TRUE) {
+  if (length(x) == 2) {
+    if (isEnv) {
+      .lastCall <- envir$..curCall
+      envir$..curCall <- c(envir$..curCall, "dSwish")
+    }
+    .x <- .rxToSE(x[[2]], envir = envir)
+    if (isEnv) envir$..curCall <- .lastCall
+    # x*exp(-x)/(1.0 + exp(-x))^2 + (1.0 + exp(-x))^(-1);
+    return(
+      paste0("((", .x, ")*exp(-(", .x, "))/(1.0 + exp(-(", .x,
+             ")))^2 + 1.0/(1.0 + exp(-(", .x, ")))")
+      )
+  } else {
+    stop("'dSwish' can only take 1 argument", call. = FALSE)
+  }
+
+}
+
 .rxToSETransit <- function(x, envir = NULL, progress = FALSE, isEnv=TRUE) {
   if (length(x) == 4) {
     ## transit(n, mtt, bio)
@@ -1185,11 +1291,11 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
     .bio <- .rxToSE(x[[4]], envir = envir)
     if (isEnv) envir$..curCall <- .lastCall
     return(paste0(
-      "exp(log((", .bio, ")*(podo(", .rxLastAssignedDdt, ")))+log(",
+      "exp(log((", .bio, ")*(podo0(", .rxLastAssignedDdt, ")))+log(",
       .n, " + 1)-log(", .mtt, ")+(", .n,
       ")*((log(", .n, "+1)-log(", .mtt,
-      "))+log(t-tlast(", .rxLastAssignedDdt, ")))-((", .n, "+1)/(", .mtt,
-      "))*(t-tlast(", .rxLastAssignedDdt, "))-lgamma(1+", .n, "))"
+      "))+log(t-tlast0(", .rxLastAssignedDdt, ")))-((", .n, "+1)/(", .mtt,
+      "))*(t-tlast0(", .rxLastAssignedDdt, "))-lgamma(1+", .n, "))"
     ))
   } else if (length(x) == 3) {
     if (isEnv) {
@@ -1199,7 +1305,7 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
     .n <- .rxToSE(x[[2]], envir = envir)
     .mtt <- .rxToSE(x[[3]], envir = envir)
     if (isEnv) envir$..curCall <- .lastCall
-    return(paste0("exp(log(podo(", .rxLastAssignedDdt, "))+(log(", .n, "+1)-log(", .mtt, "))+(", .n, ")*((log(", .n, "+1)-log(", .mtt, "))+ log(t-tlast(", .rxLastAssignedDdt, ")))-((", .n, " + 1)/(", .mtt, "))*(t-tlast(",.rxLastAssignedDdt, "))-lgamma(1+", .n, "))"))
+    return(paste0("exp(log(podo0(", .rxLastAssignedDdt, "))+(log(", .n, "+1)-log(", .mtt, "))+(", .n, ")*((log(", .n, "+1)-log(", .mtt, "))+ log(t-tlast0(", .rxLastAssignedDdt, ")))-((", .n, " + 1)/(", .mtt, "))*(t-tlast0(",.rxLastAssignedDdt, "))-lgamma(1+", .n, "))"))
   } else {
     stop("'transit' can only take 2-3 arguments", call. = FALSE)
   }
@@ -1227,6 +1333,7 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
   return(.rxToSEMax(c(.ret, .xrest), min=min))
 }
 
+
 .rxToSECall <- function(x, envir = NULL, progress = FALSE, isEnv=TRUE) {
   if (identical(x[[1]], quote(`(`))) {
     return(paste0("(", .rxToSE(x[[2]], envir = envir), ")"))
@@ -1251,7 +1358,7 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
   } else if (identical(x[[1]], quote(`tad`))) {
     return(.rxToSETad(x, envir = envir, progress = progress, isEnv=isEnv))
   } else if (identical(x[[1]], quote(`tad0`))) {
-    return(.rxToSETad(x, envir = envir, progress = progress, isEnv=isEnv))
+    return(.rxToSETad0(x, envir = envir, progress = progress, isEnv=isEnv))
   } else if (identical(x[[1]], quote(`lag`)) ||
                identical(x[[1]], quote(`lead`))) {
     return(.rxToSELagOrLead(x, envir = envir, progress = progress, isEnv=isEnv))
@@ -1261,10 +1368,12 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
     return(.rxToSETlastOrTafd0(x, envir = envir, progress = progress, isEnv=isEnv))
   } else if (identical(x[[1]], quote(`tlast`)) ||
                identical(x[[1]], quote(`tfirst`)) ||
-               identical(x[[1]], quote(`last0`)) ||
-               identical(x[[1]], quote(`first0`)) ||
+               identical(x[[1]], quote(`tlast0`)) ||
+               identical(x[[1]], quote(`tfirst0`)) ||
                identical(x[[1]], quote(`dose`)) ||
-               identical(x[[1]], quote(`podo`))) {
+               identical(x[[1]], quote(`podo`)) ||
+               identical(x[[1]], quote(`dose0`)) ||
+               identical(x[[1]], quote(`podo0`))) {
     return(.rxToSETlastOrTfirst(x, envir = envir, progress = progress, isEnv=isEnv))
   } else if (identical(x[[1]], quote(`psigamma`))) {
     return(.rxToSEPsigamma(x, envir = envir, progress = progress, isEnv=isEnv))
@@ -1286,6 +1395,14 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
     if (length(x) != 2) stop("abs only takes 1 argument", call.=FALSE)
     .r <- .rxToSE(x[[2]], envir = envir)
     return(paste0("(2.0*(", .r, ")*rxGt(", .r, ",0.0)-(", .r, "))"))
+  } else if (identical(x[[1]], quote(`d4GELU`))) {
+    return(.rxToSEd4GELU(x, envir = envir, progress = progress, isEnv=isEnv))
+  } else if (identical(x[[1]], quote(`d4softplus`))) {
+    return(.rxToSEd4softplus(x, envir = envir, progress = progress, isEnv=isEnv))
+  } else if (identical(x[[1]], quote(`dSELU`))) {
+    .rxToSEdSELU(x, envir=envir, progress=progress, isEnv=isEnv)
+  } else if (identical(x[[1]], quote(`dSwish`))) {
+    .rxToSEdSwish(x, envir=envir, progress=progress, isEnv=isEnv)
   } else {
     if (length(x[[1]]) == 1) {
       .x1 <- as.character(x[[1]])
@@ -2267,7 +2384,8 @@ rxFromSE <- function(x, unknownDerivatives = c("forward", "central", "error"),
           ")"
         )
         return(.ret)
-      } else if (any(paste(.ret0[[1]]) == c("tlast", "tfirst", "dose", "podo"))) {
+      } else if (any(paste(.ret0[[1]]) == c("tlast", "tfirst", "dose", "podo",
+                                            "tlast0", "first0", "dose0", "podo0"))) {
         if (length(.ret0) == 1L) {
           return(paste0(.ret0[[1]], "()"))
         } else if (length(.ret0) == 2L) {
