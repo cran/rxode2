@@ -52,7 +52,6 @@ sAppendN(&sbOut, "rxode2_fn0i _sumType=NULL;\n", 27);
 sAppendN(&sbOut, "_update_par_ptr_p _update_par_ptr=NULL;\n", 40);
 sAppendN(&sbOut, "_getParCov_p _getParCov=NULL;\n", 30);
 sAppendN(&sbOut, "linCmtA_p linCmtA;\n", 19);
-sAppendN(&sbOut, "linCmtA_p linCmtC;\n", 19);
 sAppendN(&sbOut, "linCmtB_p linCmtB;\n", 19);
 sAppendN(&sbOut, "_rx_asgn _rxode2_rxAssignPtr=NULL;\n", 35);
 sAppendN(&sbOut, "_rx_asgn _rxQr=NULL;\n", 21);

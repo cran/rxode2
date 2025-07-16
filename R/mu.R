@@ -295,10 +295,8 @@
       .thetas <- try(.muRefExtractTheta(y, env), silent=TRUE)
       if (inherits(.thetas, "try-error")) .thetas <- NULL
       if (length(.thetas) == 1L) {
-        .d <- try(symengine::D(get("rxdummyLhs", rxS(paste0("rxdummyLhs=", deparse1(y)))), .thetas),
-                  silent=TRUE)
-        .extra <- try(str2lang(rxFromSE(.d)),
-                      silent=TRUE)
+        .d <- try(symengine::D(get("rxdummyLhs", rxS(paste0("rxdummyLhs=", deparse1(y)))), .thetas), silent=TRUE)
+        .extra <- try(str2lang(rxFromSE(.d)), silent=TRUE)
         .thetaD <- try(.muRefExtractTheta(.extra, env), silent=TRUE)
         if (inherits(.thetaD, "try-error")) .thetaD <- NULL
         if (is.null(.thetaD)) {
@@ -1107,24 +1105,7 @@
   .checkForAtLeastOneEstimatedOrModeledParameterPerEndpoint(.env)
   .muRefDowngrade(.env)
   .muRefSeparateCalculatedMuRefCovs(.env)
-  if (.env$hasErrors) {
-    .errMsg <- paste0(crayon::bold$blue("\nmodel"), "({}) errors:\n",
-                      paste(vapply(seq_along(.env$lstExpr),
-                                   function(i) {
-                                     sprintf(paste0("%s", crayon::bold("%03d:"), " %s"),
-                                             ifelse(is.null(.env$lstErr[[i]]), "",
-                                                    sprintf(paste0(crayon::bold("%s"), "\n"), .env$lstErr[[i]])),
-                                             i, deparse1(.env$lstExpr[[i]]))
-                                   }, character(1), USE.NAMES=FALSE), collapse="\n"))
-    message(.errMsg)
-  }
-  if (length(.env$err) > 0) {
-    stop(paste0(ifelse(.env$hasErrors, "syntax/parsing errors (see above) and additionally:\n", "syntax/parsing errors:\n"),
-                paste(.env$err, collapse="\n")),
-         call.=FALSE)
-  } else if (.env$hasErrors) {
-    stop("syntax/parsing errors, see above", call.=FALSE)
-  }
+  .handleErrs(.env)
   .rm <- intersect(c(".curEval", ".curLineClean", ".expr", ".found", "body", "cov.ref",
                      "err", "exp.theta", "expit.theta", "expit.theta.hi", "expit.theta.low",
                      "found", "info", "log.theta", "logit.theta", "logit.theta.hi",

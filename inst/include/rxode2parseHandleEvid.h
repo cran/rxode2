@@ -4,30 +4,7 @@
 
 #include "rxode2parse.h"
 //#include "rxThreadData.h"
-#define rxErrCorruptETSort    1
-#define rxErrRate0            2
-#define rxErrModelRateAbsent  4
-#define rxErrCorruptETSort2   8
-#define rxErrDurNeg0          16
-#define rxErrModelDurAbsent   32
-#define rxErrModelData686     64
-#define rxErrModelDataNeg6    128
-#define rxErrModelDataErr8    256
-#define rxErrModelDataErr886  512
-#define rxErrModelDataErr797  1024
-#define rxErrModelDataNeg7    2048
-#define rxErrModelDataErr9    4096
-#define rxErrModelDataErr997  8192
-#define rxErrCorruptETSort3   16384
-#define rxErrCorruptET        32768
-#define rxErrNegCmt           65536
-#define rxErrCorruptET2       131072
-#define rxErrSync             262144
-#define rxErrSync2            524288
-#define rxErrModeledFss2      1048576
-#define rxErrModeledFss2n2    2097152
-#define rxErrModeledFss2n3    4194304
-#define rxErrRate02           8388608
+#include "rxode2dataErr.h"
 
 #if defined(__cplusplus)
 #define FLOOR(x) std::floor(x)
@@ -113,7 +90,7 @@ extern "C" {
 #define EVID0_PHANTOM 50
 #define EVID0_ONDOSE 60
 
-static inline void getWh(int evid, int *wh, int *cmt, int *wh100, int *whI, int *wh0){
+static inline void getWh(int evid, int *wh, int *cmt, int *wh100, int *whI, int *wh0) {
   *wh = evid;
   *cmt = 0;
   *wh100 = FLOOR(*wh/1e5L);
@@ -122,27 +99,6 @@ static inline void getWh(int evid, int *wh, int *cmt, int *wh100, int *whI, int 
   *wh0 = FLOOR((*wh%10000)/100);
   *cmt = *wh0 - 1 + *wh100*100;
   *wh0 = evid - *wh100*1e5 - *whI*1e4 - *wh0*100;
-  if (rx_global.linNcmt != 0) {
-    if (rx_global.linKa) {
-      switch (*cmt) {
-      case 0:
-        *cmt = op_global.neq;
-        break;
-      case 1:
-        *cmt = op_global.neq+1;
-        break;
-      case 2:
-        *cmt -= 2;
-        break;
-      }
-    } else {
-      if (*cmt == 0) {
-        *cmt = op_global.neq;
-      } else {
-        *cmt -= 1;
-      }
-    }
-  }
 }
 
 static inline double getDoseNumber(rx_solving_options_ind *ind, int i) {
@@ -167,7 +123,8 @@ static inline void setDoseNumber(rx_solving_options_ind *ind, int i, int j, doub
 }
 
 static inline void handleInfusionGetEndOfInfusionIndex(int idx, int *infEixds,
-																											 rx_solve *rx, rx_solving_options *op,
+																											 rx_solve *rx,
+                                                       rx_solving_options *op,
 																											 rx_solving_options_ind *ind) {
 	int curEvid = getEvid(ind, ind->idose[idx]);
 	double curAmt = getDoseNumber(ind, idx);
@@ -188,7 +145,7 @@ static inline void handleInfusionGetEndOfInfusionIndex(int idx, int *infEixds,
 					lastKnownOff = k;
 					if (j == idx) {
 						*infEixds = k;
-						// dur = getTime_(ind->idose[infEixds], ind);// -
+						// dur = getTime_(ind->idose[infEixds], ind);
 						// dur -= getTime_(ind->idose[ind->ixds+2], ind);
 						// dur2 = getIiNumber(ind, ind->ixds) - dur;
 					}
@@ -320,16 +277,16 @@ static inline int syncIdx(rx_solving_options_ind *ind) {
   return 1;
 }
 
-
 extern t_F AMT;
 
 
-static inline double getAmt(rx_solving_options_ind *ind, int id, int cmt, double dose, double t, double *y) {
+static inline double getAmt(rx_solving_options_ind *ind, int id, int cmt,
+                            double dose, double t, double *y) {
   double ret = AMT(id, cmt, dose, t, y);
   if (ISNA(ret)){
     rx_solving_options *op = &op_global;
     op->badSolve=1;
-    op->naTime = 1;
+    op->naTime = 5 + 10*cmt;
   }
   return ret;
 }
@@ -351,15 +308,22 @@ static inline int pushIgnoredDose(int doseIdx, rx_solving_options_ind *ind) {
     if (ind->ignoredDoses[i] == doseIdx) return 0;
   }
   if (ind->ignoredDosesN[0]+1 >= ind->ignoredDosesAllocN[0]) {
-    int *tmpI = (int*)realloc(ind->ignoredDoses, (ind->ignoredDosesN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
-    if (tmpI == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 0;
+    rx_solving_options *op = &op_global;
+#pragma omp critical
+    {
+      int *tmpI = (int*)realloc(ind->ignoredDoses, (ind->ignoredDosesN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
+      if (tmpI == NULL) {
+        op->badSolve = 1;
+        // return 0;
+      } else {
+        ind->ignoredDoses = tmpI;
+        ind->ignoredDosesAllocN[0] = (ind->ignoredDosesN[0]+1+EVID_EXTRA_SIZE);
+        re = 1;
+      }
     }
-    ind->ignoredDoses = tmpI;
-    ind->ignoredDosesAllocN[0] = (ind->ignoredDosesN[0]+1+EVID_EXTRA_SIZE);
-    re = 1;
+    if (op->badSolve) {
+      return 0; // don't continue if we have a bad solve.
+    }
   }
   ind->ignoredDoses[ind->ignoredDosesN[0]] = doseIdx;
   ind->ignoredDosesN[0] = ind->ignoredDosesN[0]+1;
@@ -369,15 +333,22 @@ static inline int pushIgnoredDose(int doseIdx, rx_solving_options_ind *ind) {
 static inline int pushPendingDose(int doseIdx, rx_solving_options_ind *ind) {
   int re = 0;
   if (ind->pendingDosesN[0]+1 >= ind->pendingDosesAllocN[0]) {
-    int *tmpI = (int*)realloc(ind->pendingDoses, (ind->pendingDosesN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
-    if (tmpI == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
+    rx_solving_options *op = &op_global;
+#pragma omp critical
+    {
+      int *tmpI = (int*)realloc(ind->pendingDoses, (ind->pendingDosesN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
+      if (tmpI == NULL) {
+        op->badSolve = 1;
+        //return 0;
+      } else {
+        ind->pendingDoses = tmpI;
+        ind->pendingDosesAllocN[0] = (ind->pendingDosesN[0]+1+EVID_EXTRA_SIZE);
+        re = 1;
+      }
+    }
+    if (op->badSolve == 1)  {
       return 0;
     }
-    ind->pendingDoses = tmpI;
-    ind->pendingDosesAllocN[0] = (ind->pendingDosesN[0]+1+EVID_EXTRA_SIZE);
-    re = 1;
   }
   ind->pendingDoses[ind->pendingDosesN[0]] = doseIdx;
   ind->pendingDosesN[0] = ind->pendingDosesN[0]+1;
@@ -389,40 +360,49 @@ static inline int pushDosingEvent(double time, double amt, int evid,
                                    rx_solving_options_ind *ind) {
   int re = 0;
   if (ind->extraDoseN[0]+1 >= ind->extraDoseAllocN[0]) {
-    int *tmpI = (int*)realloc(ind->extraDoseTimeIdx, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
-    if (tmpI == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
+    rx_solving_options *op = &op_global;
+#pragma omp critical
+    {
+      int *tmpI = (int*)realloc(ind->extraDoseTimeIdx, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
+      if (tmpI == NULL) {
+        op->badSolve = -1;
+        // return 0;
+      } else {
+        ind->extraDoseTimeIdx = tmpI;
+
+        tmpI = (int*)realloc(ind->extraDoseEvid, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
+        if (tmpI == NULL) {
+          op->badSolve = 1;
+          // return 1;
+        } else {
+          ind->extraDoseEvid = tmpI;
+          double * tmpD = (double*)realloc(ind->extraDoseTime, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
+          if (tmpD == NULL) {
+            op->badSolve = 1;
+            //return 1;
+          } else {
+            ind->extraDoseTime = tmpD;
+
+            tmpD = (double*)realloc(ind->extraDoseDose,  (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
+            if (tmpD == NULL) {
+              op->badSolve = 1;
+              //return 1;
+            } else {
+              ind->extraDoseDose = tmpD;
+
+              ind->extraDoseAllocN[0] = (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE);
+              re = 1;
+            }
+          }
+        }
+      }
+    }
+    if (op->badSolve == 1) {
+      return 1;
+    } else if (op->badSolve == -1) {
+      op->badSolve = 1; // set to bad solve.
       return 0;
     }
-    ind->extraDoseTimeIdx = tmpI;
-
-    tmpI = (int*)realloc(ind->extraDoseEvid, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
-    if (tmpI == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 1;
-    }
-    ind->extraDoseEvid = tmpI;
-
-    double * tmpD = (double*)realloc(ind->extraDoseTime, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
-    if (tmpD == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 1;
-    }
-    ind->extraDoseTime = tmpD;
-
-    tmpD = (double*)realloc(ind->extraDoseDose,  (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
-    if (tmpD == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 1;
-    }
-    ind->extraDoseDose = tmpD;
-
-    ind->extraDoseAllocN[0] = (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE);
-    re = 1;
   }
   ind->extraDoseTimeIdx[ind->extraDoseN[0]] = ind->extraDoseN[0];
   ind->extraDoseTime[ind->extraDoseN[0]] = time;
@@ -438,39 +418,49 @@ static inline int pushUniqueDosingEvent(double time, double amt, int evid,
                                         rx_solving_options_ind *ind) {
   int re = 0;
   if (ind->extraDoseN[0]+1 >= ind->extraDoseAllocN[0]) {
-    int *tmpI = (int*)realloc(ind->extraDoseTimeIdx, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
-    if (tmpI == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
+    rx_solving_options *op = &op_global;
+#pragma omp critical
+    {
+      int *tmpI = (int*)realloc(ind->extraDoseTimeIdx, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
+      if (tmpI == NULL) {
+        op->badSolve = -1;
+        // return 0;
+      }  else {
+        ind->extraDoseTimeIdx = tmpI;
+
+        tmpI = (int*)realloc(ind->extraDoseEvid, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
+        if (tmpI == NULL) {
+          op->badSolve = 1;
+          // return 1;
+        } else {
+          ind->extraDoseEvid = tmpI;
+
+          double * tmpD = (double*)realloc(ind->extraDoseTime, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
+          if (tmpD == NULL) {
+            op->badSolve = 1;
+            //return 1;
+          } else {
+            ind->extraDoseTime = tmpD;
+
+            tmpD = (double*)realloc(ind->extraDoseDose,  (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
+            if (tmpD == NULL) {
+              op->badSolve = 1;
+              // return 1;
+            } else {
+              ind->extraDoseDose = tmpD;
+
+              ind->extraDoseAllocN[0] = (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE);
+            }
+          }
+        }
+      }
+    }
+    if (op->badSolve == 1) {
+      return 1; // don't continue if we have a bad solve.
+    } else if (op->badSolve == -1) {
+      op->badSolve = 1; // set to bad solve.
       return 0;
     }
-    ind->extraDoseTimeIdx = tmpI;
-
-    tmpI = (int*)realloc(ind->extraDoseEvid, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(int));
-    if (tmpI == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 1;
-    }
-    ind->extraDoseEvid = tmpI;
-
-    double * tmpD = (double*)realloc(ind->extraDoseTime, (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
-    if (tmpD == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 1;
-    }
-    ind->extraDoseTime = tmpD;
-
-    tmpD = (double*)realloc(ind->extraDoseDose,  (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE)*sizeof(double));
-    if (tmpD == NULL) {
-      rx_solving_options *op = &op_global;
-      op->badSolve = 1;
-      return 1;
-    }
-    ind->extraDoseDose = tmpD;
-
-    ind->extraDoseAllocN[0] = (ind->extraDoseN[0]+1+EVID_EXTRA_SIZE);
     re = 1;
   }
   for (int i = 0; i < ind->extraDoseN[0]; ++i) {
@@ -505,9 +495,11 @@ static inline int handle_evid(int evid, int neq,
     ind->ixds++;
     ind->solved = ind->idx;
     return 0;
-  }//  else if (!ind->doSS) {
-  //   REprintf("handle evid %d dose at time %f is value %f (ind->ixds: %d; ind->idx: %d)\n",
-  //            evid, xout, getDoseIndex(ind, ind->idx), ind->ixds, ind->idx);
+  } // else if (!ind->doSS) {
+  //   rx_solving_options *op = &op_global;
+  //   REprintf("handle evid[%d] %d dose at time %f is value %f (ind->ixds: %d; ind->idx: %d; id: %d)\n",
+  //            op->numLin, evid, xout,
+  //            getDoseIndex(ind, ind->idx), ind->ixds, ind->idx, ind->id);
   // }
   int cmt, foundBad, j;
   double tmp;
@@ -549,7 +541,8 @@ static inline int handle_evid(int evid, int neq,
       ind->on[cmt] = 0;
       return 1;
     }
-    if (!ind->doSS && (ind->wh0 == EVID0_SS2 || ind->wh0 == EVID0_SS20) && cmt < op->neq) {
+    if (!ind->doSS && (ind->wh0 == EVID0_SS2 || ind->wh0 == EVID0_SS20) &&
+        cmt < op->neq) {
       // Save for adding at the end; Only for ODE systems
       memcpy(ind->solveSave, yp, op->neq*sizeof(double));
     }
@@ -561,16 +554,12 @@ static inline int handle_evid(int evid, int neq,
           ind->wh0 != EVID0_SS20) {
         ind->on[cmt] = 1;
         ind->cacheME = 0;
-        InfusionRate[cmt] -= getDoseIndexPlus1(ind, ind->idx);
-        // if (ind->wh0 != EVID0_SS2 &&
-        //     ind->wh0 != EVID0_SS) {
-        //   int infEixds = ind->ixds;
-        //   if (infEixds > 0) {
-        //     pushPendingDose(infEixds+1, ind);
-        //   } else {
-        //     pushPendingDose(infEixds-1, ind);
-        //   }
-        // }
+        tmp = getDoseIndexPlus1(ind, ind->idx);
+        if (ind->whI == EVIDF_MODEL_DUR_ON && tmp == 0.0) {
+          yp[cmt] += getAmt(ind, id, cmt, getDoseIndex(ind, ind->idx), xout, yp);
+          break;
+        }
+        InfusionRate[cmt] -= tmp;
         if (ind->wh0 == EVID0_SS2 &&
             getAmt(ind, id, cmt, getDoseIndex(ind, ind->idx), xout, yp) !=
             getDoseIndex(ind, ind->idx)) {
@@ -587,13 +576,15 @@ static inline int handle_evid(int evid, int neq,
       // If cmt is off, don't remove rate....
       // Probably should throw an error if the infusion rate is on still.
       // ind->curDose and ind->curDoseS[cmt] are handled when the modeled item is turned on.
-      InfusionRate[cmt] += getDoseIndex(ind, ind->idx);
+      tmp = getDoseIndex(ind, ind->idx);
+      if (tmp == 0.0) break;
+      InfusionRate[cmt] += tmp;
       ind->cacheME=0;
       if (ind->wh0 == EVID0_SS2 &&
           getAmt(ind, id, cmt, getDoseIndex(ind, ind->idx), xout, yp) !=
           getDoseIndex(ind, ind->idx)) {
-        if (!(ind->err & 2097152)){
-          ind->err += 2097152;
+        if (!(ind->err & rxErrModeledFss2n2)){
+          ind->err += rxErrModeledFss2n2;
         }
         return 0;
       }
@@ -606,19 +597,13 @@ static inline int handle_evid(int evid, int neq,
       if (tmp > 0) {
         ind->curDose = tmp;
         ind->curDoseS[cmt] = ind->curDose;
-        // if (ind->wh0 != EVID0_SS2 &&
-        //     ind->wh0 != EVID0_SS) {
-        //   int infEixds;
-        //   handleInfusionGetEndOfInfusionIndex(ind->ixds, &infEixds, &rx_global, op, ind);
-        //   pushPendingDose(infEixds, ind);
-        // }
       }
       tmp = getAmt(ind, id, cmt, tmp, xout, yp);
       InfusionRate[cmt] += tmp;
       ind->cacheME=0;
       if (ind->wh0 == EVID0_SS2 && tmp != getDoseIndex(ind, ind->idx)) {
-        if (!(ind->err & 4194304)){
-          ind->err += 4194304;
+        if (!(ind->err & rxErrModeledFss2n3)){
+          ind->err += rxErrModeledFss2n3;
         }
         return 0;
       }
@@ -631,23 +616,18 @@ static inline int handle_evid(int evid, int neq,
       if (tmp > 0) {
         ind->curDose = tmp;
         ind->curDoseS[cmt] = ind->curDose;
-        // if (ind->wh0 != EVID0_SS2 &&
-        //     ind->wh0 != EVID0_SS) {
-        //   int infEixds;
-        //   handleInfusionGetEndOfInfusionIndex(ind->ixds, &infEixds, &rx_global, op, ind);
-        //   pushPendingDose(infEixds, ind);
-        // }
       }
       // if (!ind->doSS) {
-      //   REprintf("infusion dose at %f is %f ind->ixds: %d\n", xout, tmp, ind->ixds);
+      //   REprintf("infusion dose[cmt:%d] at %f is %f ind->ixds: %d\n",
+      //            cmt, xout, tmp, ind->ixds);
       // }
       InfusionRate[cmt] += tmp;
       ind->cacheME=0;
       if (ind->wh0 == EVID0_SS2 && getDoseIndex(ind, ind->idx) > 0 &&
           getAmt(ind, id, cmt, getDoseIndex(ind, ind->idx), xout, yp) !=
           getDoseIndex(ind, ind->idx)) {
-        if (!(ind->err & 4194304)){
-          ind->err += 4194304;
+        if (!(ind->err & rxErrModeledFss2n3)){
+          ind->err += rxErrModeledFss2n3;
         }
       }
       break;
@@ -662,6 +642,8 @@ static inline int handle_evid(int evid, int neq,
     case EVIDF_NORMAL:
       ind->on[cmt] = 1;
       if (ind->wh0 != EVID0_PHANTOM) {
+        // REprintf("handle_evid: EVIDF_NORMAL: %d; cmt: %d; dose: %f; xout: %f\n",
+        //          evid, cmt, getDoseIndex(ind, ind->idx), xout);
         yp[cmt] += getAmt(ind, id, cmt, getDoseIndex(ind, ind->idx), xout, yp);     //dosing before obs
       }
 		}
@@ -679,9 +661,10 @@ static inline int handleEvid1(int *i, rx_solve *rx, int *neq, double *yp, double
   if (!isObs(getEvid(ind, ind->ix[ind->idx]))) {
     syncIdx(ind);
   }
-  return handle_evid(getEvid(ind, ind->ix[ind->idx]), neq[0] + op->extraCmt,
-										 ind->BadDose, ind->InfusionRate, ind->dose, yp,
-										 *xout, neq[1], ind);
+  int he = handle_evid(getEvid(ind, ind->ix[ind->idx]), neq[0] + op->extraCmt,
+                       ind->BadDose, ind->InfusionRate, ind->dose, yp,
+                       *xout, neq[1], ind);
+  return he;
 }
 
 // time   amt rate          ii  addl evid            ss
