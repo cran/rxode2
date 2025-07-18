@@ -1,6 +1,6 @@
-6c0fa868c5787e11bd3f8e9b849b8593 *DESCRIPTION
+c0edac89f368db5a73060213fb658eb7 *DESCRIPTION
 c1080fb0d93322482c0c837968cd5db2 *NAMESPACE
-b0f6bce8db7d7bd1e4310d79920d4928 *NEWS.md
+351044b7b7ccb8eb415e4b7e1973f7c1 *NEWS.md
 e07eb8059da406242535c6015fa3c08a *R/000.R
 360a2456d47722520e51c3ce7757eb82 *R/CTS.R
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
@@ -49,6 +49,7 @@ eb6ba3b2936502fa60c782d4e821196b *R/piping-model.R
 c0fcaf3bfaa6ce5ec4ffbd4dd98d0654 *R/prelu.R
 0c172861276f12ee0fb4e7d82b144bac *R/print.R
 f8adaa07cec40f9a9c7ed600408e0436 *R/progress.R
+0a82ecf2d88b20d32a6912df3d93b3e9 *R/rbind.R
 16a6b3ab62f9e6282e444948759ef607 *R/reexport.R
 1e3a324274136b3283dbc202263c52f5 *R/register-s3.R
 f53e93cb6b27ca9c41648ef26d4c2085 *R/relu.R
@@ -75,7 +76,7 @@ e4a85b100f5b8aa72f12846ea3927c4c *R/rxUiBlessed.R
 859540f240be0d2b1ee18eb355bdafa1 *R/rxValidate.R
 68783e9885a0bee0c6e39e7d93b1b08c *R/rxode-options.R
 3d625a580a5084476af91489c1aa4e4d *R/rxode2.R
-1468a0f86fc041c2b0c8b40d554a3dab *R/rxode2_md5.R
+ffaad556b62d60ae68d3f4b68daab70e *R/rxode2_md5.R
 c1fcf074beb11b1d0369c0ac02283381 *R/rxrandom.R
 5ad2c4a516787feb3c4f39ba3c0ecd9d *R/rxrandomui.R
 1ea48176f4328ca5ad7efb5c13ad93d5 *R/rxsolve.R
@@ -117,7 +118,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 8080bb72687763adae3540339de4c066 *inst/doc/rxode2-syntax.Rmd
-7cd8c5628cac834ee0564031ab593879 *inst/doc/rxode2-syntax.html
+1ccd6818d534d89a705f46b9b91f1f02 *inst/doc/rxode2-syntax.html
 f2519760fc2a12a82de69f60f33dac15 *inst/include/needSortDefines.h
 a56cec6cfa31ade6139f91937dff0600 *inst/include/rxode2.h
 13f0192225d8bb522d686908a2f7ae90 *inst/include/rxode2_RcppExports.h
@@ -131,7 +132,7 @@ e0c024883f7bcf8fb67b9c320c1d1948 *inst/include/rxode2_control.h
 75b712e30054a0d2599ef2523bcc8bd5 *inst/include/rxode2parseHandleEvid.h
 97c79c7ebac80ea0570f843ec3f95186 *inst/include/rxode2parseSbuf.h
 e43d6ba134b68b84aa95fc7de73af051 *inst/include/rxode2parseStruct.h
-643bd7e908cf720f070586818e6646f1 *inst/include/rxode2parseVer.h
+aed14b94dcee6035eb9a00bb17eddca6 *inst/include/rxode2parseVer.h
 09969b66eaadb100a41c45417b0f93dd *inst/include/rxode2parse_control.h
 bae59ababd4ea18634f3d67def156fa7 *inst/include/rxode2ptr.h
 8e5949d8fd97e2c2cffba29ba8df2ae4 *inst/include/rxode2random_fillVec.h
@@ -528,7 +529,7 @@ aaa3b0ce74051746e7c2ae5178772553 *src/getOption.c
 d069b15dc9974469b45d9cbdc60a0715 *src/getOption.h
 1222754d072ac09045307fa5167db5bb *src/handle_evid.cpp
 38fcdba15c0b30d1105c604e1cbad90a *src/idamax.c
-c4f204847817ad2d7c91585d24ec606b *src/init.c
+da3198bf1af63e6ab3d794ad2c4a83ac *src/init.c
 ad576feb391cc73c6e802d6f0de9f6ac *src/install.libs.R
 21f03d32e6c4de50749ac8ccf46ccbc5 *src/intdy.c
 580648e4a05b2830a967ae208151bcd8 *src/isEt.c
@@ -745,6 +746,7 @@ a3f4261b8a7a0cd0237456403beb045b *tests/testthat/test-parsing.R
 2937ad15260c75d9c550c146435cd75a *tests/testthat/test-plot.R
 48884e7c40858ef00b6f522e7ceb2fa2 *tests/testthat/test-print.R
 2cd39d2d283f723c733b80df6e6cf788 *tests/testthat/test-random.R
+99df9ad48a409017e2f0090c0ab0299d *tests/testthat/test-rbind.R
 10edcba57cfd8bd478498e9580121bdb *tests/testthat/test-resample.R
 95d55ec36c5ff1de4f4efbc85e19e646 *tests/testthat/test-reset.R
 1a500123f5542db39096a385941c644f *tests/testthat/test-rhs.R
