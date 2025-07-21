@@ -1,6 +1,6 @@
-c0edac89f368db5a73060213fb658eb7 *DESCRIPTION
-c1080fb0d93322482c0c837968cd5db2 *NAMESPACE
-351044b7b7ccb8eb415e4b7e1973f7c1 *NEWS.md
+252f9a6b51a1bcc7633bc4da90298089 *DESCRIPTION
+45cc1f1f1a94cb6cfcfef2f874f2bf1f *NAMESPACE
+f747329743a3e9788aacf04bb6582f21 *NEWS.md
 e07eb8059da406242535c6015fa3c08a *R/000.R
 360a2456d47722520e51c3ce7757eb82 *R/CTS.R
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
@@ -49,7 +49,7 @@ eb6ba3b2936502fa60c782d4e821196b *R/piping-model.R
 c0fcaf3bfaa6ce5ec4ffbd4dd98d0654 *R/prelu.R
 0c172861276f12ee0fb4e7d82b144bac *R/print.R
 f8adaa07cec40f9a9c7ed600408e0436 *R/progress.R
-0a82ecf2d88b20d32a6912df3d93b3e9 *R/rbind.R
+d78278fea5e95fea73c9dd7ca60508c2 *R/rbind.R
 16a6b3ab62f9e6282e444948759ef607 *R/reexport.R
 1e3a324274136b3283dbc202263c52f5 *R/register-s3.R
 f53e93cb6b27ca9c41648ef26d4c2085 *R/relu.R
@@ -76,7 +76,7 @@ e4a85b100f5b8aa72f12846ea3927c4c *R/rxUiBlessed.R
 859540f240be0d2b1ee18eb355bdafa1 *R/rxValidate.R
 68783e9885a0bee0c6e39e7d93b1b08c *R/rxode-options.R
 3d625a580a5084476af91489c1aa4e4d *R/rxode2.R
-ffaad556b62d60ae68d3f4b68daab70e *R/rxode2_md5.R
+50646d590cc592aadceb03b4f2c85827 *R/rxode2_md5.R
 c1fcf074beb11b1d0369c0ac02283381 *R/rxrandom.R
 5ad2c4a516787feb3c4f39ba3c0ecd9d *R/rxrandomui.R
 1ea48176f4328ca5ad7efb5c13ad93d5 *R/rxsolve.R
@@ -118,7 +118,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 8080bb72687763adae3540339de4c066 *inst/doc/rxode2-syntax.Rmd
-1ccd6818d534d89a705f46b9b91f1f02 *inst/doc/rxode2-syntax.html
+565b8864afde541d8185b67c12c8c6be *inst/doc/rxode2-syntax.html
 f2519760fc2a12a82de69f60f33dac15 *inst/include/needSortDefines.h
 a56cec6cfa31ade6139f91937dff0600 *inst/include/rxode2.h
 13f0192225d8bb522d686908a2f7ae90 *inst/include/rxode2_RcppExports.h
@@ -132,7 +132,7 @@ e0c024883f7bcf8fb67b9c320c1d1948 *inst/include/rxode2_control.h
 75b712e30054a0d2599ef2523bcc8bd5 *inst/include/rxode2parseHandleEvid.h
 97c79c7ebac80ea0570f843ec3f95186 *inst/include/rxode2parseSbuf.h
 e43d6ba134b68b84aa95fc7de73af051 *inst/include/rxode2parseStruct.h
-aed14b94dcee6035eb9a00bb17eddca6 *inst/include/rxode2parseVer.h
+e1c293c76f8b8b651d1852a7a16a63b2 *inst/include/rxode2parseVer.h
 09969b66eaadb100a41c45417b0f93dd *inst/include/rxode2parse_control.h
 bae59ababd4ea18634f3d67def156fa7 *inst/include/rxode2ptr.h
 8e5949d8fd97e2c2cffba29ba8df2ae4 *inst/include/rxode2random_fillVec.h
@@ -140,7 +140,7 @@ bae59ababd4ea18634f3d67def156fa7 *inst/include/rxode2ptr.h
 299972cc617766625e3bf12938612bef *inst/po/en@quot/LC_MESSAGES/R-RxODE.mo
 4a53b9909e6141fcf4ae81bb6a84a466 *inst/po/en@quot/LC_MESSAGES/R-rxode2.mo
 d56d6e65fe9313f2fa32d768f07bacd7 *inst/po/en@quot/LC_MESSAGES/RxODE.mo
-c037ef2be29e442ae8689f241b536de8 *inst/tools/workaround.R
+a4f6bbfaf9fce19da6d35f9e8120fe50 *inst/tools/workaround.R
 49a8d8a2c81e927702893a696774a0cd *inst/tran.g
 fd97b398f2b822aa8fdd703cc0d3b0bc *inst/tutorials/rxode2-00-syntax/RxODE00syntax.Rmd
 fd0845800cc8fee7da1fba5ca6e25835 *inst/tutorials/rxode2-00-syntax/images/expandTutorial.png
@@ -497,9 +497,9 @@ c2b2043ee4e37e434f722bb7be0af291 *src/cfode_static.h
 b14234023dea7bec50575fc79e1b95b5 *src/checkmate.cpp
 0f33196cd822eaf2ecfeccad5eb1ed28 *src/checkmate.h
 afa613cc3353e86d79deb728aafad716 *src/checkmate_stub.c
-dc8d45cac1cd11b004b26e4027a05ead *src/codegen.c
+5b6c4c5d840dde5ffe1d5a32c94f8adf *src/codegen.c
 f085918e4ac08c3b765d636ff398799f *src/codegen.h
-b82a57d8afc4f92135e023068b53238c *src/codegen2.h
+e9304b8179e8b5b9d49b16a8f85fb7d0 *src/codegen2.h
 4d6d2634dd12183358220c9fa9bb4120 *src/common.c
 64f7f0ade87a5a2cea023ff281a7b02e *src/common.h
 ff7da8e3bcac4f9b39e955c479346808 *src/corfailure.c

@@ -1,37 +1,38 @@
 #include <time.h>
 #include <stdlib.h>
 unsigned long int __timeId=0;
+char *genRandomChar(void);
 void writeHeader(const char *md5, const char *extra) {
-sAppend(&sbOut, "#define _getRxSolve_ _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _evalUdf _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _solveData _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _assign_ptr _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _rxRmModelLib _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _rxGetModelLib _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _old_c _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _ptrid _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _rxIsCurrentC _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _sumPS _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _prodPS _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _prodType _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _sumType _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _update_par_ptr _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _getParCov _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _rxode2_rxAssignPtr _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _rxQr _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _compareFactorVal _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _sum _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _udf _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _sign _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _prod _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _max _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _min _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _transit4P _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _transit3P _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _assignFuns0 _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _assignFuns _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define _rxord _rx%s%s%ld\n", extra, md5, __timeId++);
-sAppend(&sbOut, "#define __assignFuns2 _rx%s%s%ld\n", extra, md5, __timeId++);
+sAppend(&sbOut, "#define _getRxSolve_ _rx%s%s%ld__getRxSolve__%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _evalUdf _rx%s%s%ld__evalUdf_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _solveData _rx%s%s%ld__solveData_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _assign_ptr _rx%s%s%ld__assign_ptr_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _rxRmModelLib _rx%s%s%ld__rxRmModelLib_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _rxGetModelLib _rx%s%s%ld__rxGetModelLib_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _old_c _rx%s%s%ld__old_c_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _ptrid _rx%s%s%ld__ptrid_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _rxIsCurrentC _rx%s%s%ld__rxIsCurrentC_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _sumPS _rx%s%s%ld__sumPS_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _prodPS _rx%s%s%ld__prodPS_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _prodType _rx%s%s%ld__prodType_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _sumType _rx%s%s%ld__sumType_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _update_par_ptr _rx%s%s%ld__update_par_ptr_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _getParCov _rx%s%s%ld__getParCov_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _rxode2_rxAssignPtr _rx%s%s%ld__rxode2_rxAssignPtr_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _rxQr _rx%s%s%ld__rxQr_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _compareFactorVal _rx%s%s%ld__compareFactorVal_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _sum _rx%s%s%ld__sum_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _udf _rx%s%s%ld__udf_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _sign _rx%s%s%ld__sign_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _prod _rx%s%s%ld__prod_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _max _rx%s%s%ld__max_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _min _rx%s%s%ld__min_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _transit4P _rx%s%s%ld__transit4P_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _transit3P _rx%s%s%ld__transit3P_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _assignFuns0 _rx%s%s%ld__assignFuns0_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _assignFuns _rx%s%s%ld__assignFuns_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define _rxord _rx%s%s%ld__rxord_%s\n", extra, md5, __timeId++, genRandomChar());
+sAppend(&sbOut, "#define __assignFuns2 _rx%s%s%ld___assignFuns2_%s\n", extra, md5, __timeId++, genRandomChar());
 }
 void writeBody0(void) {
 sAppendN(&sbOut, "_getRxSolve_t _getRxSolve_;\n", 28);
