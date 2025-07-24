@@ -1,6 +1,6 @@
-252f9a6b51a1bcc7633bc4da90298089 *DESCRIPTION
+e8fbc66ffd61ddac5c94c110c80d33ae *DESCRIPTION
 45cc1f1f1a94cb6cfcfef2f874f2bf1f *NAMESPACE
-f747329743a3e9788aacf04bb6582f21 *NEWS.md
+467c374c44b2d033ddb67e02e4c16430 *NEWS.md
 e07eb8059da406242535c6015fa3c08a *R/000.R
 360a2456d47722520e51c3ce7757eb82 *R/CTS.R
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
@@ -76,7 +76,7 @@ e4a85b100f5b8aa72f12846ea3927c4c *R/rxUiBlessed.R
 859540f240be0d2b1ee18eb355bdafa1 *R/rxValidate.R
 68783e9885a0bee0c6e39e7d93b1b08c *R/rxode-options.R
 3d625a580a5084476af91489c1aa4e4d *R/rxode2.R
-50646d590cc592aadceb03b4f2c85827 *R/rxode2_md5.R
+a477b6ca71c43a36b4226be1d90df21d *R/rxode2_md5.R
 c1fcf074beb11b1d0369c0ac02283381 *R/rxrandom.R
 5ad2c4a516787feb3c4f39ba3c0ecd9d *R/rxrandomui.R
 1ea48176f4328ca5ad7efb5c13ad93d5 *R/rxsolve.R
@@ -94,7 +94,7 @@ bb112e2b3ceef3740b23dcf13aff9517 *R/ui-getControl.R
 4e6b8205ae0324ed20694b1e31790493 *R/ui-rename.R
 058b43d9e8df5a0edb90472caad15935 *R/ui.R
 39ece1a7c31e2c007029927637a3698e *R/units.R
-aaf984b883462b3e7629282b4df78022 *R/utils.R
+288d61bcfba127231a432bee3f25fa3d *R/utils.R
 aa90bd510d4795e1322e30f05b916fe1 *R/version.R
 0b3bb36f50033ff26058541591abb2ce *README.md
 860492c3cd06ce47a71cff725e17bb57 *build/buildLinCmt.R
@@ -118,7 +118,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 8080bb72687763adae3540339de4c066 *inst/doc/rxode2-syntax.Rmd
-565b8864afde541d8185b67c12c8c6be *inst/doc/rxode2-syntax.html
+8d1da88f80ec56b0f3ce16119e48ab95 *inst/doc/rxode2-syntax.html
 f2519760fc2a12a82de69f60f33dac15 *inst/include/needSortDefines.h
 a56cec6cfa31ade6139f91937dff0600 *inst/include/rxode2.h
 13f0192225d8bb522d686908a2f7ae90 *inst/include/rxode2_RcppExports.h
@@ -132,7 +132,7 @@ e0c024883f7bcf8fb67b9c320c1d1948 *inst/include/rxode2_control.h
 75b712e30054a0d2599ef2523bcc8bd5 *inst/include/rxode2parseHandleEvid.h
 97c79c7ebac80ea0570f843ec3f95186 *inst/include/rxode2parseSbuf.h
 e43d6ba134b68b84aa95fc7de73af051 *inst/include/rxode2parseStruct.h
-e1c293c76f8b8b651d1852a7a16a63b2 *inst/include/rxode2parseVer.h
+4d97f6345eeea3e0682f267ceb7a926c *inst/include/rxode2parseVer.h
 09969b66eaadb100a41c45417b0f93dd *inst/include/rxode2parse_control.h
 bae59ababd4ea18634f3d67def156fa7 *inst/include/rxode2ptr.h
 8e5949d8fd97e2c2cffba29ba8df2ae4 *inst/include/rxode2random_fillVec.h
@@ -435,7 +435,7 @@ e7ee787481e91f74b7331b933d1cec44 *man/rxToSE.Rd
 b0db5e972857bd53824b932c5d0d03c1 *man/rxUiDecompress.Rd
 f6562533917ce1736b6d27402172543f *man/rxUiDeparse.Rd
 2fdb577480df8287d45a916db6484897 *man/rxUiGet.Rd
-e04f7186a9bd38e118af918bbe6fc46c *man/rxUnloadAll.Rd
+2ab3f0d358fd14f057f99883b4b584f1 *man/rxUnloadAll.Rd
 c518326919334ac7fd84ca561e9171d6 *man/rxUse.Rd
 ec249b327f20f049304841937da07b35 *man/rxValidate.Rd
 79b0715c464ec7bb84b2f95e5fbd625a *man/rxVersion.Rd
