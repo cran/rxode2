@@ -57,6 +57,8 @@ rxode2_fn2 d2ELUa;
 
 rxode2_fn3 logit;
 rxode2_fn3 expit;
+rxode2_fn3 probitInv;
+rxode2_fn3 probit;
 rxode2_fn2 gammap;
 rxode2_fn2 gammaq;
 rxode2_fn2 lowergamma;
@@ -206,6 +208,36 @@ double _sign(unsigned int n, ...) {
   va_end(valist);
   return s;
 }
+
+double _mix(int _cSub, unsigned int n,  ...) {
+  rx_solving_options_ind* ind = &(_solveData->subjects[_cSub]);
+  va_list valist;
+  va_start(valist, n);
+  double ret = NA_REAL;
+  double p = 0.0;
+  double u = ind->mixunif; // sampled once per patient
+  int found = 0;
+  double v = 0.0;
+  for (unsigned int i = 0; i < n-1; i+= 2) {
+    v = va_arg(valist, double);
+    p += va_arg(valist, double);
+    if (found == 0) {
+      if (u < p) {
+        ret = v;
+        ind->mixest = i/2 + 1; // 1-based index
+        found = 1;
+      }
+    }
+  }
+  v = va_arg(valist, double); // other possibility
+  if (found == 0) {
+    ind->mixest = _solveData->mixnum;
+    ret = v;
+  }
+  va_end(valist);
+  return ret;
+}
+
 
 double _rxord(int _cSub, unsigned int n,  ...) {
   rx_solving_options_ind* ind = &(_solveData->subjects[_cSub]);
@@ -378,7 +410,9 @@ void _assignFuns0(void) {
   lowergamma = (rxode2_fn2) R_GetCCallable("rxode2","lowergamma");
   gammapDer  = (rxode2_fn2) R_GetCCallable("rxode2","gammapDer");
   logit = (rxode2_fn3) R_GetCCallable("rxode2", "logit");
+  probit = (rxode2_fn3) R_GetCCallable("rxode2", "probit");
   expit = (rxode2_fn3) R_GetCCallable("rxode2", "expit");
+  probitInv = (rxode2_fn3) R_GetCCallable("rxode2", "probitInv");
   simeta =(_simfun) R_GetCCallable("rxode2", "simeta");
   simeps =(_simfun) R_GetCCallable("rxode2", "simeps");
 

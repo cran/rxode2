@@ -42,6 +42,10 @@
 #'
 #' - `assertRxUiRandomOnIdOnly` -- Make sure there are only random effects at the ID level
 #'
+#' - `assertRxUiIovNoCor` -- Make sure that the IOV model does not have any correlations
+#'
+#' - `assertRxUiNoMix` -- Make sure that the model does not have a mixture model inside it
+#'
 #' @return the rxUi model
 #'
 #' @inheritParams checkmate::assertIntegerish
@@ -149,6 +153,31 @@ assertRxUiPrediction <- function(ui, extra="", .var.name=.vname(ui)) {
   if (is.null(.predDf)) {
     stop("there must be at least one prediction in the model({}) block", extra, ".  Use `~` for predictions",
          call.=FALSE)
+  }
+  invisible(ui)
+}
+#' @export
+#' @rdname assertRxUi
+assertRxUiIovNoCor <- function(ui, extra="", .var.name=.vname(ui)) {
+  ui <- assertRxUi(ui, extra=extra, .var.name=.var.name)
+  .iniDf <- ui$iniDf
+  .w <- which(!is.na(.iniDf$condition) &
+                .iniDf$condition != "id" &
+                 is.na(.iniDf$err) &
+                 .iniDf$neta1 != .iniDf$neta2)
+  if (length(.w) > 0) {
+    stop("'", .var.name, "' cannot have covariance/correlation for IOV related components", extra, call.=FALSE)
+  }
+  invisible(ui)
+}
+
+#' @export
+#' @rdname assertRxUi
+assertRxUiNoMix <- function(ui, extra="", .var.name=.vname(ui)) {
+  force(.var.name)
+  ui <- assertRxUi(ui, extra=extra, .var.name=.var.name)
+  if (!is.null(ui$mixProbs)) {
+    stop("'", .var.name, "' cannot have a mixture model (ie `mix()`)", extra, call.=FALSE)
   }
   invisible(ui)
 }

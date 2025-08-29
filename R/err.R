@@ -1210,6 +1210,7 @@ rxErrTypeCombine <- function(oldErrType, newErrType) {
     .udfUiEnv$lhs <- NULL
     .udfUiEnv$parsing <- FALSE
   })
+  .udfUiEnv$probs <- NULL
   .udfUiEnv$parsing <- TRUE
   # ntheta neta1 neta2   name lower       est   upper   fix  err  label
   # backTransform condition trLow trHi
@@ -1221,7 +1222,17 @@ rxErrTypeCombine <- function(oldErrType, newErrType) {
   .env$rxUdfUiCount <- new.env(parent=emptyenv())
   .env$before <- list()
   .env$after <- list()
-  .env$eta <- dimnames(ini)[[1]]
+  .env$level <- NULL
+  if (is.matrix(ini)) {
+    .env$eta <- dimnames(ini)[[1]]
+  } else {
+    .env$eta <- dimnames(ini$id)[[1]]
+    ## Get the levels of the ini block
+    for (v in names(ini)) {
+      if (v == "id") next
+      .env$level <- c(.env$level, dimnames(ini[[v]])[[1]])
+    }
+  }
   .env$top <- TRUE
   if (!inherits(ini, "lotriFix") && inherits(ini, "matrix")) {
     class(ini) <- c("lotriFix", class(ini))
@@ -1403,6 +1414,7 @@ rxErrTypeCombine <- function(oldErrType, newErrType) {
                                   }, integer(1))
       }
       .env$extraDvid <- paste0("dvid(", paste(.env$predDf$cmt, collapse = ","), ")")
+      .env$mixProbs <- .udfUiEnv$probs
       # Cleanup the environment
       .rm <- intersect(c("curCondition", "curDvid", "curVar", "df",
                          "errTypeInfo", "err", "hasNonErrorTerm", "isAnAdditiveExpression",
