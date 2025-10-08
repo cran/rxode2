@@ -1,5 +1,5 @@
 Package: rxode2
-Version: 4.1.0
+Version: 4.1.1
 Title: Facilities for Simulating from ODE-Based Models
 Authors@R: c(
    person("Matthew L.","Fidler", role = c("aut", "cre"), email = "matthew.fidler@gmail.com", comment=c(ORCID="0000-0001-8538-6691")),
@@ -67,7 +67,7 @@ VignetteBuilder: knitr
 License: GPL (>= 3)
 URL: https://nlmixr2.github.io/rxode2/,
         https://github.com/nlmixr2/rxode2/
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Biarch: true
 LinkingTo: sitmo, lotri (>= 1.0.0), PreciseSums (>= 0.7), Rcpp,
         RcppArmadillo (>= 0.9.300.2.0), BH, RcppParallel, RcppEigen (>=
@@ -76,7 +76,7 @@ Encoding: UTF-8
 LazyData: true
 Language: en-US
 Config/testthat/edition: 3
-Packaged: 2025-08-29 17:11:03 UTC; matt
+Packaged: 2025-10-08 00:22:30 UTC; matt
 Author: Matthew L. Fidler [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-8538-6691>),
   Wenping Wang [aut],
@@ -112,4 +112,4 @@ Author: Matthew L. Fidler [aut, cre] (ORCID:
   Yu Feng [ctb],
   Zufar Mulyukov [ctb]
 Repository: CRAN
-Date/Publication: 2025-08-29 18:20:02 UTC
+Date/Publication: 2025-10-08 05:10:17 UTC
