@@ -1,3 +1,19 @@
+# rxode2 5.0.0
+
+- Better error for `tad(depot)` when `linCmt()` doesn't include a
+  depot compartment.
+
+- Remove `qs` dependency; For rxode2 ui objects, use lists instead of
+  serialized objects. The internal C++ code still generates `qs2`
+  sterilization objects (#950)
+
+- Fixed translation for censoring/limit to account for a possible
+  `CMT` variable before the `CENS` / `LIMIT` column (#951, #952)
+
+- Added `dmexpit()` for getting the diagonal Jacobian.
+
+- Added special handling of `mixest` and `mixunif`.
+
 # rxode2 4.1.1
 
 - Stacking for multiple-endpoint `ipredSim` now matches
@@ -16,6 +32,10 @@
 
 - When referencing `cmt` in models, the variable is forced to be `CMT`
   (related to #939)
+
+- Added ability to use `mixest` or `mixunif` to preserve the selected
+  mixture estimates when performing a table step for a nlmixr2 mixture
+  model (#942)
 
 # rxode2 4.1.0
 
