@@ -90,6 +90,8 @@ SEXP _rxode2_rxRmvnSEXP(SEXP, SEXP, SEXP, SEXP, SEXP,
 SEXP _rxode2_itostr(SEXP, SEXP);
 SEXP _rxode2_itoletter(SEXP, SEXP);
 
+SEXP _rxode2_rxGetSerialType_(SEXP);
+
 SEXP _cbindOme(SEXP et_, SEXP mat_, SEXP n_);
 
 SEXP _rxode2_nestingInfo_(SEXP omega, SEXP data);
@@ -300,8 +302,8 @@ void handleTlast(double *time, rx_solving_options_ind *ind);
 SEXP _rxode2_rxrandnV(SEXP, SEXP);
 SEXP _rxode2_rxErf(SEXP);
 
-void simeps(int id);
-void simeta(int id);
+void simeps(void);
+void simeta(void);
 
 void nullGlobals(void);
 SEXP _rxode2_codeLoaded(void);
@@ -600,6 +602,7 @@ SEXP _rxode2_mlogit_j(SEXP x);
 void R_init_rxode2(DllInfo *info){
   allocExtraDosingC();
   R_CallMethodDef callMethods[]  = {
+    {"_rxode2_rxGetSerialType_", (DL_FUNC) &_rxode2_rxGetSerialType_, 1},
     {"_rxode2_mlogit_f", (DL_FUNC) &_rxode2_mlogit_f, 2},
     {"_rxode2_mlogit_j", (DL_FUNC) &_rxode2_mlogit_j, 1},
     {"_rxode2_mexpit", (DL_FUNC) &_rxode2_mexpit, 1},
@@ -856,6 +859,8 @@ void R_init_rxode2(DllInfo *info){
   R_RegisterCCallable("rxode2", "compareFactorVal", (DL_FUNC) &compareFactorVal);
   R_RegisterCCallable("rxode2", "handleTlast", (DL_FUNC) &handleTlast);
   R_RegisterCCallable("rxode2", "phi", (DL_FUNC) &phi);
+  R_RegisterCCallable("rxode2", "_setThreadInd", (DL_FUNC) &_setThreadInd);
+
   R_RegisterCCallable("rxode2", "ribeta", (DL_FUNC) &ribeta);
   R_RegisterCCallable("rxode2", "ribinom", (DL_FUNC) &ribinom);
   R_RegisterCCallable("rxode2", "ricauchy", (DL_FUNC) &ricauchy);

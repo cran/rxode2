@@ -1339,6 +1339,18 @@ rxLastCompile <- function() {
   })
   return(invisible(.rxCompileEnv$lst))
 }
+#' Get the number of loaded rxode2 DLLs
+#'
+#'
+#' @return Number of loaded rxode2 DLLs
+#' @export
+#' @author Matthew L. Fidler
+#' @examples
+#' rxNumLoaded()
+rxNumLoaded <- function() {
+  .dlls <- getLoadedDLLs()
+  length(grep(rex::rex(start, "rx_", n_times(any, 32), or("_x64", "_i386", "_", "")), names(.dlls)))
+}
 .pkg <- NULL
 #' @rdname rxCompile
 #' @export
