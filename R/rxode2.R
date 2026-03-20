@@ -231,12 +231,12 @@ NA_LOGICAL <- NA # nolint
 #'
 #' # QD (once daily) dosing for 5 days.
 #'
-#' qd <- et(amountUnits = "ug", timeUnits = "hours") %>%
+#' qd <- et(amountUnits = "ug", timeUnits = "hours") |>
 #'   et(amt = 10000, addl = 4, ii = 24)
 #'
 #' # Sample the system hourly during the first day, every 8 hours
 #' # then after
-#' qd <- qd %>% et(0:24) %>%
+#' qd <- qd |> et(0:24) |>
 #'   et(from = 24 + 8, to = 5 * 24, by = 8)
 #'
 #' # Step 3 - solve the system
@@ -381,7 +381,7 @@ rxode2 <- # nolint
     .env$missing.modName <- missing(modName)
     wd <- .normalizePath(wd, "/", mustWork = FALSE)
     if (.env$missing.modName) {
-      if (rxode2.tempfiles) {
+      if (getOption("rxode2.tempfiles", TRUE)) {
         .env$mdir <- suppressMessages(.normalizePath(rxTempDir(), mustWork = FALSE))
       } else {
         .env$mdir <- suppressMessages(.normalizePath(wd, mustWork = FALSE))
@@ -446,7 +446,7 @@ rxode2 <- # nolint
         .p <- .ret["params"]
         .ini <- names(.mv$.ini)
         .init <- rxode2::rxInit(rxDll)
-        .ret$params <- .ret$params[!(.ret$params %in% names(.init))]
+        .ret$params <- .ret$params[!(.ret$params %in%  names(.init))]
         class(.ret) <- "list"
         return(.ret)
       })
@@ -462,7 +462,7 @@ rxode2 <- # nolint
     .env$stateExtra <- .extra
     .env$lhs <- .env$.mv$lhs
     .env$params <- .env$.mv$params
-    .env$version <- rxode2::rxVersion()["version"]
+    .env$version <- .rxVersion["version"]
     .env$solve <- eval(bquote(function(..., returnType= "matrix", object = NULL) {
       rxode2::rxSolve(object = get("rxDll", envir = .(.env)), ..., returnType = "matrix")
     }))
@@ -1044,10 +1044,11 @@ rxMd5 <- function(model, # Model File
         stop("unknown model", call. = FALSE)
       }
     }
-    rxSyncOptions()
+    ## rxSyncOptions()
     .tmp <- c(
-      rxode2.syntax.allow.ini, rxode2.calculate.jacobian,
-      rxode2.calculate.sensitivity)
+      getOption("rxode2.syntax.allow.ini", TRUE),
+      getOption("rxode2.calculate.jacobian", FALSE),
+      getOption("rxode2.calculate.sensitivity", FALSE))
     .ret <- c(
       .ret, .tmp, .rxIndLinStrategy, .rxIndLinState,
       .linCmtSens, .udfMd5Info(), .rxFullPrint
@@ -1060,7 +1061,7 @@ rxMd5 <- function(model, # Model File
     ## new rxode2 DLLs gives different digests.
     .ret <- c(.ret, .md5Rx)
     ## Add version and github repository information
-    .ret <- c(.ret, rxode2::rxVersion())
+    .ret <- c(.ret, .rxVersion)
     return(list(
       text = model,
       digest = digest::digest(list(.ret, .indLinInfo), serialize = TRUE, algo = "md5")
@@ -1309,6 +1310,7 @@ rxCompile <- function(model, dir, prefix, force = FALSE, modName = NULL,
 }
 
 .rxCompileEnv <- new.env(parent = emptyenv())
+.rxCompileEnv$success <- TRUE
 .rxCompileEnv$lst <- list()
 #' Get the last compiled model information as alist
 #'
@@ -1338,6 +1340,29 @@ rxLastCompile <- function() {
     message(.rxCompileEnv$lst[[nm]])
   })
   return(invisible(.rxCompileEnv$lst))
+}
+#' Was the last compilation successful?
+#'
+#' @return this determines if the last compilation was successful.  This is useful for
+#'   debugging and testing purposes.
+#'
+#' @export
+#'
+#' @author Matthew L. Fidler
+#'
+#' @keywords internal
+#'
+#' @examples
+#'
+#' .rxLastCompileSuccess()
+#'
+.rxLastCompileSuccess <- function(set) {
+  if (missing(set)) {
+    return(.rxCompileEnv$success)
+  } else {
+    .rxCompileEnv$success <- set
+  }
+  .rxCompileEnv$success
 }
 #' Get the number of loaded rxode2 DLLs
 #'
@@ -1369,7 +1394,7 @@ rxCompile.rxModelVars <- function(model, # Model
     prefix <- .rxPre(model, modName)
   }
   if (is.null(dir)) {
-    if (rxode2.tempfiles) {
+    if (getOption("rxode2.tempfiles", TRUE)) {
       .dir <- file.path(rxTempDir(), paste0(prefix, ".rxd"))
     } else {
       .dir <- getwd()
@@ -1537,6 +1562,7 @@ rxCompile.rxModelVars <- function(model, # Model
         if (!(all(.stderr == "") && length(.stderr) == 1)) {
           .rxCompileEnv$lst[["stderr"]] <- paste(.stderr, sep = "\n")
         }
+        .rxCompileEnv$success <- TRUE
         .badBuild <- function(msg, cSrc = TRUE) {
           .rxCompileEnv$lst[["msg"]] <- gettext(msg)
           .rxCompileEnv$lst[["stdout"]] <- rawToChar(.out$stdout)
@@ -1546,6 +1572,7 @@ rxCompile.rxModelVars <- function(model, # Model
             dyn.load(.cDllFile)
           }
           message("Error building the model: see rxode2::rxLastCompile()")
+          .rxCompileEnv$success <- FALSE
           if (.Platform$OS.type == "windows") {
             message("this could be because your Rtools is not set up correctly")
           } else {

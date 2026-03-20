@@ -68,7 +68,7 @@
 #' @export
 rxCat <- function(a, ...) {
   ## nocov start
-  if (rxode2.verbose) {
+  if (getOption("rxode2.verbose", TRUE)) {
     if (is(a, "rxode2")) {
       message(rxode2::rxNorm(a), appendLF = FALSE)
     } else {
@@ -416,6 +416,13 @@ gammapInva <- function(x, p) {
                                      "probit", "probit + yeoJohnson",
                                      "logit + boxCox", "probit + boxCox"),
                          inverse=FALSE) {
+  .w <- which(is.na(x))
+  if (length(.w) > 0L) {
+    .ret <- numeric(length(x))
+    .ret[.w] <- NA_real_
+    .ret[-.w] <- .rxTransform(x[-.w], lambda, low, high, transform, inverse)
+    return(.ret)
+  }
   if (is.integer(transform)) {
   } else {
     transform <- factor(match.arg(transform),
@@ -847,11 +854,9 @@ rxUnloadAll <- function(set=TRUE) {
 #' print(pi)
 .rxWithOptions <- function(ops, code) {
   .old <- options() # nolint
-  rxSyncOptions()
   do.call(options, as.list(ops)) # nolint
   on.exit({
     options(.old) # nolint
-    rxSyncOptions()
   })
   force(code)
 }
@@ -982,7 +987,7 @@ is.latex <- function() {
   rxReq("knitr")
   if (knitr::is_latex_output()) {
     rxReq("kableExtra")
-    kableExtra::kbl(table, longtable=TRUE, booktabs=TRUE, caption=caption) %>%
+    kableExtra::kbl(table, longtable=TRUE, booktabs=TRUE, caption=caption) |>
       kableExtra::kable_styling(latex_options=c("repeat_header", "striped", "hold_position"))
   } else if (knitr::is_html_output(excludes = "gfm")) {
     rxReq("DT")

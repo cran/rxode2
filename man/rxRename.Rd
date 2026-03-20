@@ -14,9 +14,9 @@ rxRename(.data, ..., envir = parent.frame())
 
 .rxRename(.data, ..., envir = parent.frame())
 
-rename.rxUi(.data, ...)
+\method{rename}{rxUi}(.data, ...)
 
-rename.function(.data, ...)
+\method{rename}{`function`}(.data, ...)
 
 \method{rxRename}{rxUi}(.data, ...)
 
@@ -69,7 +69,7 @@ ocmt <- function() {
   })
 }
 
-ocmt \%>\% rxRename(cpParent=cp)
+ocmt |> rxRename(cpParent=cp)
 
 }
 \author{

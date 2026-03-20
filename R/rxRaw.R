@@ -16,6 +16,25 @@
   }
   FALSE
 }
+#' Get the Default Serialization Type
+#'
+#' @return string indicating the default serialization type
+#'
+#' @export
+#'
+#' @author Matthew L. Fidler
+#'
+#' @examples
+#'
+#' rxGetDefaultSerialize()
+#'
+rxGetDefaultSerialize <- function() {
+  op <- getOption("rxode2.serialize.type", "bzip2")
+  if (!op %in% c("qs2", "qdata", "base", "bzip2", "xz")) {
+    stop("option 'rxode2.serialize.type' must be one of 'qs2', 'qdata', 'base', 'bzip2' or 'xz'", call.=FALSE)
+  }
+  op
+}
 #' Serialize an R Object to a Raw Vector
 #'
 #' @param x object to serialize
@@ -37,11 +56,7 @@
 rxSerialize <- function(x, type=c("xz", "bzip2", "qs2", "qdata", "base")) {
   ## Suggested for security reasons to limit what can be deserialized
   if (missing(type)) {
-    op <- rxode2.serialize.type
-    if (!op %in% c("qs2", "qdata", "base", "bzip2", "xz")) {
-      stop("option 'rxode2.serialize.type' must be one of 'qs2', 'qdata', 'base', 'bzip2' or 'xz'", call.=FALSE)
-    }
-    type <- op
+    type <- rxGetDefaultSerialize()
   }
   if (!.validSerializationObject(x)) {
     .cls <- class(x)
@@ -102,7 +117,7 @@ rxDeserialize <- function(x) {
                      },
                      qs = {
                        rxReq("qs")
-                       qs::qdeserialize(x)
+                       .Call(`_rxode2_qsDes`, x)
                      },
                      bzip2 = {
                         unserialize(memDecompress(x, type="bzip2"))
@@ -131,37 +146,36 @@ rxDeserialize <- function(x) {
 #' This function converts a raw vector or R object to C code that
 #' is used in the rxode2 model
 #'
-#' @return character string of C code
+#' @return raw vector for conversion to C in the codegen procedure
 #'
 #' @keywords internal
 #' @inherit rxSerialize
-#' @param raw raw vector or R object to convert
+#' @param  raw vector or R object to convert
 #' @export
 #' @author Matthew L. Fidler
 #' @examples
 #'
-#' message(rxRawToC(mtcars))
+#' rxRawToC(mtcars)
 #'
 rxRawToC <- function(raw, type=c("xz", "qs2", "qdata", "base", "bzip2")) {
   if (missing(type)) {
-    op <- rxode2.serialize.type
-    if (!op %in% c("qs2", "qdata", "base", "bzip2", "xz")) {
-      stop("option 'rxode2.serialize.type' must be one of 'qs2', 'qdata', 'base', 'bzip2', or 'xz'", call.=FALSE)
-    }
-    type <- op
+    type <- rxGetDefaultSerialize()
   }
   if (inherits(raw, "raw")) {
-    .ret <- paste0("    SEXP rw    = PROTECT(Rf_allocVector(RAWSXP, ",
-                   length(raw),
-                   "));pro++;\n",
-                   "    unsigned char r[]={",
-                   paste(paste0(ifelse((seq_along(raw) - 1L) %% 10L == 0L, "\n                0x", "0x"),
-                                sprintf("%02X", as.integer(raw))),
-                        collapse=", "),
-                   "\n                };\n",
-                   "    memcpy(RAW(rw), r, sizeof(r));")
-    .ret
+    raw
   } else {
     rxRawToC(rxSerialize(raw, type=type))
   }
+}
+
+#' Deserialize a Raw Vector using qs
+#'
+#' @param x raw vector to deserialize using qs (not on CRAN any more)
+#' @return qs::deserialize (if qs is available) of x
+#' @export
+#' @keywords internal
+#' @author Matthew L. Fidler
+rxOldQsDes <- function(x) {
+  rxReq("qs")
+  .Call(`_rxode2_qsDes`, x)
 }

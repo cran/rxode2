@@ -15,6 +15,14 @@ static void loadQs() {
   }
 }
 
+extern "C" SEXP _rxode2_qsDes(SEXP const x) {
+BEGIN_RCPP
+  Rcpp::Environment qs_ = loadNamespaceQs("qs");
+  Rcpp::Function f = qs_.get("qdeserialize");
+  return f(x);
+END_RCPP
+}
+
 Rcpp::Function getRxFn(std::string name);
 
 extern "C" SEXP getRxode2ParseDf(void) {
@@ -36,7 +44,7 @@ extern "C" SEXP getRxode2ParseGetPointerAssignment(void) {
 }
 
 //[[Rcpp::export]]
-Rcpp::CharacterVector rxQs(SEXP const x) {
+SEXP rxQs(SEXP const x) {
   Rcpp::Function f = getRxFn("rxRawToC");
   return f(x);
 }
@@ -78,8 +86,10 @@ bool rxParseSetSilentErr(int silent){
 //'
 //' @keywords internal
 //'
+//' @export
+//'
 //' @return a string indicating the serialization type:
-//'    "qs2", "qdata", "qs", "base", or "unknown"
+//'    "qs2", "qdata", "qs", "bzip2", "xz",  "base", or "unknown"
 //[[Rcpp::export]]
 Rcpp::CharacterVector rxGetSerialType_(SEXP raw) {
   if (TYPEOF(raw) != RAWSXP) {

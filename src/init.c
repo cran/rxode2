@@ -100,6 +100,7 @@ SEXP _rxode2_isNullZero(SEXP in);
 
 SEXP rxode2_get_mv(void);
 SEXP _rxode2_rxGetSeed(void);
+SEXP _rxode2_setGlobalSeed(SEXP);
 
 SEXP _gammap(SEXP, SEXP);
 SEXP _gammaq(SEXP, SEXP);
@@ -240,6 +241,8 @@ SEXP _rxode2_convertId_(SEXP);
 
 SEXP _rxode2_rpp_(SEXP nS, SEXP lambdaS, SEXP gammaS, SEXP probS, SEXP t0S,
                   SEXP tmaxS, SEXP randomOrderS);
+
+SEXP _rxode2_qsDes(SEXP);
 
 extern int rxIsCurrentC(SEXP obj);
 
@@ -602,6 +605,7 @@ SEXP _rxode2_mlogit_j(SEXP x);
 void R_init_rxode2(DllInfo *info){
   allocExtraDosingC();
   R_CallMethodDef callMethods[]  = {
+    {"_rxode2_qsDes", (DL_FUNC) &_rxode2_qsDes, 1},
     {"_rxode2_rxGetSerialType_", (DL_FUNC) &_rxode2_rxGetSerialType_, 1},
     {"_rxode2_mlogit_f", (DL_FUNC) &_rxode2_mlogit_f, 2},
     {"_rxode2_mlogit_j", (DL_FUNC) &_rxode2_mlogit_j, 1},
@@ -662,6 +666,7 @@ void R_init_rxode2(DllInfo *info){
     {"_rxode2_isLinCmt", (DL_FUNC) &_rxode2_isLinCmt, 0},
     {"rxode2_get_mv", (DL_FUNC) &rxode2_get_mv, 0},
     {"_rxode2_rxGetSeed", (DL_FUNC) &_rxode2_rxGetSeed, 0},
+    {"_rxode2_setGlobalSeed", (DL_FUNC) &_rxode2_setGlobalSeed, 1},
     {"_rxode2_rxInv", (DL_FUNC) &_rxode2_rxInv, 1},
     {"_rxCholInv", (DL_FUNC) &_rxCholInv, 3},
     {"_rxode2_rxSymInvCholEnvCalculate", (DL_FUNC) &_rxode2_rxSymInvCholEnvCalculate, 3},
