@@ -112,5 +112,10 @@
 #define Rxc_linCmtHmeanO 107
 #define Rxc_linCmtSuspect 108
 #define Rxc_linCmtForwardMax 109
-#define Rxc__zeros 110
+#define Rxc_indOwnAlloc 110
+#define Rxc_maxExtra 111
+#define Rxc_tolFactor 112
+#define Rxc_serializeFile 113
+#define Rxc_dense 114
+#define Rxc__zeros 115
 #endif // __rxode2_control_H__

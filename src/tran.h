@@ -20,6 +20,13 @@ typedef struct symtab {
   vLines strVal; /* symbol string for rxode2 assigned strings */
   int *strValI; /* which variable is assigned a string */
   int *strValII; /* The number that the string is assigned (what C sees) */
+  vLines strCmp; /* symbol string: compared covariates in first-seen order */
+  vLines strCmpVal; /* compared strings in first-seen order */
+  int *strCmpN; /* number of compared strings per covariate */
+  int *strCmpValI; /* which covariate index each compared string belongs to */
+  const char *strCmpCurCov; /* current comparison covariate while parsing */
+  const char *strCmpCurStr; /* current comparison string while parsing */
+  int strCmpCurType; /* current string comparison operator while parsing */
   int lhi; // ith for lhs
   int *lho; /* lhs order */
   int *lh;        /*
@@ -92,6 +99,8 @@ lhs symbols?
   int hasKa;
   int allocS;
   int allocSV;
+  int allocSC;
+  int allocSCV;
   int allocD;
   int matn;
   int matnf;
@@ -112,6 +121,9 @@ lhs symbols?
   int lvlStr;
   int dummyLhs;
   int hasMix; // Has mixture function
+  int evid_; // pushing evid_() flag
+  int *splitBolus; // source then target de indexes (+1)
+  int splitBolusN;
 } symtab;
 
 extern symtab tb;
@@ -142,6 +154,7 @@ extern vLines sbPm, sbPmDt, sbNrmL;
 #define TMATF 20
 #define TLIN 21
 #define TNONE 22
+#define TEVID 23
 
 // new de type
 #define fromDDT 2
@@ -202,6 +215,7 @@ typedef struct nodeInfo {
   int theta0_noout;
   int theta;
   int cmt_statement;
+  int splitBolus_statement;
   int param_statement;
   int interp_statement;
   int dvid_statementI;
@@ -212,8 +226,18 @@ typedef struct nodeInfo {
   int equality_str1;
   int equality_str2;
   int simfun_statement;
+  int obs_statement;
+  int evid_statement;
+  int bolus_statement;
+  int infuse_statement;
+  int infuseDur_statement;
+  int reset_statement;
+  int replace_statement;
+  int multiply_statement;
+  int phantom_statement;
   int relational_op;
   int string;
+  int mod_expression;
 } nodeInfo;
 
 static inline void niReset(nodeInfo *ni){
@@ -264,6 +288,7 @@ static inline void niReset(nodeInfo *ni){
   ni->theta0 = -1;
   ni->theta0_noout = -1;
   ni->cmt_statement = -1;
+  ni->splitBolus_statement = -1;
   ni->param_statement = -1;
   ni->interp_statement = -1;
   ni->dvid_statementI = -1;
@@ -274,8 +299,18 @@ static inline void niReset(nodeInfo *ni){
   ni->equality_str1 = -1;
   ni->equality_str2 = -1;
   ni->simfun_statement = -1;
+  ni->obs_statement = -1;
+  ni->evid_statement = -1;
+  ni->bolus_statement = -1;
+  ni->infuse_statement = -1;
+  ni->infuseDur_statement = -1;
+  ni->reset_statement = -1;
+  ni->multiply_statement = -1;
+  ni->phantom_statement = -1;
+  ni->replace_statement = -1;
   ni->relational_op = -1;
   ni->string = -1;
+  ni->mod_expression = -1;
 }
 
 #define STRINGIFY(...) STRINGIFY_AUX(__VA_ARGS__)

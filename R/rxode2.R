@@ -93,7 +93,6 @@ NA_LOGICAL <- NA # nolint
 #' pharmacokinetics (PK), pharmacodynamics (PD), disease progression,
 #' drug-disease modeling, etc.
 #'
-#' @section Creating rxode2 models
 #'
 #' @includeRmd man/rmdhunks/rxode2-create-models.Rmd
 #'
@@ -1287,7 +1286,7 @@ rxCompile <- function(model, dir, prefix, force = FALSE, modName = NULL,
       .cc <- gsub("\n", "", .cc)
       .cflags <- rawToChar(sys::exec_internal(file.path(R.home("bin"), "R"), c("CMD", "config", "CFLAGS"))$stdout)
       .cflags <- gsub("\n", "", .cflags)
-      .cflags <- paste0(.cflags, " -O", getOption("rxode2.compile.O", "2"))
+      .cflags <- paste0(.cflags, " -O", getOption("rxode2.compile.O", "3"))
       .shlibCflags <- rawToChar(sys::exec_internal(file.path(R.home("bin"), "R"), c("CMD", "config", "SHLIB_CFLAGS"))$stdout)
       .shlibCflags <- gsub("\n", "", .shlibCflags)
       .cpicflags <- rawToChar(sys::exec_internal(file.path(R.home("bin"), "R"), c("CMD", "config", "CPICFLAGS"))$stdout)
@@ -1342,6 +1341,9 @@ rxLastCompile <- function() {
   return(invisible(.rxCompileEnv$lst))
 }
 #' Was the last compilation successful?
+#'
+#' @param set Logical flag. If missing, returns the current compilation
+#'   status. If provided, sets the compilation status.
 #'
 #' @return this determines if the last compilation was successful.  This is useful for
 #'   debugging and testing purposes.
@@ -1531,8 +1533,8 @@ rxCompile.rxModelVars <- function(model, # Model
         }
         .defs <- ""
         .ret <- sprintf(
-          "#rxode2 Makevars\nPKG_CFLAGS=-O%s %s -I\"%s\" -I\"%s\"\nPKG_LIBS=$(BLAS_LIBS) $(LAPACK_LIBS) $(FLIBS)\n",
-          getOption("rxode2.compile.O", "2"),
+          "#rxode2 Makevars\nPKG_CFLAGS=-O%s -fno-math-errno %s -I\"%s\" -I\"%s\"\nPKG_LIBS=$(BLAS_LIBS) $(LAPACK_LIBS) $(FLIBS)\n",
+          getOption("rxode2.compile.O", "3"),
           .defs, .getIncludeDir(),
           system.file("include", package = "rxode2")
         )

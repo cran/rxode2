@@ -182,6 +182,40 @@ extern "C" {
   typedef void (*setRxMixnum_t)(rx_solve *rx, int mixnum);
   extern setRxMixnum_t setRxMixnum;
 
+  // Get the per-individual sticky tolerance factor
+  typedef double (*getIndTolFactor_t)(rx_solving_options_ind *ind);
+  extern getIndTolFactor_t getIndTolFactor;
+
+  // Set the per-individual sticky tolerance factor
+  typedef void (*setIndTolFactor_t)(rx_solving_options_ind *ind, double tolFactor);
+  extern setIndTolFactor_t setIndTolFactor;
+
+  // Get the per-individual neq override (-1 = use op->neq)
+  typedef int (*getIndNeqOverride_t)(rx_solving_options_ind *ind);
+  extern getIndNeqOverride_t getIndNeqOverride;
+
+  // Set the per-individual neq override (pass -1 to clear)
+  typedef void (*setIndNeqOverride_t)(rx_solving_options_ind *ind, int neq);
+  extern setIndNeqOverride_t setIndNeqOverride;
+
+  typedef void (*rxSetSilentErr_t)(int silent);
+  extern rxSetSilentErr_t rxSetSilentErr;
+
+  typedef int (*getOrdId_t)(rx_solve *rx, int solveid);
+  extern getOrdId_t getOrdId;
+
+  typedef int (*solveMethodThreadSafe_t)(rx_solving_options* op);
+  extern solveMethodThreadSafe_t solveMethodThreadSafe;
+  // Thread-safe C-level tolerance adjustment — no Rcpp/PROTECT overhead, safe from OMP threads
+  typedef void (*atolRtolFactor_t)(double factor);
+  extern atolRtolFactor_t atolRtolFactor_;
+
+  typedef int (*rxInt_t)(SEXP x, R_xlen_t i);
+  extern rxInt_t rxInt;
+
+  typedef double (*rxReal_t)(SEXP x, R_xlen_t i);
+  extern rxReal_t rxReal;
+
   static inline SEXP iniRxodePtrs0(SEXP p) {
     if (_rxode2_rxRmvnSEXP_ == NULL) {
       _rxode2_rxRmvnSEXP_ = (_rxode2_rxRmvnSEXP_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 0));
@@ -238,6 +272,16 @@ extern "C" {
       mexpit = (mexpit_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 51));
       getRxMixnum = (getRxMixnum_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 52));
       setRxMixnum = (setRxMixnum_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 53));
+      getIndTolFactor = (getIndTolFactor_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 54));
+      setIndTolFactor = (setIndTolFactor_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 55));
+      getIndNeqOverride = (getIndNeqOverride_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 56));
+      setIndNeqOverride = (setIndNeqOverride_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 57));
+      rxSetSilentErr = (rxSetSilentErr_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 58));
+      getOrdId       = (getOrdId_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 59));
+      solveMethodThreadSafe = (solveMethodThreadSafe_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 60));
+      atolRtolFactor_ = (atolRtolFactor_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 61));
+      rxInt = (rxInt_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 62));
+      rxReal = (rxReal_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 63));
     }
     return R_NilValue;
   }
@@ -297,6 +341,16 @@ extern "C" {
   mexpit_t mexpit = NULL;                               \
   getRxMixnum_t getRxMixnum = NULL;                     \
   setRxMixnum_t setRxMixnum = NULL;                     \
+  getIndTolFactor_t getIndTolFactor = NULL;             \
+  setIndTolFactor_t setIndTolFactor = NULL;             \
+  getIndNeqOverride_t getIndNeqOverride = NULL;         \
+  setIndNeqOverride_t setIndNeqOverride = NULL;         \
+  rxSetSilentErr_t rxSetSilentErr = NULL;               \
+  getOrdId_t getOrdId = NULL;                           \
+  solveMethodThreadSafe_t solveMethodThreadSafe = NULL; \
+  atolRtolFactor_t atolRtolFactor_ = NULL;              \
+  rxInt_t rxInt = NULL;                                 \
+  rxReal_t rxReal = NULL;                               \
   SEXP iniRxodePtrs(SEXP ptr) {                         \
     return iniRxodePtrs0(ptr);                          \
   }                                                     \

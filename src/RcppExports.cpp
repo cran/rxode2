@@ -176,81 +176,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// etDollarNames
-CharacterVector etDollarNames(RObject obj);
-RcppExport SEXP _rxode2_etDollarNames(SEXP objSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< RObject >::type obj(objSEXP);
-    rcpp_result_gen = Rcpp::wrap(etDollarNames(obj));
-    return rcpp_result_gen;
-END_RCPP
-}
-// etUpdate
-RObject etUpdate(RObject obj, RObject arg, RObject value, LogicalVector exact);
-RcppExport SEXP _rxode2_etUpdate(SEXP objSEXP, SEXP argSEXP, SEXP valueSEXP, SEXP exactSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< RObject >::type obj(objSEXP);
-    Rcpp::traits::input_parameter< RObject >::type arg(argSEXP);
-    Rcpp::traits::input_parameter< RObject >::type value(valueSEXP);
-    Rcpp::traits::input_parameter< LogicalVector >::type exact(exactSEXP);
-    rcpp_result_gen = Rcpp::wrap(etUpdate(obj, arg, value, exact));
-    return rcpp_result_gen;
-END_RCPP
-}
-// et_
-RObject et_(List input, List et__);
-RcppExport SEXP _rxode2_et_(SEXP inputSEXP, SEXP et__SEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< List >::type input(inputSEXP);
-    Rcpp::traits::input_parameter< List >::type et__(et__SEXP);
-    rcpp_result_gen = Rcpp::wrap(et_(input, et__));
-    return rcpp_result_gen;
-END_RCPP
-}
-// etSeq_
-List etSeq_(List ets, int handleSamples, int waitType, double defaultIi, bool rbind, int uniqueId, int reserveLen, bool needSort, CharacterVector newUnits, LogicalVector newShow, bool isCmtIntIn);
-RcppExport SEXP _rxode2_etSeq_(SEXP etsSEXP, SEXP handleSamplesSEXP, SEXP waitTypeSEXP, SEXP defaultIiSEXP, SEXP rbindSEXP, SEXP uniqueIdSEXP, SEXP reserveLenSEXP, SEXP needSortSEXP, SEXP newUnitsSEXP, SEXP newShowSEXP, SEXP isCmtIntInSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< List >::type ets(etsSEXP);
-    Rcpp::traits::input_parameter< int >::type handleSamples(handleSamplesSEXP);
-    Rcpp::traits::input_parameter< int >::type waitType(waitTypeSEXP);
-    Rcpp::traits::input_parameter< double >::type defaultIi(defaultIiSEXP);
-    Rcpp::traits::input_parameter< bool >::type rbind(rbindSEXP);
-    Rcpp::traits::input_parameter< int >::type uniqueId(uniqueIdSEXP);
-    Rcpp::traits::input_parameter< int >::type reserveLen(reserveLenSEXP);
-    Rcpp::traits::input_parameter< bool >::type needSort(needSortSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type newUnits(newUnitsSEXP);
-    Rcpp::traits::input_parameter< LogicalVector >::type newShow(newShowSEXP);
-    Rcpp::traits::input_parameter< bool >::type isCmtIntIn(isCmtIntInSEXP);
-    rcpp_result_gen = Rcpp::wrap(etSeq_(ets, handleSamples, waitType, defaultIi, rbind, uniqueId, reserveLen, needSort, newUnits, newShow, isCmtIntIn));
-    return rcpp_result_gen;
-END_RCPP
-}
-// etRep_
-List etRep_(RObject curEt, int times, NumericVector wait, IntegerVector ids, int handleSamples, int waitType, double ii);
-RcppExport SEXP _rxode2_etRep_(SEXP curEtSEXP, SEXP timesSEXP, SEXP waitSEXP, SEXP idsSEXP, SEXP handleSamplesSEXP, SEXP waitTypeSEXP, SEXP iiSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< RObject >::type curEt(curEtSEXP);
-    Rcpp::traits::input_parameter< int >::type times(timesSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type wait(waitSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ids(idsSEXP);
-    Rcpp::traits::input_parameter< int >::type handleSamples(handleSamplesSEXP);
-    Rcpp::traits::input_parameter< int >::type waitType(waitTypeSEXP);
-    Rcpp::traits::input_parameter< double >::type ii(iiSEXP);
-    rcpp_result_gen = Rcpp::wrap(etRep_(curEt, times, wait, ids, handleSamples, waitType, ii));
-    return rcpp_result_gen;
-END_RCPP
-}
 // getLinInfo_
 IntegerVector getLinInfo_(List mv);
 RcppExport SEXP _rxode2_getLinInfo_(SEXP mvSEXP) {
@@ -1122,6 +1047,39 @@ RcppExport SEXP _rxode2_rxSimThetaOmega(SEXP paramsSEXP, SEXP omegaSEXP, SEXP om
     UNPROTECT(1);
     return rcpp_result_gen;
 }
+// rxSolveSetCurObj_
+void rxSolveSetCurObj_(SEXP obj);
+static SEXP _rxode2_rxSolveSetCurObj__try(SEXP objSEXP) {
+BEGIN_RCPP
+    Rcpp::traits::input_parameter< SEXP >::type obj(objSEXP);
+    rxSolveSetCurObj_(obj);
+    return R_NilValue;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_rxSolveSetCurObj_(SEXP objSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_rxSolveSetCurObj__try(objSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        (Rf_error)("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
 // rxSolveFree
 LogicalVector rxSolveFree();
 static SEXP _rxode2_rxSolveFree_try() {
@@ -1169,6 +1127,48 @@ RcppExport SEXP _rxode2_rxSolveSetup() {
     {
         Rcpp::RNGScope rcpp_rngScope_gen;
         rcpp_result_gen = PROTECT(_rxode2_rxSolveSetup_try());
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        (Rf_error)("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
+// rxSolveFromRaw_
+SEXP rxSolveFromRaw_(const RObject& obj, const RObject& rawObj, const RObject& solveState, const List& rxControl, const Nullable<CharacterVector>& specParams, const Nullable<List>& extraArgs, const RObject& params, const RObject& events, const RObject& inits);
+static SEXP _rxode2_rxSolveFromRaw__try(SEXP objSEXP, SEXP rawObjSEXP, SEXP solveStateSEXP, SEXP rxControlSEXP, SEXP specParamsSEXP, SEXP extraArgsSEXP, SEXP paramsSEXP, SEXP eventsSEXP, SEXP initsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< const RObject& >::type obj(objSEXP);
+    Rcpp::traits::input_parameter< const RObject& >::type rawObj(rawObjSEXP);
+    Rcpp::traits::input_parameter< const RObject& >::type solveState(solveStateSEXP);
+    Rcpp::traits::input_parameter< const List& >::type rxControl(rxControlSEXP);
+    Rcpp::traits::input_parameter< const Nullable<CharacterVector>& >::type specParams(specParamsSEXP);
+    Rcpp::traits::input_parameter< const Nullable<List>& >::type extraArgs(extraArgsSEXP);
+    Rcpp::traits::input_parameter< const RObject& >::type params(paramsSEXP);
+    Rcpp::traits::input_parameter< const RObject& >::type events(eventsSEXP);
+    Rcpp::traits::input_parameter< const RObject& >::type inits(initsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rxSolveFromRaw_(obj, rawObj, solveState, rxControl, specParams, extraArgs, params, events, inits));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_rxSolveFromRaw_(SEXP objSEXP, SEXP rawObjSEXP, SEXP solveStateSEXP, SEXP rxControlSEXP, SEXP specParamsSEXP, SEXP extraArgsSEXP, SEXP paramsSEXP, SEXP eventsSEXP, SEXP initsSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_rxSolveFromRaw__try(objSEXP, rawObjSEXP, solveStateSEXP, rxControlSEXP, specParamsSEXP, extraArgsSEXP, paramsSEXP, eventsSEXP, initsSEXP));
     }
     Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
     if (rcpp_isInterrupt_gen) {
@@ -2161,6 +2161,58 @@ RcppExport SEXP _rxode2_rxSymInvCholEnvCalculate(SEXP objSEXP, SEXP whatSEXP, SE
     UNPROTECT(1);
     return rcpp_result_gen;
 }
+// rxMemoryComponents_
+NumericVector rxMemoryComponents_(int neq, int stateSize, int nlhs, int npars, int neta, int neps, int ncov, int nsim, int cores, int nMtime, int extraCmt, int linB, int nLlik, int nIndSim, int numLinSens, int numLin, int nsub, double nallTotal, double maxAllTimes);
+static SEXP _rxode2_rxMemoryComponents__try(SEXP neqSEXP, SEXP stateSizeSEXP, SEXP nlhsSEXP, SEXP nparsSEXP, SEXP netaSEXP, SEXP nepsSEXP, SEXP ncovSEXP, SEXP nsimSEXP, SEXP coresSEXP, SEXP nMtimeSEXP, SEXP extraCmtSEXP, SEXP linBSEXP, SEXP nLlikSEXP, SEXP nIndSimSEXP, SEXP numLinSensSEXP, SEXP numLinSEXP, SEXP nsubSEXP, SEXP nallTotalSEXP, SEXP maxAllTimesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< int >::type neq(neqSEXP);
+    Rcpp::traits::input_parameter< int >::type stateSize(stateSizeSEXP);
+    Rcpp::traits::input_parameter< int >::type nlhs(nlhsSEXP);
+    Rcpp::traits::input_parameter< int >::type npars(nparsSEXP);
+    Rcpp::traits::input_parameter< int >::type neta(netaSEXP);
+    Rcpp::traits::input_parameter< int >::type neps(nepsSEXP);
+    Rcpp::traits::input_parameter< int >::type ncov(ncovSEXP);
+    Rcpp::traits::input_parameter< int >::type nsim(nsimSEXP);
+    Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
+    Rcpp::traits::input_parameter< int >::type nMtime(nMtimeSEXP);
+    Rcpp::traits::input_parameter< int >::type extraCmt(extraCmtSEXP);
+    Rcpp::traits::input_parameter< int >::type linB(linBSEXP);
+    Rcpp::traits::input_parameter< int >::type nLlik(nLlikSEXP);
+    Rcpp::traits::input_parameter< int >::type nIndSim(nIndSimSEXP);
+    Rcpp::traits::input_parameter< int >::type numLinSens(numLinSensSEXP);
+    Rcpp::traits::input_parameter< int >::type numLin(numLinSEXP);
+    Rcpp::traits::input_parameter< int >::type nsub(nsubSEXP);
+    Rcpp::traits::input_parameter< double >::type nallTotal(nallTotalSEXP);
+    Rcpp::traits::input_parameter< double >::type maxAllTimes(maxAllTimesSEXP);
+    rcpp_result_gen = Rcpp::wrap(rxMemoryComponents_(neq, stateSize, nlhs, npars, neta, neps, ncov, nsim, cores, nMtime, extraCmt, linB, nLlik, nIndSim, numLinSens, numLin, nsub, nallTotal, maxAllTimes));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_rxMemoryComponents_(SEXP neqSEXP, SEXP stateSizeSEXP, SEXP nlhsSEXP, SEXP nparsSEXP, SEXP netaSEXP, SEXP nepsSEXP, SEXP ncovSEXP, SEXP nsimSEXP, SEXP coresSEXP, SEXP nMtimeSEXP, SEXP extraCmtSEXP, SEXP linBSEXP, SEXP nLlikSEXP, SEXP nIndSimSEXP, SEXP numLinSensSEXP, SEXP numLinSEXP, SEXP nsubSEXP, SEXP nallTotalSEXP, SEXP maxAllTimesSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_rxMemoryComponents__try(neqSEXP, stateSizeSEXP, nlhsSEXP, nparsSEXP, netaSEXP, nepsSEXP, ncovSEXP, nsimSEXP, coresSEXP, nMtimeSEXP, extraCmtSEXP, linBSEXP, nLlikSEXP, nIndSimSEXP, numLinSensSEXP, numLinSEXP, nsubSEXP, nallTotalSEXP, maxAllTimesSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        (Rf_error)("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
 // rxOptRep_
 RObject rxOptRep_(RObject input);
 RcppExport SEXP _rxode2_rxOptRep_(SEXP inputSEXP) {
@@ -2171,6 +2223,107 @@ BEGIN_RCPP
     rcpp_result_gen = Rcpp::wrap(rxOptRep_(input));
     return rcpp_result_gen;
 END_RCPP
+}
+// rxSaveState_
+SEXP rxSaveState_();
+static SEXP _rxode2_rxSaveState__try() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    rcpp_result_gen = Rcpp::wrap(rxSaveState_());
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_rxSaveState_() {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_rxSaveState__try());
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        (Rf_error)("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
+// rxIsSerializeFile_
+bool rxIsSerializeFile_(SEXP rawSexp);
+static SEXP _rxode2_rxIsSerializeFile__try(SEXP rawSexpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< SEXP >::type rawSexp(rawSexpSEXP);
+    rcpp_result_gen = Rcpp::wrap(rxIsSerializeFile_(rawSexp));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_rxIsSerializeFile_(SEXP rawSexpSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_rxIsSerializeFile__try(rawSexpSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        (Rf_error)("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
+}
+// rxRestoreState_
+SEXP rxRestoreState_(SEXP rawSexp);
+static SEXP _rxode2_rxRestoreState__try(SEXP rawSexpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< SEXP >::type rawSexp(rawSexpSEXP);
+    rcpp_result_gen = Rcpp::wrap(rxRestoreState_(rawSexp));
+    return rcpp_result_gen;
+END_RCPP_RETURN_ERROR
+}
+RcppExport SEXP _rxode2_rxRestoreState_(SEXP rawSexpSEXP) {
+    SEXP rcpp_result_gen;
+    {
+        Rcpp::RNGScope rcpp_rngScope_gen;
+        rcpp_result_gen = PROTECT(_rxode2_rxRestoreState__try(rawSexpSEXP));
+    }
+    Rboolean rcpp_isInterrupt_gen = Rf_inherits(rcpp_result_gen, "interrupted-error");
+    if (rcpp_isInterrupt_gen) {
+        UNPROTECT(1);
+        Rf_onintr();
+    }
+    bool rcpp_isLongjump_gen = Rcpp::internal::isLongjumpSentinel(rcpp_result_gen);
+    if (rcpp_isLongjump_gen) {
+        Rcpp::internal::resumeJump(rcpp_result_gen);
+    }
+    Rboolean rcpp_isError_gen = Rf_inherits(rcpp_result_gen, "try-error");
+    if (rcpp_isError_gen) {
+        SEXP rcpp_msgSEXP_gen = Rf_asChar(rcpp_result_gen);
+        UNPROTECT(1);
+        (Rf_error)("%s", CHAR(rcpp_msgSEXP_gen));
+    }
+    UNPROTECT(1);
+    return rcpp_result_gen;
 }
 // rxStack_
 List rxStack_(List Data, Nullable<CharacterVector> vars);
@@ -2783,8 +2936,10 @@ static int _rxode2_RcppExport_validate(const char* sig) {
         signatures.insert("NumericVector(*rxSetupScale)(const RObject&,RObject,Nullable<List>)");
         signatures.insert("void(*atolRtolFactor_)(double)");
         signatures.insert("List(*rxSimThetaOmega)(const Nullable<NumericVector>&,const RObject&,const Nullable<NumericVector>&,const NumericVector&,const NumericVector&,const bool&,std::string,const int,int,const Nullable<NumericMatrix>&,const NumericVector&,const NumericVector&,const Nullable<NumericVector>&,const bool&,int,const RObject,const NumericVector&,const NumericVector&,const Nullable<NumericVector>&,const bool&,std::string,const int,int,int,double,double,bool,const LogicalVector&)");
+        signatures.insert("void(*rxSolveSetCurObj_)(SEXP)");
         signatures.insert("LogicalVector(*rxSolveFree)()");
         signatures.insert("LogicalVector(*rxSolveSetup)()");
+        signatures.insert("SEXP(*rxSolveFromRaw_)(const RObject&,const RObject&,const RObject&,const List&,const Nullable<CharacterVector>&,const Nullable<List>&,const RObject&,const RObject&,const RObject&)");
         signatures.insert("SEXP(*rxSolve_)(const RObject&,const List&,const Nullable<CharacterVector>&,const Nullable<List>&,const RObject&,const RObject&,const RObject&,const int)");
         signatures.insert("CharacterVector(*rxSolveDollarNames)(RObject)");
         signatures.insert("RObject(*rxSolveGet)(RObject,RObject,LogicalVector)");
@@ -2813,6 +2968,10 @@ static int _rxode2_RcppExport_validate(const char* sig) {
         signatures.insert("NumericVector(*rxInv)(SEXP)");
         signatures.insert("RObject(*rxSymInvChol)(RObject,Nullable<NumericVector>,std::string,int)");
         signatures.insert("RObject(*rxSymInvCholEnvCalculate)(List,std::string,Nullable<NumericVector>)");
+        signatures.insert("NumericVector(*rxMemoryComponents_)(int,int,int,int,int,int,int,int,int,int,int,int,int,int,int,int,int,double,double)");
+        signatures.insert("SEXP(*rxSaveState_)()");
+        signatures.insert("bool(*rxIsSerializeFile_)(SEXP)");
+        signatures.insert("SEXP(*rxRestoreState_)(SEXP)");
         signatures.insert("LogicalVector(*isNullZero)(RObject)");
         signatures.insert("NumericVector(*rxErf)(NumericVector)");
         signatures.insert("NumericVector(*binomProbsPredVec_)(int,int,int,int,bool,double)");
@@ -2842,8 +3001,10 @@ RcppExport SEXP _rxode2_RcppExport_registerCCallable() {
     R_RegisterCCallable("rxode2", "_rxode2_rxSetupScale", (DL_FUNC)_rxode2_rxSetupScale_try);
     R_RegisterCCallable("rxode2", "_rxode2_atolRtolFactor_", (DL_FUNC)_rxode2_atolRtolFactor__try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSimThetaOmega", (DL_FUNC)_rxode2_rxSimThetaOmega_try);
+    R_RegisterCCallable("rxode2", "_rxode2_rxSolveSetCurObj_", (DL_FUNC)_rxode2_rxSolveSetCurObj__try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSolveFree", (DL_FUNC)_rxode2_rxSolveFree_try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSolveSetup", (DL_FUNC)_rxode2_rxSolveSetup_try);
+    R_RegisterCCallable("rxode2", "_rxode2_rxSolveFromRaw_", (DL_FUNC)_rxode2_rxSolveFromRaw__try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSolve_", (DL_FUNC)_rxode2_rxSolve__try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSolveDollarNames", (DL_FUNC)_rxode2_rxSolveDollarNames_try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSolveGet", (DL_FUNC)_rxode2_rxSolveGet_try);
@@ -2872,6 +3033,10 @@ RcppExport SEXP _rxode2_RcppExport_registerCCallable() {
     R_RegisterCCallable("rxode2", "_rxode2_rxInv", (DL_FUNC)_rxode2_rxInv_try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSymInvChol", (DL_FUNC)_rxode2_rxSymInvChol_try);
     R_RegisterCCallable("rxode2", "_rxode2_rxSymInvCholEnvCalculate", (DL_FUNC)_rxode2_rxSymInvCholEnvCalculate_try);
+    R_RegisterCCallable("rxode2", "_rxode2_rxMemoryComponents_", (DL_FUNC)_rxode2_rxMemoryComponents__try);
+    R_RegisterCCallable("rxode2", "_rxode2_rxSaveState_", (DL_FUNC)_rxode2_rxSaveState__try);
+    R_RegisterCCallable("rxode2", "_rxode2_rxIsSerializeFile_", (DL_FUNC)_rxode2_rxIsSerializeFile__try);
+    R_RegisterCCallable("rxode2", "_rxode2_rxRestoreState_", (DL_FUNC)_rxode2_rxRestoreState__try);
     R_RegisterCCallable("rxode2", "_rxode2_isNullZero", (DL_FUNC)_rxode2_isNullZero_try);
     R_RegisterCCallable("rxode2", "_rxode2_rxErf", (DL_FUNC)_rxode2_rxErf_try);
     R_RegisterCCallable("rxode2", "_rxode2_binomProbsPredVec_", (DL_FUNC)_rxode2_binomProbsPredVec__try);

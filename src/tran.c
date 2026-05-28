@@ -156,6 +156,7 @@ static inline void add_de(nodeInfo ni, char *name, char *v, int hasLhs, int from
 #include "parseDfdy.h"
 #include "parseCmtProperties.h"
 #include "parseDdt.h"
+#include "rxProtect.h"
 
 static inline int parseNodePossiblySkipRecursion(nodeInfo ni, char *name, D_ParseNode *pn, D_ParseNode *xpn,
 						 int *i, int nch, int *depth) {
@@ -169,6 +170,17 @@ static inline int parseNodePossiblySkipRecursion(nodeInfo ni, char *name, D_Pars
   if (handleIfElse(ni, name, *i) ||
       // simeta()/simeps()
       handleSimFunctions(ni, name, i, nch, pn) ||
+      handleObsStatement(ni, name, i, nch, pn) ||
+      handleSplitBolusStatement(ni, name, i, nch, pn) ||
+      // evid_() dose-push
+      handleEvidStatement(ni, name, i, nch, pn) ||
+      handleBolusStatement(ni, name, i, nch, pn) ||
+      handleInfuseStatement(ni, name, i, nch, pn) ||
+      handleInfuseDurStatement(ni, name, i, nch, pn) ||
+      handleReplaceStatement(ni, name, i, nch, pn) ||
+      handleResetStatement(ni, name, i, nch, pn) ||
+      handleMultiplyStatement(ni, name, i, nch, pn) ||
+      handlePhantomStatement(ni, name, i, nch, pn) ||
       handleStringEqualityStatements(ni, name, *i, xpn) ||
       handleDvidStatement(ni, name, xpn, pn) ||
       handleStartInterpStatement(ni, name, i, xpn, pn) ||
@@ -194,6 +206,9 @@ static inline int parseNodeAfterRecursion(nodeInfo ni, char *name, D_ParseNode *
   if (*i==0 && nodeHas(power_expression)) {
     aAppendN(",", 1);
     sAppendN(&sbt, "^", 1);
+  } else if (*i==0 && nodeHas(mod_expression)) {
+    aAppendN(",", 1);
+    sAppendN(&sbt, "%%", 2);
   }
   handleRemainingAssignments(ni, name, *i, pn, xpn);
   return 0;
@@ -216,6 +231,8 @@ void wprint_parsetree(D_ParserTables pt, D_ParseNode *pn, int depth, print_node_
     int isWhile=0;
     if (nodeHas(power_expression)) {
       aAppendN("Rx_pow(", 7);
+    } else if (nodeHas(mod_expression)) {
+      aAppendN("fmod(", 5);
     }
     for (i = 0; i < nch; i++) {
       D_ParseNode *xpn = d_get_child(pn, i);
@@ -273,6 +290,8 @@ void parseFree(int last) {
   lineFree(&(tb.de));
   lineFree(&(tb.str));
   lineFree(&(tb.strVal));
+  lineFree(&(tb.strCmp));
+  lineFree(&(tb.strCmpVal));
   lineFree(&depotLines);
   lineFree(&centralLines);
   lineFree(&_dupStrs);
@@ -281,6 +300,7 @@ void parseFree(int last) {
   R_Free(tb.interp);
   R_Free(tb.lag);
   R_Free(tb.alag);
+  R_Free(tb.splitBolus);
   R_Free(tb.ini);
   R_Free(tb.mtime);
   R_Free(tb.iniv);
@@ -292,6 +312,8 @@ void parseFree(int last) {
   R_Free(tb.sin);
   R_Free(tb.strValI);
   R_Free(tb.strValII);
+  R_Free(tb.strCmpN);
+  R_Free(tb.strCmpValI);
   R_Free(tb.idi);
   R_Free(tb.isi);
   R_Free(tb.idu);
@@ -372,11 +394,15 @@ void reset(void) {
   tb.idi	= R_Calloc(MXDER, int);
   tb.strValI= R_Calloc(MXDER, int);
   tb.strValII= R_Calloc(MXDER, int);
+  tb.strCmpN= R_Calloc(MXDER, int);
+  tb.strCmpValI= R_Calloc(MXDER, int);
   tb.isi    = R_Calloc(MXDER, int);
   tb.idu	= R_Calloc(MXDER, int);
   tb.lag	= R_Calloc(MXSYM, int);
   tb.alag   = R_Calloc(MXSYM, int);
   tb.alagn  = 0;
+  tb.splitBolus = R_Calloc(MXSYM, int);
+  tb.splitBolusN = 0;
   tb.dvid	= R_Calloc(MXDER, int);
   tb.thread     = 1; // Thread safe flag
   tb.dvidn      = 0;
@@ -415,6 +441,8 @@ void reset(void) {
   tb.allocD	= MXDER;
   tb.allocS = MXDER;
   tb.allocSV = MXDER;
+  tb.allocSC = MXDER;
+  tb.allocSCV = MXDER;
   tb.matn	= 0;
   tb.matnf	= 0;
   tb.ncmt	= 0;
@@ -430,6 +458,10 @@ void reset(void) {
   tb.simflg     = 0;
   tb.nLlik      = 0;
   tb.hasMix     = 0;
+  tb.evid_      = 0;
+  tb.strCmpCurCov = NULL;
+  tb.strCmpCurStr = NULL;
+  tb.strCmpCurType = -1;
 
   // Reset Arrays
   // Reset integers
@@ -557,6 +589,10 @@ void trans_internal(const char* parse_file, int isStr){
   lineIni(&depotLines);
   lineIni(&centralLines);
 
+  /* TODO(long-term): switch to udparse() once dparser-R ships a version that
+   * exports that symbol to CRAN.  udparse() accepts an unsigned int for
+   * buf_len, eliminating the silent (int)strlen truncation on inputs >= INT_MAX
+   * bytes.  Track at https://github.com/nlmixr2/dparser-R */
   _pn= dparse(curP, gBuf, (int)strlen(gBuf));
   if (!_pn || curP->syntax_errors) {
     rx_syntax_error = 1;
@@ -648,19 +684,24 @@ SEXP getRxode2ParseDf(void);
 
 SEXP _rxode2_trans(SEXP parse_file, SEXP prefix, SEXP model_md5, SEXP parseStr,
                    SEXP isEscIn, SEXP inME, SEXP goodFuns, SEXP fullPrintIn){
+  rxProtectGuard;
   const char *in = NULL;
   _rxode2parse_assignTranslation(getRxode2ParseDf());
   int isStr = setupTrans(parse_file, prefix, model_md5, parseStr, isEscIn, inME, goodFuns, fullPrintIn);
   in = CHAR(STRING_ELT(parse_file,0));
   trans_internal(in, isStr);
-  SEXP lst = PROTECT(generateModelVars());
+  SEXP lst = rxP(generateModelVars());
+  if (rx_syntax_error) {
+    rxUP(1);
+  }
   finalizeSyntaxError();
-  UNPROTECT(1);
+  rxUP(1);
   _rxode2parse_unprotect();
   return lst;
 }
 
 SEXP _rxode2_parseModel(SEXP type){
+  rxProtectGuard;
   if (!sbPm.o){
     _rxode2parse_unprotect();
     err_trans("model no longer loaded in memory");
@@ -669,37 +710,39 @@ SEXP _rxode2_parseModel(SEXP type){
   SEXP pm;
   switch (iT){
   case 1:
-    pm = PROTECT(Rf_allocVector(STRSXP, sbPmDt.n));
+    pm = rxP(Rf_allocVector(STRSXP, sbPmDt.n));
     for (int i = 0; i < sbPmDt.n; i++){
       SET_STRING_ELT(pm, i, Rf_mkChar(sbPmDt.line[i]));
     }
     break;
   default:
-    pm = PROTECT(Rf_allocVector(STRSXP, sbPm.n));
+    pm = rxP(Rf_allocVector(STRSXP, sbPm.n));
     for (int i = 0; i < sbPm.n; i++){
       SET_STRING_ELT(pm, i, Rf_mkChar(sbPm.line[i]));
     }
     break;
   }
-  UNPROTECT(1);
+  rxUP(1);
   return pm;
 }
 
 SEXP _rxode2_codeLoaded(void){
-  SEXP pm = PROTECT(Rf_allocVector(INTSXP, 1));
+  rxProtectGuard;
+  SEXP pm = rxP(Rf_allocVector(INTSXP, 1));
   if (!sbPm.o || !sbNrm.o){
     INTEGER(pm)[0]=0;
   } else {
     INTEGER(pm)[0]=1;
   }
-  UNPROTECT(1);
+  rxUP(1);
   return pm;
 }
 
 SEXP _rxode2_isLinCmt(void) {
-  SEXP ret = PROTECT(Rf_allocVector(INTSXP, 1));
+  rxProtectGuard;
+  SEXP ret = rxP(Rf_allocVector(INTSXP, 1));
   INTEGER(ret)[0]=tb.linCmt;
-  UNPROTECT(1);
+  rxUP(1);
   return ret;
 }
 
@@ -711,7 +754,20 @@ SEXP _rxode2_isLinCmt(void) {
 // Taken from dparser and changed to use R_Calloc
 char * rc_dup_str(const char *s, const char *e) {
   lastStr=s;
-  int l = e ? e-s : (int)strlen(s);
+  int l;
+  if (e) {
+    ptrdiff_t diff = e - s;
+    if (diff < 0 || diff > (ptrdiff_t)INT_MAX) {
+      (Rf_error)(_("string segment too long in rc_dup_str"));
+    }
+    l = (int)diff;
+  } else {
+    size_t sLen = strlen(s);
+    if (sLen > (size_t)INT_MAX) {
+      (Rf_error)(_("string too long in rc_dup_str"));
+    }
+    l = (int)sLen;
+  }
   syntaxErrorExtra=min(l-1, 40);
   addLine(&_dupStrs, "%.*s", l, s);
   return _dupStrs.line[_dupStrs.n-1];
@@ -723,6 +779,8 @@ void transIniNull(void) {
   lineNull(&(tb.de));
   lineNull(&(tb.str));
   lineNull(&(tb.strVal));
+  lineNull(&(tb.strCmp));
+  lineNull(&(tb.strCmpVal));
   sNull(&(sb));
   sNull(&(sbDt));
   sNull(&(sbt));

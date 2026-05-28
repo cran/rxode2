@@ -27,11 +27,27 @@ if (length(w) >= 1) {
   close(RcppExports.R)
 }
 
+compilerPath <- tools::Rcmd("config CC", stdout=TRUE)
+
+# To distinguish between them, check the version output
+versionInfo <- try(system(paste(compilerPath, "--version"), intern = TRUE))
+if (inherits(versionInfo, "try-error")) {
+  .o2 <- "-O2 "
+} else if (any(grepl("clang", versionInfo, ignore.case = TRUE))) {
+  .o2 <- "-O3 -fno-math-errno -mtune=native "
+} else if (any(grepl("gcc", versionInfo, ignore.case = TRUE))) {
+  .o2 <- "-O3 -fno-math-errno -mtune=native "
+} else {
+  .o2 <- "-O2 "
+}
+
 .in <- suppressWarnings(readLines("src/Makevars.in"))
 .in <- gsub("@ARMA@", file.path(find.package("RcppArmadillo"),"include"), .in)
+.in <- gsub("@O2@", .o2, .in)
 .in <- gsub("@BH@", file.path(find.package("BH"),"include"), .in)
 .in <- gsub("@RCPP@", file.path(find.package("Rcpp"),"include"), .in)
 .in <- gsub("@EG@", file.path(find.package("RcppEigen"),"include"), .in)
+
 
 .in <- gsub("@SL@", paste(capture.output(StanHeaders:::LdFlags()), capture.output(RcppParallel:::RcppParallelLibs())), #nolint
             .in)

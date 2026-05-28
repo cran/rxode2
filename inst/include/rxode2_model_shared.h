@@ -272,15 +272,33 @@ static inline double Rx_pow_di_(double a, double b, rx_solve *rx) {
 #define CmT CMT
 #define cMT CMT
 #define _cmp2(val, valStr, type, cmpStr) (type ? _compareFactorVal(val, valStr, cmpStr) : !_compareFactorVal(val, valStr, cmpStr))
+#define _cmp2d(val, valStr, type, cmpInt) (type ? _compareFactorInt(val, valStr, cmpInt) : !_compareFactorInt(val, valStr, cmpInt))
 // equality_str1 : string ('!=' | '==' ) identifier_r; //type=1 is equal, type=0 not equal
 #define _cmp1(cmpStr, type, val, valStr) (type ? _compareFactorVal(val, valStr, cmpStr) : !_compareFactorVal(val, valStr, cmpStr))
+#define _cmp1d(cmpStr, type, val, cmpInt) (type ? _compareFactorInt(val, cmpStr, cmpInt) : !_compareFactorInt(val, cmpStr, cmpInt))
 
 // Types for par pointers.r
 typedef int (*rxode2_compareFactorVal_fn)(int val, const char *factor, const char *value);
+typedef int (*rxode2_compareFactorInt_fn)(int val, const char *factor, int value);
 typedef double (*rxode2_fn) (double x);
 typedef double (*rxode2_ifn) (double x);
 typedef double (*rxode2_fn2) (double x, double y);
 typedef double (*rxode2_fn3) (double x, double y, double z);
+typedef double (*rxode2_fn4) (double x, double y, double z, double w);
+typedef double (*rxode2_fn5) (double x, double y, double z, double w,
+                              double v);
+typedef double (*rxode2_fn6) (double x, double y, double z, double w,
+                              double v, double u);
+typedef double (*rxode2_fn7) (double x, double y, double z, double w,
+                              double v, double u, double t);
+typedef double (*rxode2_fn8) (double x, double y, double z, double w,
+                              double v, double u, double t, double s);
+typedef double (*rxode2_fn9) (double x, double y, double z, double w,
+                              double v, double u, double t, double s,
+                              double r);
+typedef double (*rxode2_fn10) (double x, double y, double z, double w,
+                               double v, double u, double t, double s,
+                               double r, double q);
 typedef double (*rxode2_fn3i) (double x, double y, int i);
 typedef double (*rxode2_fn2i) (double x, int i);
 typedef int (*rxode2_fn0i) (void);
@@ -361,6 +379,9 @@ typedef double (*rxode2_llikGammaFun) (double *in, double x, double shape, doubl
 typedef double (*rxode2_llikCauchyFun) (double *in, double x, double location, double scale);
 
 typedef void (*_setThreadInd_t) (int);
+typedef int  (*_rxPushDose_t)(rx_solving_options_ind *, double,
+                               double, int, double, int,
+                               double, double, int, int, int);
 typedef void (*rxode2_assignFuns2_t)(rx_solve, rx_solving_options, t_F, t_LAG, t_RATE, t_DUR,t_calc_mtime, t_ME, t_IndF, t_getTime, t_locateTimeIndex, t_handle_evidL,t_getDur);
 
 #endif // __rxode2_model_shared_H__

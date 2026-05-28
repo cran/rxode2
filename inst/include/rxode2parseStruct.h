@@ -1,3 +1,9 @@
+// Extra event slots pre-allocated in ind->solve / indOwnAllocN to absorb
+// _rxPushDose growth without requiring a solve-buffer realloc mid-integration.
+#ifndef EVID_EXTRA_SIZE
+#define EVID_EXTRA_SIZE 16
+#endif
+
 typedef struct sbuf {
   char *s;        /* curr print buffer */
   int sN;
@@ -19,6 +25,41 @@ typedef struct vLines {
 #define rxode2naTimeInputIgnore 1
 #define rxode2naTimeInputWarn   2
 #define rxode2naTimeInputError  3
+
+struct rx_solving_options_ind_s;
+typedef struct rx_solving_options_ind_s rx_solving_options_ind;
+
+struct rx_solve_s;
+typedef struct rx_solve_s rx_solve;
+
+typedef double (*t_F)(int _cSub,  int _cmt, double _amt, double t, double *y);
+typedef double (*t_LAG)(int _cSub,  int _cmt, double t, double *y);
+typedef double (*t_RATE)(int _cSub,  int _cmt, double _amt, double t, double *y);
+typedef double (*t_DUR)(int _cSub,  int _cmt, double _amt, double t, double *y);
+
+typedef void (*t_calc_mtime)(int cSub, double *mtime, double *y);
+
+typedef void (*t_ME)(int _cSub, double _t, double t, double *_mat, const double *__zzStateVar__);
+typedef void (*t_IndF)(int _cSub, double _t, double t, double *_mat);
+
+typedef double (*t_getTime)(int idx, rx_solving_options_ind *ind);
+typedef int (*t_locateTimeIndex)(double obs_time,  rx_solving_options_ind *ind);
+typedef int (*t_handle_evidL)(int evid, double *yp, double xout, int id, rx_solving_options_ind *ind) ;
+typedef double (*t_getDur)(int l, rx_solving_options_ind *ind, int backward, unsigned int *p);
+
+typedef struct {
+  t_F f;
+  t_LAG lag;
+  t_RATE rate;
+  t_DUR dur;
+  t_calc_mtime mtime;
+  t_ME me;
+  t_IndF indf;
+  t_getTime gettime;
+  t_locateTimeIndex timeindex;
+  t_handle_evidL handleEvid;
+  t_getDur getdur;
+} rx_fn_pointers;
 
 typedef struct {
   // These options should not change based on an individual solve
@@ -82,10 +123,12 @@ typedef struct {
   int depotLin;
   int linOffset;
   int ssSolved;
+  int useDense;
+  int indOwnAlloc;
 } rx_solving_options;
 
 
-typedef struct {
+struct rx_solving_options_ind_s {
   double bT;
   int *slvr_counter;
   int *dadt_counter;
@@ -108,7 +151,7 @@ typedef struct {
   double *ii;
   double *solve;
   double *mtime;
-  double mtime0[90]; // initial sort-time mtime values; sentinel R_NegInf = already fired
+  double *mtime0;    // initial sort-time mtime values; sentinel R_NegInf = already fired
   double *solveSave;
   double *solveLast;
   double *solveLast2;
@@ -122,6 +165,7 @@ typedef struct {
   // 2 5
   // 3 6
   int n_all_times;
+  int n_all_times_orig;
   int nevid2;
   int ixds;
   int ndoses;
@@ -235,22 +279,48 @@ typedef struct {
 
   // Add mixture uniform variable
   double mixunif;
-} rx_solving_options_ind;
 
-typedef struct {
+  // Per-individual sticky tolerance factor; initialized to 1.0 by
+  // setupRxInd() at first allocation and intentionally NOT reset on
+  // subsequent calls so that any loosening applied via atolRtolFactor_()
+  // or setIndTolFactor() persists across re-solves for stiff individuals.
+  double tolFactor;
+
+  // Per-individual neq override; -1 means use op->neq (default).  Set
+  // via setIndNeqOverride()/getIndNeqOverride() so that downstream
+  // packages (e.g. nlmixr2est's predOde / shi21EtaGeneral) can solve
+  // with a different neq for a single individual without mutating the
+  // shared op->neq from a parallel worker thread.  Cleared by
+  // restoring -1.
+  int neqOverride;
+
+  // When 1, this individual owns its dose/ii/all_times/solve arrays
+  // (independently malloc'd, not pointers into the global buffer)
+  int indOwnAlloc;
+  int indOwnAllocN;     // allocated capacity for event arrays (>= n_all_times)
+  int solveAllocN;      // allocated capacity for ind->solve in units of events (neq doubles each)
+  int idoseOwnAllocN;   // allocated capacity for idose (>= ndoses)
+  int _atEventTime;     // set before each event-table interval; consumed once in dydt
+  int nPushedExtra;      // count of events pushed via evid_() for this individual this solve
+  rx_fn_pointers *fns;
+  rx_solving_options *op;
+  rx_solve *rx;
+};
+
+typedef struct rx_solve_s {
   rx_solving_options_ind *subjects;
   rx_solving_options *op;
-  int nsub;
-  int nsim;
+  uint32_t nsub;
+  uint32_t nsim;
   int neta;
   int neps;
   int nIndSim;
   int simflg;
-  int nall;
+  uint32_t nall;
   int nevid9;
   int nobs; // isObs() observations
   int nobs2; // evid=0 observations
-  int nr;
+  int64_t nr; // int64_t because nobs*nsim can exceed INT_MAX in VPC with many subjects/timepoints/sims
   int add_cov;
   int matrix;
   int needSort;
@@ -317,7 +387,19 @@ typedef struct {
   // Add mixture number flag
   int mixnum;
   int input_mixnum;
+
+  // Maximum number of events that evid_() may push per individual per solve.
+  // 0 = unlimited.  Exceeding the limit aborts the individual with NA output.
+  int maxExtra;
+  // Set to 1 (atomically) when any individual exceeds maxExtra; checked after
+  // the solve completes to emit an error.
+  int extraPushAbort;
+  int *splitBolus;
+  int splitBolusN;
+  rx_fn_pointers fns;
 } rx_solve;
+
+typedef void (*rxode2_assignFuns2_t)(rx_solve, rx_solving_options, t_F, t_LAG, t_RATE, t_DUR,t_calc_mtime, t_ME, t_IndF, t_getTime, t_locateTimeIndex, t_handle_evidL,t_getDur);
 
 static inline void sNull(sbuf *sbb) {
   sbb->s = NULL;
@@ -336,18 +418,3 @@ static inline void lineNull(vLines *sbb) {
   sbb->n  = 0;
   sbb->o  = 0;
 }
-
-typedef double (*t_F)(int _cSub,  int _cmt, double _amt, double t, double *y);
-typedef double (*t_LAG)(int _cSub,  int _cmt, double t, double *y);
-typedef double (*t_RATE)(int _cSub,  int _cmt, double _amt, double t, double *y);
-typedef double (*t_DUR)(int _cSub,  int _cmt, double _amt, double t, double *y);
-
-typedef void (*t_calc_mtime)(int cSub, double *mtime, double *y);
-
-typedef void (*t_ME)(int _cSub, double _t, double t, double *_mat, const double *__zzStateVar__);
-typedef void (*t_IndF)(int _cSub, double _t, double t, double *_mat);
-
-typedef double (*t_getTime)(int idx, rx_solving_options_ind *ind);
-typedef int (*t_locateTimeIndex)(double obs_time,  rx_solving_options_ind *ind);
-typedef int (*t_handle_evidL)(int evid, double *yp, double xout, int id, rx_solving_options_ind *ind) ;
-typedef double (*t_getDur)(int l, rx_solving_options_ind *ind, int backward, unsigned int *p);

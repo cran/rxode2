@@ -137,6 +137,35 @@ extern "C" {
 
   double * getOpIndSolve(rx_solving_options* op, rx_solving_options_ind* ind, int idx);
 
+  // Get the per-individual sticky tolerance factor (initialized to 1.0).
+  // This factor is re-applied to the thread-local tolerance arrays every
+  // time iniSubject() re-initializes this individual.
+  double getIndTolFactor(rx_solving_options_ind *ind);
+
+  // Set the per-individual sticky tolerance factor.  Values > 1.0 loosen
+  // tolerances; use when an individual is too stiff to solve at the
+  // requested tolerance so the factor persists across re-solves.
+  void setIndTolFactor(rx_solving_options_ind *ind, double tolFactor);
+
+  // Get the per-individual neq override.  Returns -1 when no override
+  // is in effect (caller should fall back to op->neq).  Use to solve
+  // a single individual with a different effective neq without
+  // mutating the shared op->neq from a parallel worker thread.
+  int getIndNeqOverride(rx_solving_options_ind *ind);
+
+  // Set the per-individual neq override.  Pass -1 to clear the
+  // override.  Caller is responsible for restoring the prior value
+  // (RAII guard in nlmixr2est).
+  void setIndNeqOverride(rx_solving_options_ind *ind, int neq);
+
+  void rxSetSilentErr(int silent);
+
+  int getOrdId(rx_solve *rx, int solveid);
+
+  int solveMethodThreadSafe(rx_solving_options* op);
+
+  void atolRtolFactor_(double factor);
+
 #if defined(__cplusplus)
 }
 #endif

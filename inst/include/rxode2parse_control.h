@@ -111,7 +111,12 @@
 #define Rxc_linCmtHmeanO 107
 #define Rxc_linCmtSuspect 108
 #define Rxc_linCmtForwardMax 109
-#define Rxc__zeros 110
+#define Rxc_indOwnAlloc 110
+#define Rxc_maxExtra 111
+#define Rxc_tolFactor 112
+#define Rxc_serializeFile 113
+#define Rxc_dense 114
+#define Rxc__zeros 115
 #define RxMv_params 0
 #define RxMv_lhs 1
 #define RxMv_state 2
@@ -141,8 +146,10 @@
 #define RxMv_normProp 26
 #define RxMv_stateOrd 27
 #define RxMv_lhsOrd 28
-#define RxMv_timeId 29
-#define RxMv_md5 30
+#define RxMv_splitBolus 29
+#define RxMv_strCmpParams 30
+#define RxMv_timeId 31
+#define RxMv_md5 32
 #define RxMvFlag_ncmt 0
 #define RxMvFlag_ka 1
 #define RxMvFlag_linB 2
@@ -157,6 +164,7 @@
 #define RxMvFlag_nLlik 11
 #define RxMvFlag_ndiff 12
 #define RxMvFlag_mix 13
+#define RxMvFlag_evid_ 14
 
 #define RxMvTrans_lib_name 0
 #define RxMvTrans_jac 1

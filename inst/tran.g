@@ -22,9 +22,19 @@ statement
   | param_statement end_statement
   | interp_statement end_statement
   | cmt_statement end_statement
+  | splitBolus_statement end_statement
   | dvid_statementI end_statement
   | break_statement end_statement
   | simfun_statement end_statement
+  | obs_statement end_statement
+  | evid_statement end_statement
+  | bolus_statement end_statement
+  | infuse_statement end_statement
+  | infuseDur_statement end_statement
+  | replace_statement end_statement
+  | multiply_statement end_statement
+  | phantom_statement end_statement
+  | reset_statement end_statement
   | compound_statement
   | selection_statement
   | ifelse_statement
@@ -44,8 +54,84 @@ break_statement
 
 simfun_statement : "(simeps|simeta)" '(' ')' ;
 
+obs_statement : function ;
+
+cmt_evid: string |  identifier_r_no_output | decimalintNo0 ;
+
+evid_statement
+  : 'evid_' '('
+    logical_or_expression ','   /* time  */
+    logical_or_expression ','   /* evid  */
+    logical_or_expression ','   /* amt   */
+    cmt_evid              ','   /* cmt   */
+    logical_or_expression ','   /* rate  */
+    logical_or_expression ','   /* ii    */
+    decimalint            ','   /* addl  */
+    ssVal                      /* ss    */
+    ')' ;
+
+bolus_statement
+    : 'bolus' '('
+            logical_or_expression ','   /* amt   */
+            cmt_evid              ','   /* cmt   */
+            logical_or_expression ','   /* ii    */
+            decimalint            ','   /* addl  */
+            ssVal                       /* ss    */
+            ')' ;
+
+infuse_statement
+    : 'infuse' '('
+            logical_or_expression ','   /* amt   */
+            logical_or_expression ','   /* rate  */
+            cmt_evid              ','   /* cmt   */
+            logical_or_expression ','   /* ii    */
+            decimalint            ','   /* addl  */
+            ssVal                      /* ss    */
+            ')' ;
+
+infuseDur_statement
+    : 'infuseDur' '('
+            logical_or_expression ','   /* amt   */
+            logical_or_expression ','   /* dur  */
+            cmt_evid              ','   /* cmt   */
+            logical_or_expression ','   /* ii    */
+            decimalint            ','   /* addl  */
+            ssVal                      /* ss    */
+            ')' ;
+
+replace_statement
+    : 'replace' '('
+            logical_or_expression ','   /* amt   */
+            cmt_evid   /* cmt   */
+            ')' ;
+
+multiply_statement
+    : 'multiply' '('
+            logical_or_expression ','   /* amt   */
+            cmt_evid   /* cmt   */
+            ')' ;
+
+phantom_statement
+    : 'phantom' '('
+            logical_or_expression ','   /* amt   */
+            cmt_evid              ','   /* cmt   */
+            logical_or_expression ','   /* ii    */
+            decimalint            ','   /* addl  */
+            ssVal                       /* ss    */
+            ')' ;
+
+reset_statement
+    : 'reset' '(' ')' ;
+
 cmt_statement
     : 'cmt' '(' identifier_r_no_output ')';
+
+splitBolus_statement
+    : 'splitBolus' '('
+      identifier_r_no_output ','
+      identifier_r_no_output
+      (',' identifier_r_no_output)*
+      ')';
 
 param_statement
     : "params?" '(' (identifier_r | theta0 | theta | eta) (',' (identifier_r | theta0 | theta | eta) )*  ')';
@@ -136,13 +222,17 @@ multiplicative_expression : unary_expression
 
 mult_part : ('*' | '/') unary_expression ;
 
-unary_expression : ('+' | '-')? (theta0 | theta | eta | primary_expression | power_expression );
+unary_expression : ('+' | '-')? (theta0 | theta | eta | primary_expression | power_expression | mod_expression );
 
 exponent_expression : ('+' | '-')? (theta0 | theta | eta | primary_expression );
 
 power_expression : primary_expression power_operator exponent_expression;
 
 power_operator   : ('^' | '**');
+
+mod_expression : primary_expression mod_operator exponent_expression;
+
+mod_operator : '%%';
 
 primary_expression
   : constant
@@ -172,7 +262,9 @@ identifier_r: identifier_r_extra | identifier_r_1 | identifier_r_2 ;
 
 identifier_r_no_output: identifier_r_no_output_1 | identifier_r_no_output_2 | identifier_r_extra;
 
-identifier_r_extra: 'alag' | 'f'| 'F' | 'rate' | 'dur' | 'lag';
+identifier_r_extra: 'alag' | 'f'| 'F' | 'rate' | 'dur' | 'lag' |
+  'evid_' | 'bolus' | 'infuse' | 'infuseDur' | 'splitBolus' | 'replace' |
+  'reset';
 
 theta: ('THETA' | 'theta') '[' decimalintNo0 ']';
 eta: ('ETA' | 'eta') '[' decimalintNo0 ']';
@@ -182,7 +274,7 @@ theta_noout: ('THETA' | 'theta') '[' decimalintNo0 ']';
 eta_noout: ('ETA' | 'eta') '[' decimalintNo0 ']';
 theta0_noout: ('THETA' | 'theta' | 'ETA' | 'eta');
 
-
+ssVal: "0|1|2|3" $term -1;
 decimalintNo0: "([1-9][0-9]*)" $term -1;
 decimalint: "0|([1-9][0-9]*)" $term -1;
 string: string1 | string2;

@@ -9,6 +9,7 @@
 \alias{rxSolve.nlmixr2FitCore}
 \alias{rxSolve.default}
 \alias{update.rxSolve}
+\alias{rxSolve.rxSolve}
 \alias{predict.rxode2}
 \alias{predict.function}
 \alias{predict.rxUi}
@@ -150,6 +151,11 @@ rxSolve(
   linCmtHmeanO = c("geometric", "arithmetic", "harmonic"),
   linCmtSuspect = 1e-06,
   linCmtForwardMax = 2L,
+  indOwnAlloc = NA,
+  maxExtra = 1000L,
+  tolFactor = NULL,
+  serializeFile = NULL,
+  dense = FALSE,
   envir = parent.frame()
 )
 
@@ -214,12 +220,24 @@ rxSolve(
   events = NULL,
   inits = NULL,
   ...,
+  indOwnAlloc = TRUE,
   theta = NULL,
   eta = NULL,
   envir = parent.frame()
 )
 
 \method{update}{rxSolve}(object, ...)
+
+\method{rxSolve}{rxSolve}(
+  object,
+  params = NULL,
+  events = NULL,
+  inits = NULL,
+  ...,
+  theta = NULL,
+  eta = NULL,
+  envir = parent.frame()
+)
 
 \method{predict}{rxode2}(object, ...)
 
@@ -323,13 +341,18 @@ during one call to the solver. (5000 by default)}
 \item{hmin}{The minimum absolute step size allowed. The default
 value is 0.}
 
-\item{hmax}{The maximum absolute step size allowed.  When
-\code{hmax=NA} (default), uses the average difference +
-hmaxSd*sd in times and sampling events. The \code{hmaxSd} is a user
-specified parameter and which defaults to zero.  When
-\code{hmax=NULL} rxode2 uses the maximum difference in times in
-your sampling and events.  The value 0 is equivalent to infinite
-maximum absolute step size.}
+\item{hmax}{The maximum absolute step size allowed.
+
+When \code{hmax=NA} and dense=FALSE (default), uses the average
+difference + hmaxSd*sd in times and sampling events. The \code{hmaxSd}
+is a user specified parameter and which defaults to zero.
+
+When \code{hmax=NA} and \code{dense=TRUE}, uses the maximum difference in
+times in your sampling and events.
+
+To use this for other routines specify \code{hmax=NULL} the maximum
+difference in times in your sampling and events us used.  The
+value 0 is equivalent to infinite maximum absolute step size.}
 
 \item{hmaxSd}{The number of standard deviations of the time
 difference to add to hmax. The default is 0}
@@ -345,8 +368,8 @@ default value is determined by the solver (when \code{hini = 0})}
 method.  The default value is 5.  This can be between 1 and 5.}
 
 \item{...}{Other arguments including scaling factors for each
-compartment.  This includes S# = numeric will scale a compartment
-# by a dividing the compartment amount by the scale factor,
+compartment.  This includes \code{S# =} numeric will scale a compartment
+\code{#} by a dividing the compartment amount by the scale factor,
 like NONMEM.}
 
 \item{cores}{Number of cores used in parallel ODE solving.  This
@@ -950,6 +973,69 @@ integer from 1 to 3.  There is at least 1 extra point taken for
 gradient calculation, if the gradient is suspect another is taken
 (if this value is 2), and finally a third is calculated if the
 gradient is still suspect.}
+
+\item{indOwnAlloc}{Logical; when \code{TRUE} each individual's \code{dose},
+\code{ii}, \code{all_times}, and \code{solve} arrays are allocated independently
+via \code{malloc}/\code{calloc} rather than as pointers into a single
+global buffer.  This enables per-individual reallocation for dose
+and observation-pushing with \code{evid_()} and related
+functions. When \code{FALSE} these arrays are allocated as a single
+global buffer, which is slightly faster and slightly more memory
+efficient but does not allow for dynamic dosing/observations.  By
+default this is \code{NA} which automatically decides based on if
+there is any dosing or observation pushing in the model.}
+
+\item{maxExtra}{Integer; maximum number of events (doses and
+observations) that \code{evid_()} may push per individual per solve.
+When an individual exceeds this limit the solve is aborted for
+that individual (output filled with \code{NA}) and an error is raised
+after the full parallel solve completes.  Set to \code{0L} to allow
+unlimited pushes (use with care — cascading \code{evid_()} calls can
+grow without bound).  Default is \code{100L}.}
+
+\item{tolFactor}{A per-individual tolerance multiplier (>= 1.0, or
+\code{NULL} for no effect).  When supplied, each individual's
+\code{atol}, \code{rtol}, \code{ssAtol}, and \code{ssRtol} are multiplied by
+this factor before the ODE solver is called, loosening the
+tolerances for that individual.  This is useful when a small
+number of subjects are numerically stiff and would otherwise
+cause solve failures: pass a larger factor for the
+problematic subjects and leave the rest at 1.0 (or omit them).
+The effective tolerance is always capped at \code{maxAtolRtolFactor}.
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{`tolFactor` may be:
+* `NULL` (default) — no adjustment applied.
+* A single numeric value — the same factor is applied to
+  the first `length(tolFactor)` subjects in order.
+* A numeric vector — applied element-wise to subjects in
+  the order they appear.
+* A **named** numeric vector — names are matched to subject
+  IDs; unmatched subjects retain `tolFactor = 1.0`.
+
+The per-subject factors used (after matching) are stored back
+in the solved object and accessible via `$tolFactor`.
+}\if{html}{\out{</div>}}}
+
+\item{serializeFile}{Controls serialization-driven solves. When
+this is a file path, \code{rxSolve()} writes the pre-integration
+serialized state to that file and returns the file path invisibly
+without running the solve. When this is \code{TRUE}, \code{rxSolve()}
+writes the serialized state to a temporary \code{.rxbin} file, solves
+by reloading from that file, returns the solve result, and then
+removes the temporary file (mostly for testing). When solving
+from an existing serialization file via \code{rxSolve(model, "state.rxbin")}, only the model and serialization file are
+allowed because the file already stores the solve inputs and
+controls.}
+
+\item{dense}{Logical; when \code{TRUE} and \code{method="dop853"}, enables
+DOP853 dense polynomial output (\code{iout=2}). Instead of calling the
+solver once per observation time, a single solver call spans each
+inter-dose interval and a 7th-order polynomial interpolates all
+observation times within that interval. This can substantially
+reduce the number of solver evaluations for models with dense
+sampling grids. Silently ignored for non-dop853 methods. Not yet
+supported for \code{linCmt()} models (a message is emitted and the
+standard path is used instead).}
 
 \item{envir}{is the environment to look for R user functions
 (defaults to parent environment)}

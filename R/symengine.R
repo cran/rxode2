@@ -55,11 +55,13 @@ regIfOrElse <- rex::rex(or(regIf, regElse))
   "&&" = c("rxAnd(", ",", ")"),
   "||" = c("rxOr(", ",", ")"),
   "&" = c("rxAnd(", ",", ")"),
-  "|" = c("rxOr(", ",", ")")
+  "|" = c("rxOr(", ",", ")"),
+  "%%" = c("rxMod(", ",", ")")
 )
 
 .SEdouble <- list(
   "lbeta" = c("lbeta(", ",", ")"),
+  "rxMod" = c("(", "%%", ")"),
   "rxEq" = c("(", "==", ")"),
   "rxNeq" = c("(", "!=", ")"),
   "rxGeq" = c("(", ">=", ")"),
@@ -2060,7 +2062,7 @@ rxToSE <- function(x, envir = NULL, progress = FALSE,
         }
       } else {
         if (.fun %in% c("param", "dvid", "cmt", "locf", "nocb",
-                        "midpoint", "linear")) return(NULL)
+                        "midpoint", "linear", "splitBolus")) return(NULL)
         .udf <- try(get(.fun, envir = .rxToSE.envir$parent, mode="function"), silent =TRUE)
         if (inherits(.udf, "try-error")) {
           .udf <- try(get(.fun, envir = rxode2::.udfEnvSet(NULL), mode="function"), silent =TRUE)
@@ -3854,6 +3856,13 @@ rxSplitPlusQ <- function(x, level = 0, mult = FALSE) {
       "dabs1", "abs1"
     ))
   }
+
+  .df <- rxode2parseGetTranslation()
+  .w <- which(.df$package %in% c("rxode2", "rxode2ll"))
+  .df <- .df[-.w, ,drop=FALSE]
+
+  .ret <- c(.ret, .df$rxFun)
+
   # remove operators
   .ret <- setdiff(.ret,
                   c("==", "!=", ">=", "<=", "<", ">", "&&", "||", "&", "|", "!", "+", "-", "*", "**", "^", "/"))

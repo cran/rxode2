@@ -14,14 +14,17 @@
 #include "rxthreefry.h"
 #include "rx2api.h"
 #include "mlogit.h"
+#include "rxode2_altrep.h"
 
 SEXP _rxHasOpenMp(void);
 
+extern int _rxPushDose(rx_solving_options_ind *_ind, double _curTime,
+                       double _time, int _evid, double _amt, int _cmt,
+                       double _rate, double _ii, int _addl, int _ss,
+                       int _isDur);
+
 SEXP _vecDF(SEXP cv, SEXP n_);
 SEXP _rxode2_dropUnitsRxSolve(SEXP);
-SEXP _rxode2_atolRtolFactor_(SEXP);
-SEXP _rxode2_etRep_(SEXP, SEXP, SEXP, SEXP, SEXP,
-                    SEXP, SEXP);
 SEXP _rxode2_rxSolveSEXP(SEXP, SEXP, SEXP, SEXP, SEXP,
                          SEXP, SEXP, SEXP);
 SEXP _rxode2_etTrans(SEXP, SEXP, SEXP, SEXP, SEXP,
@@ -164,6 +167,7 @@ extern double rxode2_sum(double *input, int len);
 extern double rxode2_prod(double *input, int len);
 
 extern void rxode2_assign_fn_pointers(SEXP mv);
+extern void _rxode2_assignFuns2(rx_solve rx, rx_solving_options op, t_F f, t_LAG lag, t_RATE rate, t_DUR dur, t_calc_mtime mtime, t_ME me, t_IndF indf, t_getTime gettime, t_locateTimeIndex timeindex, t_handle_evidL handleEvid, t_getDur getdur);
 
 
 // Need to change to remove global variables
@@ -285,13 +289,20 @@ double gamma_q_inva(double a, double q);
 double gamma_p_inva(double a, double p);
 
 int compareFactorVal(int val, const char *factor, const char *value);
+int compareFactorInt(int val, const char *factor, int value);
 SEXP _rxode2_rxSolve_(SEXP, SEXP, SEXP, SEXP, SEXP,
                       SEXP, SEXP, SEXP);
+SEXP _rxode2_rxSolveFromRaw_(SEXP, SEXP, SEXP, SEXP, SEXP,
+                             SEXP, SEXP, SEXP, SEXP);
+SEXP _rxode2_rxSaveState_(void);
+SEXP _rxode2_rxIsSerializeFile_(SEXP);
+SEXP _rxode2_rxRestoreState_(SEXP);
 
 SEXP getRxThreads_R(SEXP verbose);
 SEXP setRxthreads(SEXP threads, SEXP percent, SEXP throttle);
 
 int getSilentErr(void);
+void setSilentErr(int silent);
 
 int iniSubjectE(int solveid, int inLhs, rx_solving_options_ind *ind, rx_solving_options *op, rx_solve *rx,
                 t_update_inis u_inis);
@@ -328,15 +339,6 @@ extern void rxModelsAssignC(const char *str0, SEXP assign);
 
 SEXP _rxode2_rxSolveSetup(void);
 
-SEXP _rxode2_etDollarNames(SEXP);
-SEXP _rxode2_rxIsEt2(SEXP);
-SEXP _rxode2_et_(SEXP, SEXP);
-SEXP _rxode2_etUpdate(SEXP, SEXP, SEXP, SEXP);
-SEXP _rxode2_etSeq_(SEXP, SEXP, SEXP, SEXP, SEXP,
-                    SEXP, SEXP, SEXP, SEXP, SEXP,
-                    SEXP);
-SEXP _rxode2_etRep_(SEXP, SEXP, SEXP, SEXP, SEXP,
-                    SEXP, SEXP);
 SEXP _rxode2_RcppExport_registerCCallable(void);
 SEXP _rxode2_rxParseSetSilentErr(SEXP silentSEXP);
 
@@ -347,6 +349,7 @@ SEXP _rxode2_rxQr(SEXP);
 
 SEXP _rxode2_parse_strncmpci(void);
 
+SEXP _rxode2_rxIsEt2(SEXP);
 SEXP _rxode2_etTransEvidIsObs(SEXP);
 SEXP _rxode2_rxSetIni0(SEXP ini0SEXP);
 SEXP _rxode2_rxEtTransAsDataFrame_(SEXP inData1SEXP);
@@ -375,7 +378,9 @@ SEXP _rxode2_linCmtModelDouble(SEXP, SEXP, SEXP, SEXP, SEXP,
                                SEXP, SEXP, SEXP, SEXP, SEXP,
                                SEXP, SEXP);
 
+SEXP _rxode2_atolRtolFactor_(SEXP);
 void allocExtraDosingC(void);
+void atolRtolFactorC_(double factor);
 
 SEXP _rxode2_rxode2Ptr(void) {
   int pro = 0;  // Counter for the number of PROTECT calls
@@ -445,8 +450,18 @@ SEXP _rxode2_rxode2Ptr(void) {
   SEXP rxode2mexpit = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&mexpit, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2getRxMixnum = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getRxMixnum, R_NilValue, R_NilValue)); pro++;
   SEXP rxode2setRxMixnum = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&setRxMixnum, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2getIndTolFactor = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndTolFactor, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2setIndTolFactor = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&setIndTolFactor, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2getIndNeqOverride = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getIndNeqOverride, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2setIndNeqOverride = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&setIndNeqOverride, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2rxSetSilentErr =  PROTECT(R_MakeExternalPtrFn((DL_FUNC)&setSilentErr, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2getOrdId = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&getOrdId, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2solveMethodThreadSafe = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&solveMethodThreadSafe, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2atolRtolFactor_ = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&atolRtolFactorC_, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2rxInt = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&rxInt, R_NilValue, R_NilValue)); pro++;
+  SEXP rxode2rxReal = PROTECT(R_MakeExternalPtrFn((DL_FUNC)&rxReal, R_NilValue, R_NilValue)); pro++;
 
-#define nVec 54
+#define nVec 64
   SEXP ret = PROTECT(Rf_allocVector(VECSXP, nVec)); pro++;
   SET_VECTOR_ELT(ret, 0, rxode2rxRmvnSEXP);
   SET_VECTOR_ELT(ret, 1, rxode2rxParProgress);
@@ -502,6 +517,17 @@ SEXP _rxode2_rxode2Ptr(void) {
   SET_VECTOR_ELT(ret, 51, rxode2mexpit);
   SET_VECTOR_ELT(ret, 52, rxode2getRxMixnum);
   SET_VECTOR_ELT(ret, 53, rxode2setRxMixnum);
+  SET_VECTOR_ELT(ret, 54, rxode2getIndTolFactor);
+  SET_VECTOR_ELT(ret, 55, rxode2setIndTolFactor);
+  SET_VECTOR_ELT(ret, 56, rxode2getIndNeqOverride);
+  SET_VECTOR_ELT(ret, 57, rxode2setIndNeqOverride);
+  SET_VECTOR_ELT(ret, 58, rxode2rxSetSilentErr);
+  SET_VECTOR_ELT(ret, 59, rxode2getOrdId);
+  SET_VECTOR_ELT(ret, 60, rxode2solveMethodThreadSafe);
+  SET_VECTOR_ELT(ret, 61, rxode2atolRtolFactor_);
+  SET_VECTOR_ELT(ret, 62, rxode2rxInt);
+  SET_VECTOR_ELT(ret, 63, rxode2rxReal);
+
 
   SEXP retN = PROTECT(Rf_allocVector(STRSXP, nVec)); pro++;
   SET_STRING_ELT(retN, 0, Rf_mkChar("rxode2rxRmvnSEXP"));
@@ -558,6 +584,16 @@ SEXP _rxode2_rxode2Ptr(void) {
   SET_STRING_ELT(retN, 51, Rf_mkChar("rxode2mexpit"));
   SET_STRING_ELT(retN, 52, Rf_mkChar("rxode2getRxMixnum"));
   SET_STRING_ELT(retN, 53, Rf_mkChar("rxode2setRxMixnum"));
+  SET_STRING_ELT(retN, 54, Rf_mkChar("rxode2getIndTolFactor"));
+  SET_STRING_ELT(retN, 55, Rf_mkChar("rxode2setIndTolFactor"));
+  SET_STRING_ELT(retN, 56, Rf_mkChar("rxode2getIndNeqOverride"));
+  SET_STRING_ELT(retN, 57, Rf_mkChar("rxode2setIndNeqOverride"));
+  SET_STRING_ELT(retN, 58, Rf_mkChar("rxode2rxSetSilentErr"));
+  SET_STRING_ELT(retN, 59, Rf_mkChar("rxode2getOrdId"));
+  SET_STRING_ELT(retN, 60, Rf_mkChar("rxode2solveMethodThreadSafe"));
+  SET_STRING_ELT(retN, 61, Rf_mkChar("rxode2atolRtolFactor_"));
+  SET_STRING_ELT(retN, 62, Rf_mkChar("rxode2rxInt"));
+  SET_STRING_ELT(retN, 63, Rf_mkChar("rxode2rxReal"));
 
 #undef nVec
 
@@ -601,6 +637,8 @@ SEXP _rxode2_mexpit(SEXP p);
 SEXP _rxode2_dmexpit(SEXP p);
 SEXP _rxode2_mlogit_f(SEXP x, SEXP p);
 SEXP _rxode2_mlogit_j(SEXP x);
+SEXP _rxode2_rxMemoryComponents_(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
+SEXP _rxode2_rxSolveSetCurObj_(SEXP);
 
 void R_init_rxode2(DllInfo *info){
   allocExtraDosingC();
@@ -644,12 +682,7 @@ void R_init_rxode2(DllInfo *info){
     {"_rxode2_etTransEvidIsObs", (DL_FUNC) &_rxode2_etTransEvidIsObs, 1},
     {"_rxode2_parse_strncmpci",(DL_FUNC) &_rxode2_parse_strncmpci, 0},
     {"_rxode2_rxParseSetSilentErr", (DL_FUNC) &_rxode2_rxParseSetSilentErr, 1},
-    {"_rxode2_etRep_", (DL_FUNC) &_rxode2_etRep_, 7},
-    {"_rxode2_etSeq_", (DL_FUNC) &_rxode2_etSeq_, 11},
-    {"_rxode2_etUpdate", (DL_FUNC) &_rxode2_etUpdate, 4},
-    {"_rxode2_et_", (DL_FUNC) &_rxode2_et_, 2},
     {"_rxode2_rxIsEt2", (DL_FUNC) &_rxode2_rxIsEt2, 1},
-    {"_rxode2_etDollarNames", (DL_FUNC) &_rxode2_etDollarNames, 1},
     {"_rxode2_rxSolveSetup", (DL_FUNC) &_rxode2_rxSolveSetup, 0},
     {"_rxode2_isIntel", (DL_FUNC) &_rxode2_isIntel, 0},
     {"_rxode2_binomProbsPredVec_", (DL_FUNC) &_rxode2_binomProbsPredVec_, 6},
@@ -704,7 +737,6 @@ void R_init_rxode2(DllInfo *info){
     {"_rxode2_etTrans", (DL_FUNC) &_rxode2_etTrans, 12},
     {"_rxode2_rxSolveSEXP", (DL_FUNC) &_rxode2_rxSolveSEXP, 8},
     {"_rxode2_dropUnitsRxSolve", (DL_FUNC) &_rxode2_dropUnitsRxSolve, 1},
-    {"_rxode2_atolRtolFactor_", (DL_FUNC) &_rxode2_atolRtolFactor_, 1},
     {"_rxode2_rxExpandGrid_", (DL_FUNC) &_rxode2_rxExpandGrid_, 3},
     {"_rxode2_rxExpandSens_", (DL_FUNC) &_rxode2_rxExpandSens_, 2},
     {"_rxode2_rxExpandSens2_",(DL_FUNC) &_rxode2_rxExpandSens2_, 3},
@@ -778,6 +810,13 @@ void R_init_rxode2(DllInfo *info){
     {"_rxSetSeed", (DL_FUNC) _rxode2_rxSetSeed, 1},
     {"_rxode2_rxordSelect", (DL_FUNC) _rxode2_rxordSelect, 2},
     {"_rxode2_rxErf", (DL_FUNC) &_rxode2_rxErf, 1},
+    {"_rxode2_rxMemoryComponents_", (DL_FUNC) &_rxode2_rxMemoryComponents_, 19},
+    {"_rxode2_rxSaveState_", (DL_FUNC) _rxode2_rxSaveState_, 0},
+    {"_rxode2_rxIsSerializeFile_", (DL_FUNC) _rxode2_rxIsSerializeFile_, 1},
+    {"_rxode2_rxRestoreState_", (DL_FUNC) _rxode2_rxRestoreState_, 1},
+    {"_rxode2_rxSolveFromRaw_", (DL_FUNC) _rxode2_rxSolveFromRaw_, 9},
+    {"_rxode2_rxSolveSetCurObj_", (DL_FUNC) &_rxode2_rxSolveSetCurObj_, 1},
+    {"_rxode2_atolRtolFactor_", (DL_FUNC) &_rxode2_atolRtolFactor_, 1},
     {NULL, NULL, 0}
   };
   // C callable to assign environments.
@@ -790,6 +829,7 @@ void R_init_rxode2(DllInfo *info){
 
   R_RegisterCCallable("rxode2", "_rxode2_rxModelVars_", (DL_FUNC) &_rxode2_rxModelVars_);
   R_RegisterCCallable("rxode2", "getSilentErr", (DL_FUNC) &getSilentErr);
+  R_RegisterCCallable("rxode2", "setSilentErr", (DL_FUNC) &setSilentErr);
   R_RegisterCCallable("rxode2", "logit", (DL_FUNC) &logit);
   R_RegisterCCallable("rxode2", "expit", (DL_FUNC) &expit);
 
@@ -846,6 +886,7 @@ void R_init_rxode2(DllInfo *info){
   R_RegisterCCallable("rxode2","rxode2_prod",               (DL_FUNC) &rxode2_prod);
 
   R_RegisterCCallable("rxode2","rxode2_assign_fn_pointers", (DL_FUNC) &rxode2_assign_fn_pointers);
+  R_RegisterCCallable("rxode2","_rxode2_assignFuns2", (DL_FUNC) &_rxode2_assignFuns2);
 
   R_RegisterCCallable("rxode2","_rxode2_rxAssignPtr",       (DL_FUNC) _rxode2_rxAssignPtr);
   R_RegisterCCallable("rxode2", "rxIsCurrentC", (DL_FUNC) rxIsCurrentC);
@@ -862,9 +903,11 @@ void R_init_rxode2(DllInfo *info){
   R_RegisterCCallable("rxode2", "gammaqInv", (DL_FUNC) &gamma_q_inv);
   R_RegisterCCallable("rxode2", "gammaqInva", (DL_FUNC) &gamma_q_inva);
   R_RegisterCCallable("rxode2", "compareFactorVal", (DL_FUNC) &compareFactorVal);
+  R_RegisterCCallable("rxode2", "compareFactorInt", (DL_FUNC) &compareFactorInt);
   R_RegisterCCallable("rxode2", "handleTlast", (DL_FUNC) &handleTlast);
   R_RegisterCCallable("rxode2", "phi", (DL_FUNC) &phi);
   R_RegisterCCallable("rxode2", "_setThreadInd", (DL_FUNC) &_setThreadInd);
+  R_RegisterCCallable("rxode2", "_rxPushDose",   (DL_FUNC) &_rxPushDose);
 
   R_RegisterCCallable("rxode2", "ribeta", (DL_FUNC) &ribeta);
   R_RegisterCCallable("rxode2", "ribinom", (DL_FUNC) &ribinom);
@@ -898,6 +941,10 @@ void R_init_rxode2(DllInfo *info){
   R_RegisterCCallable("rxode2", "rxweibull", (DL_FUNC) &rxweibull);
   R_RegisterCCallable("rxode2", "simeps", (DL_FUNC) &simeps);
   R_RegisterCCallable("rxode2", "simeta", (DL_FUNC) &simeta);
+  R_RegisterCCallable("rxode2", "getIndTolFactor", (DL_FUNC) &getIndTolFactor);
+  R_RegisterCCallable("rxode2", "setIndTolFactor", (DL_FUNC) &setIndTolFactor);
+  R_RegisterCCallable("rxode2", "getIndNeqOverride", (DL_FUNC) &getIndNeqOverride);
+  R_RegisterCCallable("rxode2", "setIndNeqOverride", (DL_FUNC) &setIndNeqOverride);
   // log likelihoods used in calculations
   static const R_CMethodDef cMethods[] = {
     {"rxode2_sum",               (DL_FUNC) &rxode2_sum, 2, rxode2_Sum_t},
@@ -908,6 +955,7 @@ void R_init_rxode2(DllInfo *info){
   R_registerRoutines(info, cMethods, callMethods, NULL, NULL);
   R_useDynamicSymbols(info, FALSE);
   rxOptionsIni();
+  rxode2_init_altrep_class(info);
   initRxThreads();
   avoid_openmp_hang_within_fork();
   nullGlobals();

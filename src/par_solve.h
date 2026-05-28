@@ -6,6 +6,9 @@
 #define __PAR_SOLVE_H___
 
 #define isSameTimeOp(xout, xp) (op->stiff == 0 ? isSameTimeDop(xout, xp) : isSameTime(xout, xp))
+#ifndef min2
+#define min2( a , b )  ( (a) < (b) ? (a) : (b) )
+#endif
 
 #if defined(__cplusplus)
 
@@ -20,10 +23,15 @@ extern "C" {
 
   void _setIndPointersByThread(rx_solving_options_ind *ind);
 
+  extern double maxAtolRtolFactor;
+
 
 	static inline int iniSubject(int solveid, int inLhs, rx_solving_options_ind *ind, rx_solving_options *op, rx_solve *rx,
 															 t_update_inis u_inis) {
 		ind->_rxFlag=1;
+    ind->fns = &(rx->fns);
+    ind->op = op;
+    ind->rx = rx;
     ind->linSS=0;
     ind->linSScmt=0;
     ind->linSSvar=0.0;
@@ -32,10 +40,31 @@ extern "C" {
     ind->linCmtAlast = NULL;
     ind->ssTime = NA_REAL;
     _setIndPointersByThread(ind);
+    // Apply this individual's sticky tolerance factor to the thread-local
+    // tolerance arrays.  _setIndPointersByThread() has already reset
+    // ind->atol2/rtol2/ssAtol/ssRtol to the per-thread global baseline.
+    // Multiplying by tolFactor here means the ODE solver immediately sees
+    // the correct loosened tolerances without any further call to
+    // atolRtolFactor_().  For most individuals tolFactor == 1.0 (set by
+    // setupRxInd()), so this loop costs only a few multiplications.
+    if (ind->atol2 != NULL) {
+      for (int _i = op->neq; _i--;) {
+        ind->atol2[_i]  = min2(ind->atol2[_i]  * ind->tolFactor, maxAtolRtolFactor);
+        ind->rtol2[_i]  = min2(ind->rtol2[_i]  * ind->tolFactor, maxAtolRtolFactor);
+        ind->ssAtol[_i] = min2(ind->ssAtol[_i] * ind->tolFactor, maxAtolRtolFactor);
+        ind->ssRtol[_i] = min2(ind->ssRtol[_i] * ind->tolFactor, maxAtolRtolFactor);
+      }
+    }
 		for (int i=rxLlikSaveSize*op->nLlik; i--;) {
 			ind->llikSave[i] = 0.0;
 		}
 		ind->ixds = ind->idx = ind->_update_par_ptr_in = 0; // reset dosing
+    ind->nPushedExtra = 0; // reset per-solve evid_() push counter
+    // Reset n_all_times to the original event-table size for the ODE solve
+    // pass.  _rxPushDose() grows n_all_times during the solve; the LHS output
+    // pass (inLhs==1) must see the grown count so that pushed events that
+    // interleave with original observations are not silently dropped.
+    if (inLhs == 0) ind->n_all_times = ind->n_all_times_orig;
 		ind->id=solveid;
 		ind->cacheME=0;
 		ind->curShift=0.0;
@@ -64,12 +93,16 @@ extern "C" {
       if (u_inis != NULL) {
         ind->isIni = 1;
         // Also can update individual random variables (if needed)
-        if (inLhs == 0) memcpy(ind->solve, op->inits, op->neq*sizeof(double));
+        // Use rxEffNeq() for the memcpy length: under a per-individual
+        // neqOverride (predNeq < op->neq), the per-event buffer stride is
+        // predNeq, so writing op->neq doubles into slot 0 would clobber the
+        // start of slot 1 (which sits at offset predNeq, not op->neq).
+        if (inLhs == 0) memcpy(ind->solve, op->inits, rxEffNeq(ind, op)*sizeof(double));
         u_inis(solveid, ind->solve); // Update initial conditions @ current time
         ind->isIni = 0;
       } else if (rx->nMtime && inLhs == 0 && op->neq > 0) {
         // No u_inis but state-dep mtime needs initial values in ind->solve
-        memcpy(ind->solve, op->inits, op->neq*sizeof(double));
+        memcpy(ind->solve, op->inits, rxEffNeq(ind, op)*sizeof(double));
       }
 		}
     // Compute model times using ind->solve (which has user-specified inits after u_inis).
@@ -79,7 +112,7 @@ extern "C" {
         // ODE solve pass (inLhs==0) or LHS-only model (neq==0): initialise mtime.
         // Compute mtime with actual initial state → mtime_init[k].
         double *_initState = (inLhs == 0 && op->neq > 0) ? ind->solve : op->inits;
-        calc_mtime(solveid, ind->mtime, _initState);
+        if (ind->fns && ind->fns->mtime) ind->fns->mtime(solveid, ind->mtime, _initState);
 
         // Compute mtime with zero state → base (state-independent) time mtime_base[k].
         // If base <= init, place event at base so the solver is forced to visit base,
@@ -91,11 +124,12 @@ extern "C" {
         double _baseMtime[90];
         if (op->neq > 0) {
           double *_zeroState = new double[op->neq]();  // zero-initialised
-          calc_mtime(solveid, _baseMtime, _zeroState);
+          if (ind->fns && ind->fns->mtime) ind->fns->mtime(solveid, _baseMtime, _zeroState);
           delete[] _zeroState;
         } else {
-          calc_mtime(solveid, _baseMtime, _initState);
+          if (ind->fns && ind->fns->mtime) ind->fns->mtime(solveid, _baseMtime, _initState);
         }
+        std::fill_n(ind->mtime0, rx->nMtime, R_NegInf);
         for (int k = 0; k < rx->nMtime; k++) {
           if (_baseMtime[k] <= ind->mtime[k]) {
             // Event is at or after the base time: place at base so solver visits it.
@@ -104,7 +138,6 @@ extern "C" {
           // else: event is before base (negative offset); keep mtime_init (old behaviour).
           ind->mtime0[k] = ind->mtime[k];  // trigger = initial placement
         }
-        for (int k = rx->nMtime; k < 90; k++) ind->mtime0[k] = R_NegInf;
       }
       // else: LHS pass (inLhs==1, neq>0) — preserve ind->mtime[k] set by the ODE
       // solve (including any recomputeMtimeIfNeeded updates).  getTime_ returns
@@ -125,7 +158,10 @@ extern "C" {
       // sortInd and may have re-sorted for state-dep lag; preserve that order so
       // getSolve(i) positions in rxode2_df agree with the solve loop.
       sortInd(ind);
-      if (op->badSolve) return 0;
+      // Note: op->badSolve is NOT checked here — it is a shared global flag.
+      // In parallel mode another thread's failed solve would prevent THIS
+      // individual from initializing.  Bad-solve state is handled per-individual
+      // via localBadSolve / *rc in the caller.
     }
     ind->mainSorted = 1;
 		ind->ixds=ind->idx=0;
@@ -151,6 +187,15 @@ extern "C" {
     *xp = *xout;
     ind->linCmtAlast = yp ;
     ind->ixds++;
+    // Reset dose-tracking after time reset so tad is never negative post-reset.
+    // Any dose that fires after this EVID=3 re-establishes tlast from scratch.
+    int _ncmt = op->neq + op->extraCmt;
+    for (int _j = _ncmt; _j--;) {
+      ind->tlastS[_j]   = NA_REAL;
+      ind->curDoseS[_j] = NA_REAL;
+    }
+    ind->tlast   = NA_REAL;
+    ind->curDose = NA_REAL;
   }
 
 #if defined(__cplusplus)
@@ -253,6 +298,7 @@ static inline void preSolve(rx_solving_options *op, rx_solving_options_ind *ind,
     ind->tprior = xp + ind->curShift; // Set the time to the time to solve to.
     ind->tout   = xout + ind->curShift;
   }
+  ind->_atEventTime = 1;
 }
 
 

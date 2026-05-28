@@ -215,6 +215,8 @@ suggest the package emphasis on pharmacometrics modeling, including
 pharmacokinetics (PK), pharmacodynamics (PD), disease progression,
 drug-disease modeling, etc.
 
+\subsection{Creating rxode2 models}{
+
 The ODE-based model specification may be coded inside four places:
 \itemize{
 \item Inside a \code{rxode2({})} block statements:
@@ -319,6 +321,7 @@ mod$simulationIniModel
 This is the same type of function required for \code{nlmixr2} estimation and
 can be extended and modified by model piping. For this reason will be
 focused on in the documentation.
+}
 
 This basic model specification consists of one or more statements
 optionally terminated by semi-colons \verb{;} and optional comments (comments
@@ -400,8 +403,8 @@ An example model is shown below:
 Expressions in assignment and \code{if} statements can be numeric or logical.
 
 Numeric expressions can include the following numeric operators
-\verb{+, -, *, /, ^} and those mathematical functions defined in the C or the
-R math libraries (e.g., \code{fabs}, \code{exp}, \code{log}, \code{sin}, \code{abs}).
+\verb{+, -, *, /, ^, \%\%} and those mathematical functions defined in the C or
+the R math libraries (e.g., \code{fabs}, \code{exp}, \code{log}, \code{sin}, \code{abs}).
 
 You may also access the R’s functions in the \href{https://cran.r-project.org/doc/manuals/r-release/R-exts.html#Numerical-analysis-subroutines}{R math libraries},
 like \code{lgammafn} for the log gamma function.
@@ -990,10 +993,6 @@ In general all the that are supported are in the following table
 
 }
 }
-\section{Creating rxode2 models}{
-NA
-}
-
 \section{Note on strings in rxode2}{
 Strings are converted to double values inside of \code{rxode2}, hence you can
 refer to them as an integer corresponding to the string value or the

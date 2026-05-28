@@ -54,7 +54,7 @@ rxTest({
                                  SEXN=rbinom(n = 1000, size = 1, prob = 0.5)),
                  # in this case it would be useful to keep the WT in the output dataset
                  keep=c("WTBL","SEXN")),
-                 "to use 'iCov' you must have an id in your event table")
+                 "the 'id' in the iCov must have 1 unique match to the event table")
   })
 
 
@@ -147,5 +147,27 @@ rxTest({
                    paste0("cannot specify '", v,"' in 'iCov'"))
     }
 
+  })
+
+  test_that("iCov string comparison covariates use model ordering", {
+    mod <- rxode2parse('c = cov == "alpha"; d = "beta" == cov')
+
+    ev <- et() |>
+      et(amt = 1, time = 0) |>
+      et(time = 1) |>
+      et(id = 1:3)
+
+    ic <- data.frame(
+      id = 1:3,
+      cov = factor(c("beta", "gamma", "alpha"),
+                   levels = c("gamma", "beta", "alpha"))
+    )
+
+    tmp <- etTrans(ev, mod, iCov = ic, keep = "cov")
+    tmp2 <- attr(class(tmp), ".rxode2.lst")
+    class(tmp2) <- NULL
+
+    expect_equal(as.numeric(tmp2$cov1$cov), c(2, 3, 1))
+    expect_equal(as.numeric(tmp2$pars["cov", ]), c(2, 3, 1))
   })
 })

@@ -96,26 +96,6 @@ omegaListRse <- function(omegaIn) {
     .Call(`_rxode2_omegaListRse`, omegaIn)
 }
 
-etDollarNames <- function(obj) {
-    .Call(`_rxode2_etDollarNames`, obj)
-}
-
-etUpdate <- function(obj, arg = NULL, value = NULL, exact = TRUE) {
-    .Call(`_rxode2_etUpdate`, obj, arg, value, exact)
-}
-
-et_ <- function(input, et__) {
-    .Call(`_rxode2_et_`, input, et__)
-}
-
-etSeq_ <- function(ets, handleSamples = 0L, waitType = 0L, defaultIi = 0, rbind = FALSE, uniqueId = 0L, reserveLen = 0L, needSort = TRUE, newUnits = as.character( c()), newShow = as.logical( c()), isCmtIntIn = FALSE) {
-    .Call(`_rxode2_etSeq_`, ets, handleSamples, waitType, defaultIi, rbind, uniqueId, reserveLen, needSort, newUnits, newShow, isCmtIntIn)
-}
-
-etRep_ <- function(curEt, times, wait, ids, handleSamples, waitType, ii) {
-    .Call(`_rxode2_etRep_`, curEt, times, wait, ids, handleSamples, waitType, ii)
-}
-
 #' Get the Linear Compartment Information based on the model variables
 #'
 #' @param obj The model variables object
@@ -640,6 +620,10 @@ rxSimThetaOmega <- function(params = NULL, omega = NULL, omegaDf = NULL, omegaLo
     .Call(`_rxode2_rxSimThetaOmega`, params, omega, omegaDf, omegaLower, omegaUpper, omegaIsChol, omegaSeparation, omegaXform, nSub, thetaMat, thetaLower, thetaUpper, thetaDf, thetaIsChol, nStud, sigma, sigmaLower, sigmaUpper, sigmaDf, sigmaIsChol, sigmaSeparation, sigmaXform, nCoresRV, nObs, dfSub, dfObs, simSubjects, simVariability)
 }
 
+rxSolveSetCurObj_ <- function(obj) {
+    invisible(.Call(`_rxode2_rxSolveSetCurObj_`, obj))
+}
+
 #' Free the C solving/parsing information.
 #'
 #' Take the ODE C system and free it.
@@ -659,6 +643,10 @@ rxSolveFree <- function() {
 #' @author Matthew L. Fidler
 rxSolveSetup <- function() {
     .Call(`_rxode2_rxSolveSetup`)
+}
+
+rxSolveFromRaw_ <- function(obj, rawObj, solveState, rxControl, specParams, extraArgs, params, events, inits) {
+    .Call(`_rxode2_rxSolveFromRaw_`, obj, rawObj, solveState, rxControl, specParams, extraArgs, params, events, inits)
 }
 
 rxSolve_ <- function(obj, rxControl, specParams, extraArgs, params, events, inits, setupOnly) {
@@ -928,8 +916,72 @@ rxSymInvCholEnvCalculate <- function(obj, what, theta = NULL) {
     .Call(`_rxode2_rxSymInvCholEnvCalculate`, obj, what, theta)
 }
 
+#' Report the byte sizes of every rxode2 solver memory allocation
+#'
+#' Returns a named numeric vector of byte counts for every buffer rxode2
+#' allocates during \code{rxSolve()}.  Values are computed with the same
+#' formulas used by the actual allocator in \code{rxData.cpp} via the shared
+#' \code{rxFillMemLayout()} function, so any change to the allocator
+#' automatically changes the estimate.
+#'
+#' @param neq       Number of ODE states (\code{length(rxModelVars(model)$state)}).
+#' @param stateSize Effective \code{state.size()} passed to the solver.
+#'   For pure ODE models this equals \code{neq}; for linCmt-only models it
+#'   may be 0.  Use \code{neq} when in doubt.
+#' @param nlhs      Number of LHS (calculated) outputs.
+#' @param npars     Number of model parameters (for \code{gpars} estimate).
+#' @param neta      Number of random effects (etas).
+#' @param neps      Number of residual-error levels (epsilons).
+#' @param ncov      Number of time-varying covariates.
+#' @param nsim      Number of simulations.
+#' @param cores     Number of parallel OMP threads.
+#' @param nMtime    Number of model measurement times.
+#' @param extraCmt  Extra compartments (0, 1 = depot, 2 = depot+central).
+#' @param linB      1 if using an analytical linear-compartment model, else 0.
+#' @param nLlik     Number of log-likelihood terms (FOCEi).
+#' @param nIndSim   Per-individual simulation count (typically \code{neta+neps}).
+#' @param numLinSens Number of linear sensitivity parameters (FOCEi mixed models).
+#' @param numLin    Number of linear compartment terms (FOCEi mixed models).
+#' @param nsub      Number of subjects.
+#' @param nallTotal Total events across all subjects (sum of obs + doses).
+#' @param maxAllTimes Maximum events for any single subject.
+#' @return Named numeric vector; each element is bytes for that allocation.
+#'   Also includes \code{sizeofInd} (bytes per \code{rx_solving_options_ind}
+#'   struct) and \code{rxLlikSaveSize} (the compile-time constant).
+#' @noRd
+rxMemoryComponents_ <- function(neq, stateSize, nlhs, npars, neta, neps, ncov, nsim, cores, nMtime, extraCmt, linB, nLlik, nIndSim, numLinSens, numLin, nsub, nallTotal, maxAllTimes) {
+    .Call(`_rxode2_rxMemoryComponents_`, neq, stateSize, nlhs, npars, neta, neps, ncov, nsim, cores, nMtime, extraCmt, linB, nLlik, nIndSim, numLinSens, numLin, nsub, nallTotal, maxAllTimes)
+}
+
 rxOptRep_ <- function(input) {
     .Call(`_rxode2_rxOptRep_`, input)
+}
+
+#' Save the pre-integration rxode2 solver state to a binary file
+#'
+#' Called internally after event-table and parameter setup but before ODE
+#' integration.  The file can later be restored with rxRestoreState_().
+#'
+#' @param path File path to write (created/overwritten).
+#' @return Invisibly TRUE.
+#' @noRd
+rxSaveState_ <- function() {
+    .Call(`_rxode2_rxSaveState_`)
+}
+
+#' Check whether a file was written by rxSaveState_
+#' @noRd
+rxIsSerializeFile_ <- function(rawSexp) {
+    .Call(`_rxode2_rxIsSerializeFile_`, rawSexp)
+}
+
+#' Restore a pre-integration rxode2 solver state from binary file
+#'
+#' @param path File path written by rxSaveState_().
+#' @return Invisibly TRUE.
+#' @noRd
+rxRestoreState_ <- function(rawSexp) {
+    .Call(`_rxode2_rxRestoreState_`, rawSexp)
 }
 
 rxStack_ <- function(Data, vars = NULL) {

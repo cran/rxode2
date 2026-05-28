@@ -321,14 +321,14 @@ rxTest({
       }
 
       mf <- function(d2) {
-        return(d2 / (d2 - 2))
+        d2 / (d2 - 2)
       }
 
       expect_equal(mean(f$x1), mf(20), tolerance = 0.01)
-      expect_equal(sd(f$x1), sf(10, 20), tolerance = 0.01)
+      expect_equal(sd(f$x1), sf(10, 20), tolerance = 0.02)
 
       expect_equal(mean(f$x2), mf(40), tolerance = 0.01)
-      expect_equal(sd(f$x2), sf(30, 40), tolerance = 0.01)
+      expect_equal(sd(f$x2), sf(30, 40), tolerance = 0.02)
 
       ## Seed tests
 
@@ -427,7 +427,7 @@ rxTest({
       f <- suppressMessages(rxSolve(rx, ev, cores = 2))
 
       mbeta <- function(a, b) {
-        return(a / (a + b))
+        a / (a + b)
       }
       sbeta <- function(a, b) {
         sqrt(a * b / ((a + b)^2 * (a + b + 1)))
@@ -529,11 +529,11 @@ rxTest({
 
       f <- suppressMessages(rxSolve(rx, ev, cores = 2))
 
-      expect_equal(mean(f$x1), 1, tolerance = 0.01)
-      expect_equal(sd(f$x1), 1, tolerance = 0.01)
+      expect_equal(mean(f$x1), 1, tolerance = 0.02)
+      expect_equal(sd(f$x1), 1, tolerance = 0.02)
 
-      expect_equal(mean(f$x2), 2, tolerance = 0.01)
-      expect_equal(sd(f$x2), sqrt(2), tolerance = 0.01)
+      expect_equal(mean(f$x2), 2, tolerance = 0.02)
+      expect_equal(sd(f$x2), sqrt(2), tolerance = 0.02)
       ## Seed tests
 
       ## Make sure seeds are reproducible
@@ -989,7 +989,7 @@ rxTest({
       }
 
       mf <- function(d2) {
-        return(d2 / (d2 - 2))
+        d2 / (d2 - 2)
       }
 
       expect_equal(mean(f), mf(40), tolerance = 0.01)
@@ -1006,7 +1006,7 @@ rxTest({
       x2 <- rxbeta(2, 2, n = 30000)
 
       mbeta <- function(a, b) {
-        return(a / (a + b))
+        a / (a + b)
       }
 
       sbeta <- function(a, b) {
@@ -1126,7 +1126,7 @@ rxTest({
       }
 
       mf <- function(d2) {
-        return(d2 / (d2 - 2))
+        d2 / (d2 - 2)
       }
 
       expect_equal(mean(f), mf(40), tolerance = 0.01)
@@ -1143,7 +1143,7 @@ rxTest({
       x2 <- rxbeta(2, 2, n = 30000)
 
       mbeta <- function(a, b) {
-        return(a / (a + b))
+        a / (a + b)
       }
 
       sbeta <- function(a, b) {

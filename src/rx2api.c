@@ -8,9 +8,9 @@ rx_solving_options* getSolvingOptions(rx_solve* rx) {
 }
 
 rx_solving_options_ind *getSolvingOptionsInd(rx_solve *rx, int id) {
-  int nall = rx->nsub*rx->nsim;
-  if (id < 0 || id >= nall) {
-    Rf_error("[getSolvingOptionsInd]: id (%d) should be between [0, %d); nsub: %d nsim: %d", id, nall, rx->nsub, rx->nsim);
+  uint32_t nall = rx->nsub*rx->nsim;
+  if (id < 0 || (uint32_t)id >= nall) {
+    Rf_error("[getSolvingOptionsInd]: id (%d) should be between [0, %u); nsub: %u nsim: %u", id, (unsigned int)nall, (unsigned int)rx->nsub, (unsigned int)rx->nsim);
   }
   return &(rx->subjects[id]);
 }
@@ -90,6 +90,22 @@ void setRxMixnum(rx_solve *rx, int mixnum) {
   rx->mixnum = mixnum;
 }
 
+double getIndTolFactor(rx_solving_options_ind *ind) {
+  return ind->tolFactor;
+}
+
+void setIndTolFactor(rx_solving_options_ind *ind, double tolFactor) {
+  ind->tolFactor = tolFactor;
+}
+
+int getIndNeqOverride(rx_solving_options_ind *ind) {
+  return ind->neqOverride;
+}
+
+void setIndNeqOverride(rx_solving_options_ind *ind, int neq) {
+  ind->neqOverride = neq;
+}
+
 int getIndEvid(rx_solving_options_ind* ind, int kk) {
   if (kk < 0 || kk >= ind->n_all_times) {
     Rf_error("[getIndEvid]: kk (%d) should be between [0, %d)", kk, ind->n_all_times);
@@ -121,6 +137,10 @@ double getIndDv(rx_solving_options_ind* ind, int j) {
   if (j < 0 || j >= ind->n_all_times) {
     Rf_error("[getIndDv]: j (%d) should be between [0, %d)", j, ind->n_all_times);
   }
+  if (j >= ind->n_all_times_orig) {
+    // dv is NA for events added after the original event table (e.g. evid_() pushes)
+    return NA_REAL;
+  }
   return ind->dv[j];
 }
 
@@ -132,12 +152,20 @@ double getIndLimit(rx_solving_options_ind* ind, int kk) {
   if (kk < 0 || kk >= ind->n_all_times) {
     Rf_error("[getIndLimit]: kk (%d) should be between [0, %d)", kk, ind->n_all_times);
   }
+  if (kk >= ind->n_all_times_orig) {
+    // limit is -Inf for events added after the original event table (e.g. evid_() pushes)
+    return R_NegInf;
+  }
   return ind->limit[kk];
 }
 
 int getIndCens(rx_solving_options_ind* ind, int kk) {
   if (kk < 0 || kk >= ind->n_all_times) {
     Rf_error("[getIndCens]: kk (%d) should be between [0, %d)", kk, ind->n_all_times);
+  }
+  if (kk >= ind->n_all_times_orig) {
+    // cens is 0 for events added after the original event table (e.g. evid_() pushes)
+    return 0;
   }
   return ind->cens[kk];
 }
@@ -187,7 +215,7 @@ void resetOpBadSolve(rx_solving_options* op) {
 ////////////////////////////////////////////////////////////////////////
 
 int getRxNsub(rx_solve *rx) {
-  return rx->nsub;
+  return (int)rx->nsub;
 }
 
 int hasRxLimit(rx_solve *rx) {
@@ -213,6 +241,10 @@ int getRxNobs2(rx_solve *rx) {
 int getRxNpars(rx_solve *rx) {
   return rx->npars;
 }
+
+int getOrdId(rx_solve *rx, int solveid) {
+  return rx->ordId[solveid];
+}
 ////////////////////////////////////////////////////////////////////////
 // Get solve vector for ith solve
 ////////////////////////////////////////////////////////////////////////
@@ -220,5 +252,5 @@ double * getOpIndSolve(rx_solving_options* op, rx_solving_options_ind* ind, int 
   if (idx  < 0 || idx >= ind->n_all_times) {
     Rf_error("[getOpIndSolve]: the individual should be between [0, %d); neq: %d", ind->n_all_times, op->neq);
   }
-  return ind->solve + (op->neq)*(idx);
+  return ind->solve + (rxEffNeq(ind, op))*(idx);
 }

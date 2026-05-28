@@ -15,8 +15,10 @@ rxCores(verbose = FALSE)
 \arguments{
 \item{verbose}{Display the value of relevant OpenMP settings}
 
-\item{threads}{NULL (default) rereads environment variables. 0
-means to use all logical CPUs available. Otherwise a number >= 1}
+\item{threads}{NULL (default) rereads environment variables
+specified by OpenMP (\code{OMP_THREAD_LIMIT}).  If they are not
+specified, this determines based the logical cores available. 0
+means to use all logical CPU threads available. Otherwise a number >= 1}
 
 \item{percent}{If provided it should be a number between 2 and
 100; the percentage of logical CPUs to use. By default on
@@ -37,14 +39,14 @@ costly solving to occur. If the items which are likely to take
 more time are solved first, this wait is less likely to have an
 impact on the overall solving time.
 
-In rxode2 the IDs are sorted by the individual number of solving
+In rxode2 the ids are sorted by the individual number of solving
 points (largest first). It also has a C interface that allows
-these IDs to be resorted by total time spent solving the
+these ids to be resorted by total time spent solving the
 equation.  This allows packages like nlmixr to sort by solving
 time if needed.
 
 Overall the the number of threads is throttled (restricted) for
-small tasks and sorting for IDs are suppressed.}
+small tasks and sorting for ids are suppressed.}
 }
 \value{
 number of threads that rxode2 uses

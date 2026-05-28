@@ -105,7 +105,7 @@ void prnt_vars(int scenario, int lhs, const char *pre_str, const char *post_str,
       break;
     case print_populateParameters:
       // Case 1 is for declaring the par_ptr.
-      printPopulateParameters(buf, &j);
+      printPopulateParameters(buf, &j, &i);
       break;
     case print_simeps:
       // Case 15 is for declaring eps the sync parameters
@@ -186,6 +186,15 @@ void codegen(char *model, int show_ode, const char *prefix, const char *libname,
       prnt_vars(print_simeps, 1, "#define _SYNC_simeps_ for (int _svari=_solveData->neps; _svari--;){", "}\n", 15);
       prnt_vars(print_simeta, 1, "#define _SYNC_simeta_ for (int _ovari=_solveData->neta; _ovari--;){", "}\n", 16);
       writeBody0();
+      for (int i = Rf_length(_rxode2parse_functionName); i--;) {
+        const char *pkg = R_CHAR(STRING_ELT(_rxode2parse_functionPackageName, i));
+        if (strcmp(pkg, "rxode2") && strcmp(pkg, "rxode2ll")) {
+          sAppend(&sbOut, "%s %s;\n",
+                  R_CHAR(STRING_ELT(_rxode2parse_functionType, i)),
+                  R_CHAR(STRING_ELT(_rxode2parse_functionName, i)));
+
+        }
+      }
       sAppendN(&sbOut,"#include \"extraC.h\"\n", 20);
       writeBody1();
       for (int i = Rf_length(_rxode2parse_functionName); i--;) {
@@ -198,9 +207,13 @@ void codegen(char *model, int show_ode, const char *prefix, const char *libname,
       writeBody2();
       for (int i = Rf_length(_rxode2parse_packages); i--;) {
         const char* cur = R_CHAR(STRING_ELT(_rxode2parse_packages, i));
-        sAppend(&sbOut,"    static rxode2_assignFuns2_t %s_assignFuns2 = NULL;\n", cur);
-        sAppend(&sbOut,"    if (%s_assignFuns2 == NULL) %s_assignFuns2 = (rxode2_assignFuns2_t)(R_GetCCallable(\"%s\", \"_%s_assignFuns2\"));\n",
-                cur, cur, cur, cur);
+        // Do not cache the callable pointer statically: the package DLL can be
+        // reloaded (e.g. by pkgload::load_all inside devtools::test), which
+        // changes the callable address.  A stale static pointer would write to
+        // the old rx_global instead of the current one.  R_GetCCallable is
+        // fast enough that the lookup cost here is negligible.
+        sAppend(&sbOut,"    rxode2_assignFuns2_t %s_assignFuns2 = (rxode2_assignFuns2_t)(R_GetCCallable(\"%s\", \"_%s_assignFuns2\"));\n",
+                cur, cur, cur);
         sAppend(&sbOut,"    %s_assignFuns2(rx, op, f, lag, rate, dur, mtime, me, indf, gettime, timeindex, handleEvid, getdur);\n",
                 cur);
       }
@@ -210,8 +223,11 @@ void codegen(char *model, int show_ode, const char *prefix, const char *libname,
       sAppend(&sbOut, "SEXP %smodel_vars(void);\n", prefix);
       sAppendN(&sbOut,"\n", 1);
 
-      sAppendN(&sbOut, "\n// prj-specific differential eqns\nvoid ", 40);
-      sAppend(&sbOut, "%sdydt(int *_neq, double __t, double *__zzStateVar__, double *__DDtStateVar__)\n{\n  int _itwhile = 0;\n  (void)_itwhile;\n  int _cSub = _neq[1];\n  double t = __t + _solveData->subjects[_neq[1]].curShift;\n  (void)t;\n  rx_solving_options_ind *_ind = &(_solveData->subjects[_cSub]);\n  _setThreadInd(_cSub);\n  _ind->_rxFlag=1;\n", prefix);
+      sAppend(&sbOut, "\n// prj-specific differential eqns\n"
+              "#if defined(__GNUC__) || defined(__clang__)\n"
+              "__attribute__((hot))\n"
+              "#endif\nvoid ");
+      sAppend(&sbOut, "%sdydt(int *_neq, double __t, double * __restrict__ __zzStateVar__, double * __restrict__ __DDtStateVar__)\n{\n  int _itwhile = 0;\n  (void)_itwhile;\n  int _cSub = _neq[1];\n  double t = __t + _solveData->subjects[_neq[1]].curShift;\n  (void)t;\n  rx_solving_options_ind *_ind = &(_solveData->subjects[_cSub]);\n  _setThreadInd(_cSub);\n  _ind->_rxFlag=1;\n  int _wasAtEventTime = _ind->_atEventTime; _ind->_atEventTime = 0;\n  (void)_wasAtEventTime;\n", prefix);
     } else if (show_ode == ode_jac){
       sAppend(&sbOut, "// Jacobian derived vars\nvoid %scalc_jac(int *_neq, double __t, double *__zzStateVar__, double *__PDStateVar__, unsigned int __NROWPD__) {\n  int _itwhile = 0;\n  (void)_itwhile;\n    int _cSub=_neq[1];\n  double t = __t + _solveData->subjects[_neq[1]].curShift;\n  (void)t;\n  rx_solving_options_ind *_ind = &(_solveData->subjects[_cSub]);\n  _setThreadInd(_cSub);\n  _ind->_rxFlag=2;\n", prefix);
     } else if (show_ode == ode_ini){
@@ -309,7 +325,11 @@ void codegen(char *model, int show_ode, const char *prefix, const char *libname,
     } else if (show_ode == ode_indLinVec) {
       sAppend(&sbOut, "// Inductive linearization Matf\nvoid %sIndF(int _cSub, double _t, double __t, double *_matf){\n int _itwhile = 0;\n  (void)_itwhile;\n  double t = __t + _solveData->subjects[_cSub].curShift;\n  (void)t;\n  rx_solving_options_ind *_ind = &(_solveData->subjects[_cSub]);\n  _setThreadInd(_cSub);\n  _ind->_rxFlag=10;\n", prefix);
     } else {
-      sAppend(&sbOut,  "// prj-specific derived vars\nvoid %scalc_lhs(int _cSub, double __t, double *__zzStateVar__, double *_lhs) {\n    int _itwhile = 0;\n  (void)_itwhile;\n  double t = __t + _solveData->subjects[_cSub].curShift;\n  (void)t;\n  rx_solving_options_ind *_ind = &(_solveData->subjects[_cSub]);\n  _setThreadInd(_cSub);\n  _ind->_rxFlag=11;\n", prefix);
+      sAppend(&sbOut,  "// prj-specific derived vars\n"
+              "#if defined(__GNUC__) || defined(__clang__)\n"
+              "__attribute__((hot))\n"
+              "#endif\n"
+              "void %scalc_lhs(int _cSub, double __t, double * __restrict__ __zzStateVar__, double *_lhs) {\n    int _itwhile = 0;\n  (void)_itwhile;\n  double t = __t + _solveData->subjects[_cSub].curShift;\n  (void)t;\n  rx_solving_options_ind *_ind = &(_solveData->subjects[_cSub]);\n  _setThreadInd(_cSub);\n  _ind->_rxFlag=11;\n  int _wasAtEventTime = _ind->_atEventTime; _ind->_atEventTime = 0; (void)_wasAtEventTime;\n", prefix);
     }
     if ((show_ode == ode_jac && found_jac == 1 && good_jac == 1) ||
         (show_ode != ode_jac && show_ode != ode_ini && show_ode != ode_fbio &&
@@ -401,6 +421,12 @@ void codegen(char *model, int show_ode, const char *prefix, const char *libname,
             // (__DDtStateVar_k__) that are excluded (TDDT is skipped for ode_mtime),
             // so using sbPmDt here would leave the mtime expression unevaluated.
             sAppend(&sbOut,"  %s",(show_ode == ode_dydt || show_ode == ode_mtime) ? sbPm.line[i] : sbPmDt.line[i]);
+          }
+          break;
+        case TEVID:
+          /* evid_() calls emit code in dydt and lhs, guarded by _wasAtEventTime */
+          if (show_ode == ode_dydt || show_ode == ode_lhs) {
+            sAppend(&sbOut, "  if (_wasAtEventTime) { %s }\n", sbPm.line[i]);
           }
           break;
         case TASSIGN:

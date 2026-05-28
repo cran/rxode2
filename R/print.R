@@ -35,6 +35,55 @@ print.rxRateDur <- function(x, ...) {
   cli::cli_text(crayon::bold(paste0(cli::symbol$line, cli::symbol$line, " ", x, " ", cli::symbol$line, cli::symbol$line)))
 }
 
+.etPreviewGroupLabel <- function(ids) {
+  ids <- sort(unique(as.integer(ids)))
+  if (length(ids) == 0L) return("0 individuals")
+  if (length(ids) == 1L) return(sprintf("1 individual (id %s)", ids))
+  if (all(diff(ids) == 1L)) {
+    return(sprintf("%s individuals (ids %s:%s)", length(ids), ids[1], ids[length(ids)]))
+  }
+  sprintf("%s individuals", length(ids))
+}
+
+#' @export
+print.rxEtPreview <- function(x, ...) {
+  .groups <- attr(x, "rxEtPreviewGroups", exact = TRUE)
+  if (length(.groups) > 0L) {
+    if (length(.groups) == 1L) {
+      cat(sprintf("-- compressed preview for %s --\n", .etPreviewGroupLabel(.groups[[1]]$ids)))
+    } else {
+      cat(sprintf("-- compressed preview for %s groups --\n", length(.groups)))
+      .n <- min(5L, length(.groups))
+      for (.i in seq_len(.n)) {
+        cat(sprintf("   group %s: %s\n", .i, .etPreviewGroupLabel(.groups[[.i]]$ids)))
+      }
+      if (length(.groups) > 5L) {
+        cat(sprintf("   ... (and %s more groups)\n", length(.groups) - 5L))
+      }
+    }
+  }
+  .df <- x
+  class(.df) <- "data.frame"
+  if (!("id" %in% names(.df)) && length(.groups) > 0L) {
+    .idList <- lapply(.groups, function(.g) {
+      .formattedId <- if (length(.g$ids) == 1L) as.integer(.g$ids) else .formatIds(.g$ids)
+      rep(.formattedId, .g$nRow)
+    })
+    .idCol <- unlist(.idList)
+    if (length(.idCol) == nrow(.df)) {
+      .df <- cbind(id = .idCol, .df)
+    }
+  }
+  .show <- attr(x, "rxEtShow", exact = TRUE)
+  if (!is.null(.show)) {
+    .showCols <- unique(c("id", names(.show)[.show]))
+    .showCols <- intersect(.showCols, names(.df))
+    .df <- .df[, .showCols, drop = FALSE]
+  }
+  print(tibble::as_tibble(.df), ...)
+  invisible(x)
+}
+
 #' @export
 print.rxEt <- function(x, ...) {
   if (.isRxEt(x)) {
@@ -42,7 +91,7 @@ print.rxEt <- function(x, ...) {
     .et1 <- paste0("EventTable with ", x$nobs + x$ndose, " records")
     .et2 <- NULL
     .units <- x$.units
-    .maxId <- length(x$IDs)
+    .maxId <- length(x$ids)
     if (.maxId != 1) {
       .et2 <- sprintf("   %s individuals", .maxId)
     }
@@ -102,7 +151,24 @@ print.rxEt <- function(x, ...) {
           .h2(paste0("First part of ", crayon::yellow(bound), ":"))
         }), sep = "\n")
       }
-      print(tibble::as_tibble(data.frame(.etAddCls(x))))
+      .preview <- .etPreviewData(.rxEtEnv(x), "all")
+      if (!is.null(.preview[["evid"]])) {
+        class(.preview[["evid"]]) <- c("rxEvid", class(.preview[["evid"]]))
+      }
+      for (.nm in c("rate", "dur")) {
+        if (!is.null(.preview[[.nm]])) {
+          class(.preview[[.nm]]) <- c("rxRateDur", class(.preview[[.nm]]))
+        }
+      }
+      .show <- .rxEtEnv(x)$show
+      .showCols <- intersect(names(.show)[.show], names(.preview))
+      if (inherits(.preview, "rxEtPreview") && .maxId > 1L) {
+        print(.preview)
+      } else {
+        .df <- .preview[, .showCols, drop = FALSE]
+        class(.df) <- "data.frame"
+        print(tibble::as_tibble(.df))
+      }
     }
     invisible(x)
   } else {
