@@ -21,7 +21,7 @@
 
 static inline SEXP calcSLinCmt(void) {
   rxProtectGuard;
-  SEXP sLinCmt = rxP(Rf_allocVector(INTSXP,15));
+  SEXP sLinCmt = rxP(Rf_allocVector(INTSXP,16));
   INTEGER(sLinCmt)[0] = tb.ncmt;
   INTEGER(sLinCmt)[1] = tb.hasKa;
   INTEGER(sLinCmt)[2] = tb.linB;
@@ -36,8 +36,9 @@ static inline SEXP calcSLinCmt(void) {
   INTEGER(sLinCmt)[12] = tb.ndiff;
   INTEGER(sLinCmt)[13] = tb.hasMix;
   INTEGER(sLinCmt)[14] = tb.evid_;
+  INTEGER(sLinCmt)[15] = tb.hasDelay;
 
-  SEXP sLinCmtN = rxP(Rf_allocVector(STRSXP, 15));
+  SEXP sLinCmtN = rxP(Rf_allocVector(STRSXP, 16));
   SET_STRING_ELT(sLinCmtN, 0, Rf_mkChar("ncmt"));
   SET_STRING_ELT(sLinCmtN, 1, Rf_mkChar("ka"));
   SET_STRING_ELT(sLinCmtN, 2, Rf_mkChar("linB"));
@@ -53,6 +54,7 @@ static inline SEXP calcSLinCmt(void) {
   SET_STRING_ELT(sLinCmtN, 12, Rf_mkChar("ndiff"));
   SET_STRING_ELT(sLinCmtN, 13, Rf_mkChar("mix"));
   SET_STRING_ELT(sLinCmtN, 14, Rf_mkChar("evid_"));
+  SET_STRING_ELT(sLinCmtN, 15, Rf_mkChar("hasDelay"));
   Rf_setAttrib(sLinCmt,   R_NamesSymbol, sLinCmtN);
   rxUPAll();
   return(sLinCmt);
@@ -236,11 +238,17 @@ static inline SEXP calcIniVals(void) {
 SEXP orderForderS1(SEXP ordIn);
 
 static inline int sortStateVectorsErrHandle(int prop, int i) {
-  if (prop == 0 || tb.dummyLhs == 1) {
+  if ((prop & ~(propDoseRef | propDelay)) == 0 || tb.dummyLhs == 1) {
     return 1;
   }
   char *buf = NULL;
   buf = tb.ss.line[tb.di[i]];
+  // Every property that reaches here appends "'<name>', " below, and the
+  // trailing "', " is then trimmed with sbt.o -= 2.  A property with no branch
+  // appends nothing, so that trim would move sbt.o *before* the start of the
+  // buffer and write there -- corrupting the heap rather than reporting the
+  // error.  Remember where this message starts so the trim can be anchored.
+  int sbtStart = sbt.o;
   if ((prop & prop0) != 0) {
     sAppend(&sbt, "'%s(0)', ", buf);
   }
@@ -292,6 +300,17 @@ static inline int sortStateVectorsErrHandle(int prop, int i) {
   if ((prop & propDose0) != 0) {
     sAppend(&sbt, "'dose0(%s)', ", buf);
   }
+  // past(state, tau) <- expr supplies the pre-history that delay(state, tau)
+  // interpolates, so it too requires the state to have a d/dt().
+  if ((prop & propPast) != 0) {
+    sAppend(&sbt, "'past(%s)', ", buf);
+  }
+  if (sbt.o == sbtStart) {
+    // No branch above matched, so there is no trailing "', " to trim and
+    // nothing to report; a property known only to the guard above is not an
+    // error the user can act on.  Trimming here would underflow the buffer.
+    return 1;
+  }
   // Take off trailing "',
   sbt.o -= 2;
   sbt.s[sbt.o] = 0;
@@ -310,6 +329,17 @@ static inline SEXP sortStateVectors(SEXP ordS) {
   for (int i = 0; i < tb.de.n; i++) {
     int cur = tb.didx[i];
     int prop = tb.dprop[i];
+    // delay(state, T) interpolates the dense history of a differential
+    // state, so its first argument must be a real ODE state (idu==1, i.e.
+    // it has a d/dt() equation).  A non-state (parameter/covariate) passed
+    // to delay() is registered here as an extra compartment with the
+    // propDelay bit but no derivative; reject it instead of silently
+    // swallowing it as an algebraic observable.
+    if ((prop & propDelay) != 0 && tb.idu[i] == 0) {
+      char *bufd = tb.ss.line[tb.di[i]];
+      sAppend(&sbt, "the first argument to 'delay()' must be an ODE state with a 'd/dt()' defined, but 'delay(%s, ...)' has no 'd/dt(%s)'\n", bufd, bufd);
+      continue;
+    }
     if (cur == 0) {
       // This has a property without an ODE or cmt() statement; should error here.
       if (sortStateVectorsErrHandle(prop, i)) continue;
@@ -317,9 +347,22 @@ static inline SEXP sortStateVectors(SEXP ordS) {
       // This is a compartment only defined by CMT() and is used for
       // dvid ordering, no properties should be defined.
       ord[i] = -cur;
+      // Extra states (idu == 0) are algebraic observables that also appear
+      // in a cmt() statement; they are not real ODE/dosing compartments and
+      // etTran() numbers them after the real states (state ++ extraState).
+      // Push them to the end of this ordering too so the generated
+      // __DDT__/_DEPOT_/_CENTRAL_ slot indices stay aligned with the runtime
+      // compartment numbering.  Otherwise an observable whose cmt() is seen
+      // before the real compartments are numbered sorts ahead of them and
+      // shifts every tad()/tlast(<state>) lookup.  This happens whenever the
+      // cmt() precedes the d/dt() block, and always in linCmt() models, where
+      // the linear compartments (depot, central, ...) are added last in
+      // calcLinCmt().
+      if (tb.idu[i] == 0) ord[i] += tb.de.n;
       if (sortStateVectorsErrHandle(prop, i)) continue;
     } else {
       ord[i] = cur;
+      if (tb.idu[i] == 0) ord[i] += tb.de.n;
     }
   }
   if (sbt.o != 0) {

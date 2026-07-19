@@ -10,7 +10,9 @@
   # Add the meta information from model2 into the meta information of new model
   .ls <- ls(model2$meta, all.names=TRUE)
   for (.i in seq_along(.ls)) {
-    assign(.ls[.i], model2$meta[[.ls[.i]]], envir=model1$meta)
+    if (.i != ".simModelBase") {
+      assign(.ls[.i], model2$meta[[.ls[.i]]], envir=model1$meta)
+    }
   }
   model1$iniDf <- ini
   model1$lstExpr <- c(model1$lstExpr, model2$lstExpr)
@@ -21,7 +23,7 @@
 #'
 #' @param model1 rxUi type of model
 #' @param model2 rxUi type of model
-#' @param common boolean; when `TRUE` require models to have variables in common
+#' @param common boolean; when `TRUE` warn if the models have no variables in common
 #' @return rxUi combined model of model1 and model2
 #' @noRd
 #' @author Matthew L. Fidler
@@ -34,8 +36,8 @@ rxAppendModel_ <- function(model1, model2, common=TRUE) {
   .ini2 <- model2$iniDf
   .bind <- intersect(c(model1$mv0$lhs, model1$mv0$state), model2$allCovs)
   if (common && length(.bind) == 0) {
-    stop("not all the models have variables in common (use `common=FALSE` to allow this)",
-         call.=FALSE)
+    warning("the appended models have no variables in common (use `common=FALSE` to suppress this warning)",
+            call.=FALSE)
   }
   if (is.null(.ini1) && is.null(.ini2)) {
     return(.combineModelLines(model1, model2, NULL))
@@ -106,7 +108,7 @@ rxAppendModel_ <- function(model1, model2, common=TRUE) {
 #' Append two rxui models together
 #'
 #' @param ... models to append together
-#' @param common boolean that determines if you need a common value to bind
+#' @param common boolean; when `TRUE` warn if the models have no variables in common
 #' @return New model with both models appended together
 #' @author Matthew L. Fidler
 #' @export

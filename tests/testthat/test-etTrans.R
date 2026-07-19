@@ -1,6 +1,7 @@
 rxTest({ # mostly tested in 'rxode2et'
   test_that("warfarin model", {
 
+    skip_if_not_installed("nlmixr2data")
     warfarin <- nlmixr2data::warfarin
 
     mod <- rxode2({
@@ -224,7 +225,7 @@ d/dt(blood)     = a*intestine - b*blood
     prepEvents <- .etPrepareSolveEvents(prep$events, ctl)
     ctl$iCov <- prep$iCov
 
-    got <- as.data.frame(rxode2:::rxSolveSEXP(mod, ctl, NULL, list(),
+    got <- as.data.frame(rxSolveSEXP(mod, ctl, NULL, list(),
                                               c(KA = 1, CL = 7, V = 40),
                                               prepEvents, NULL, FALSE))
     want <- as.data.frame(rxSolve(mod, as.data.frame(ev), params = c(KA = 1, CL = 7, V = 40), iCov = iCov,
@@ -928,6 +929,7 @@ d/dt(blood)     = a*intestine - b*blood
     })
 
     test_that("Missing evid gives the same results", {
+      skip_if_not_installed("nlmixr2data")
       theoSd <- nlmixr2data::theo_sd
       d <- theoSd[, names(theoSd) != "EVID"]
 
@@ -1405,7 +1407,7 @@ d/dt(blood)     = a*intestine - b*blood
       trn1 <- etTrans(et, mod, keepDosingOnly = TRUE) |> as.data.frame()
 
       expect_equal(structure(list(
-        ID = structure(1L, class = "factor", .Label = "1"),
+        ID = structure(1L, class = "factor", levels = "1"),
         TIME = 0, EVID = 10140L, AMT = 10, II = 0, DV = NA_real_
       ),
       class = "data.frame", row.names = c(NA, -1L)
@@ -1417,7 +1419,7 @@ d/dt(blood)     = a*intestine - b*blood
       trn1 <- etTrans(et, mod, keepDosingOnly = TRUE) |> as.data.frame()
 
       expect_equal(structure(list(
-        ID = structure(1L, class = "factor", .Label = "1"),
+        ID = structure(1L, class = "factor", levels = "1"),
         TIME = 0, EVID = 90140L, AMT = 0, II = 0, DV = NA_real_
       ),
       class = "data.frame", row.names = c(NA, -1L)
@@ -2228,5 +2230,18 @@ test_that("warning on translation (#780)", {
   ")
 
   expect_warning(etTrans(dat, m), NA)
+
+  test_that("etTrans(combineDvid=TRUE) does not read past a length-1 vector", {
+    ## Before the fix combineDvid was read at index [1] of the (length-1) logical,
+    ## warning "subscript out of bounds (index 1 >= vector size 1)" and using an
+    ## out-of-bounds value as the dvid-combine flag.
+    mod <- rxode2({
+      d/dt(center) <- -kel * center
+      cp <- center / v
+    })
+    d <- data.frame(ID = 1L, TIME = c(0, 1, 2), DV = c(0, 5, 3),
+                    AMT = c(100, 0, 0), EVID = c(1, 0, 0))
+    expect_warning(etTrans(d, mod, combineDvid = TRUE), NA)
+  })
 
 })

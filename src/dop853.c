@@ -13,6 +13,8 @@
 #include <R.h>
 #include <Rinternals.h>
 
+void RSprintf(const char *format, ...);
+#include "solveWarn.h"
 #define _(String) (String)
 
 /* All former static variables are now in dop853_ctx_t (see dop853.h).
@@ -132,7 +134,7 @@ double contd8 (dop853_ctx_t *ctx, int ii, double x)
 
   if (i == INT_MAX)
     {
-      Rprintf (_("no dense output available for %uth component"), ii);
+      RSprintf(_("no dense output available for %uth component"), ii);
       return 0.0;
     }
 
@@ -390,7 +392,7 @@ static int dopcor (dop853_ctx_t *ctx, int *nptr, FcnEqDiff fcn, double x, double
       if (irtrn < 0)
         {
           /* if (fileout) */
-	  Rprintf(_("exit of dop853 at x = %.16e\n"), x);
+	  RSprintf(_("exit of dop853 at x = %.16e\n"), x);
           return 2;
         }
     }
@@ -401,7 +403,7 @@ static int dopcor (dop853_ctx_t *ctx, int *nptr, FcnEqDiff fcn, double x, double
       if (ctx->nstep > nmax)
         {
           /* if (fileout) */
-	  Rprintf (_("exit of dop853 at x = %.16e, more than nmax = %li are needed\n"), x, nmax);
+	  rxSolveWarnPush(ctx->subject_id, "exit of dop853 at x = %.16e, more than nmax = %li are needed");
           ctx->xout = x;
           ctx->hout = h;
           return -2;
@@ -410,7 +412,7 @@ static int dopcor (dop853_ctx_t *ctx, int *nptr, FcnEqDiff fcn, double x, double
       if (0.1 * fabs(h) <= fabs(x) * uround)
         {
           /* if (fileout) */
-	  Rprintf (_("exit of dop853 at x = %.16e, step size too small h = %.16e\n"), x, h);
+	  rxSolveWarnPush(ctx->subject_id, "exit of dop853 at x = %.16e, step size too small h = %.16e");
           ctx->xout = x;
           ctx->hout = h;
           return -3;
@@ -542,7 +544,12 @@ static int dopcor (dop853_ctx_t *ctx, int *nptr, FcnEqDiff fcn, double x, double
                   iasti++;
                   if (iasti == 15)
                     {
-		      Rprintf (_("the problem seems to become stiff at x = %.16e\n"), x);
+                      /* Stiffness detection is enabled only as the AutoSwitch
+                         composite's primary probe (nstiff>0); the -4 return is
+                         caught by the composite and handled transparently by
+                         switching to the stiff secondary (ros4), so this is not
+                         a user-facing warning.  Standalone dop853 disables the
+                         detector (nstiff<0), so it never reaches here. */
 		      ctx->xout = x;
 		      ctx->hout = h;
 		      return -4;
@@ -657,7 +664,7 @@ static int dopcor (dop853_ctx_t *ctx, int *nptr, FcnEqDiff fcn, double x, double
               if (irtrn < 0)
                 {
                   /* if (fileout) */
-		  Rprintf ( _("exit of dop853 at x = %.16e\n"), x);
+		  RSprintf( _("exit of dop853 at x = %.16e\n"), x);
                   return 2;
                 }
             }
@@ -688,6 +695,11 @@ static int dopcor (dop853_ctx_t *ctx, int *nptr, FcnEqDiff fcn, double x, double
         }
 
       h = hnew;
+      if (!R_FINITE(h)) {
+        ctx->xout = x;
+        ctx->hout = h;
+        return -3;
+      }
     }
 
 } /* dopcor */
@@ -699,7 +711,7 @@ int dop853
  double* atoler, int itoler, SolTrait solout, int iout, FILE* fileout, double uround,
  double safe, double fac1, double fac2, double beta, double hmax, double h,
  long int nmax, int meth, long int nstiff, int nrdens, int* icont, int licont,
- void *userdata)
+ void *userdata, int subject_id)
 {
   dop853_ctx_t ctx;
   int          arret, idid;
@@ -716,6 +728,7 @@ int dop853
   ctx.yy1 = ctx.k1 = ctx.k2 = ctx.k3 = ctx.k4 = ctx.k5 = NULL;
   ctx.k6 = ctx.k7 = ctx.k8 = ctx.k9 = ctx.k10 = NULL;
   ctx.userdata = userdata;
+  ctx.subject_id = subject_id;
 
   arret = 0;
 
@@ -723,7 +736,7 @@ int dop853
   if (n == INT_MAX)
     {
       /* if (fileout) */
-      Rprintf (_("system too big, max. n = %u\n"), INT_MAX-1);
+      RSprintf(_("system too big, max. n = %u\n"), INT_MAX-1);
       arret = 1;
     }
 
@@ -733,7 +746,7 @@ int dop853
   else if (nmax <= 0)
     {
       /* if (fileout) */
-      Rprintf ( _("wrong input, nmax = %li\n"), nmax);
+      RSprintf( _("wrong input, nmax = %li\n"), nmax);
       arret = 1;
     }
 
@@ -743,7 +756,7 @@ int dop853
   else if ((meth <= 0) || (meth >= 2))
     {
       /* if (fileout) */
-      Rprintf (_("curious input, meth = %i\n"), meth);
+      RSprintf(_("curious input, meth = %i\n"), meth);
       arret = 1;
     }
 
@@ -757,7 +770,7 @@ int dop853
   if ((iout < 0) || (iout > 2))
     {
       /* if (fileout) */
-      Rprintf ( _("wrong input, iout = %i\n"), iout);
+      RSprintf( _("wrong input, iout = %i\n"), iout);
       arret = 1;
     }
 
@@ -765,7 +778,7 @@ int dop853
   if (nrdens > n)
     {
       /* if (fileout) */
-      Rprintf ( _("curious input, nrdens = %u\n"), nrdens);
+      RSprintf( _("curious input, nrdens = %u\n"), nrdens);
       arret = 1;
     }
   else if (nrdens)
@@ -786,7 +799,7 @@ int dop853
           !ctx.rcont6 || !ctx.rcont7 || !ctx.rcont8 || (!ctx.indir && (nrdens < n)))
         {
           /* if (fileout) */
-	  Rprintf ( _("not enough free memory for rcont12345678&indir\n"));
+	  RSprintf( _("not enough free memory for rcont12345678&indir\n"));
           arret = 1;
         }
 
@@ -794,13 +807,13 @@ int dop853
       if (nrdens == n)
         {
           if (icont)
-            Rprintf ( _("warning : when nrdens = n there is no need allocating memory for icont\n"));
+            RSprintf( _("warning : when nrdens = n there is no need allocating memory for icont\n"));
           ctx.nrds = n;
         }
       else if (licont < nrdens)
         {
           /* if (fileout) */
-	  Rprintf ( _("insufficient storage for icont, min. licont = %u\n"), nrdens);
+	  RSprintf( _("insufficient storage for icont, min. licont = %u\n"), nrdens);
           arret = 1;
         }
       else

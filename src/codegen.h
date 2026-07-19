@@ -48,6 +48,53 @@
 #define ode_simeps 15
 // show_ode == 16 #define sync lhs for simeps
 #define ode_simeta 16
+// show_ode == 22 event-sensitivity d(alag)/dp  (jump sensitivities)
+#define ode_dLag 22
+// show_ode == 23 event-sensitivity d(F)/dp  (jump sensitivities)
+#define ode_dF 23
+// show_ode == 24 event-sensitivity d(rate)/dp  (jump sensitivities)
+#define ode_dRate 24
+// show_ode == 25 event-sensitivity d(dur)/dp  (jump sensitivities)
+#define ode_dDur 25
+// show_ode == 26 event-sensitivity d2(F)/dp/dq  (second-order jump sensitivities)
+#define ode_d2F 26
+// show_ode == 27/28/29 event-sensitivity d2(alag|rate|dur)/dp/dq (second-order
+// jump sensitivities, dtau/infusion rows)
+#define ode_d2Lag 27
+#define ode_d2Rate 28
+#define ode_d2Dur 29
+// show_ode == 30 event-sensitivity d3(F)/dp/dq/dr (third-order jump
+// sensitivities, additive-bolus F row only -- Phase H1 scope)
+#define ode_d3F 30
+// show_ode == 31 event-sensitivity d(F)/dq, q in calcSens2's index space
+// (Phase H1's dtau/lag row: feeds d(delta)/dq = amt*dFQ[c][q])
+#define ode_dFQ 31
+// show_ode == 32 event-sensitivity d(J[k][c])/dq -- total derivative of the
+// PHYSICAL Jacobian column wrt a calcSens2 parameter (Phase H1's dtau/lag
+// row).  Buffer is (nState x nState x np2), NOT the usual (nState x nParam)
+// dosing-parameter shape -- see `.rxEventSensCLines()$lagJacQ`.
+#define ode_dLagJac 32
+// show_ode == 33 event-sensitivity d(alag)/dq, q in calcSens2's index space
+// (Phase H1's dtau/lag row SAFETY GUARD: nonzero here means q ALSO drives
+// the same event's alag, the case the 2nd-order dtau row does not yet
+// handle correctly -- see `.rxEventSensCLines()$lagQ`).
+#define ode_dLagQ 33
+// show_ode == 34 event-sensitivity d(dur)/dq, q in calcSens2's index space
+// (modeled-DUR continuous-forcing 2nd-order piece: the quotient-rule 2nd
+// derivative of rate=F*amt/dur needs d(dur)/dq at q's OWN index space,
+// avoiding a calcSens2-position -> calcSens-position cross-index map --
+// see `.rxEventSensCLines()$durQ`).
+#define ode_dDurQ 34
+// show_ode == 35 non-constant delay() pre-history: past(state, tau) <- expr,
+// emitted as the dedicated _rxPast() history function (its own _past[] array,
+// independent of the modeled-lag _alag[] function)
+#define ode_past 35
+// True for any of the event-sensitivity dosing-derivative functions
+// (dLag/dF/dRate/dDur/d2F/d2Lag/d2Rate/d2Dur/d3F/dFQ/dLagJac/dLagQ/dDurQ);
+// they share the same codegen preamble (which also populates the second-
+// and third-order sensitivity locals) and emit only their R-generated
+// body lines.  Kept contiguous so this is a range test.
+#define ode_is_es_dcode(x) ((x) >= ode_dLag && (x) <= ode_dDurQ)
 
 // Scenarios
 #define print_double 0
@@ -113,9 +160,19 @@ static inline void printPDStateVar(int show_ode, int scenario) {
 static inline int shouldSkipPrintLhsI(int scenario, int lhs, int i) {
   switch(scenario){
   case print_paramLags:
-    return (tb.lag[i] == notLHS || tb.lh[i] == isState);
+    // covariate/parameter lags use _getParCov(parNo, ...); visit every
+    // parameter (same set/order as printPopulateParameters) so the running
+    // ordinal is the parameter's true index, and emit macros only for lagged
+    // ones (printParamLags gates on tb.lag[i]).  lhs variables are handled by
+    // print_lhsLags and are skipped here so the _getParCov definition does not
+    // clobber the correct lhs-lag one.
+    return (lhs && tb.lh[i] > 0 && tb.lh[i] != isLHSparam);
   case print_lhsLags:
-    return (tb.lag[i] == 0 || (tb.lh[i] != isLHS && tb.lh[i] != isLHSstr));
+    // visit every lhs-storage variable so the running ordinal matches the
+    // _lhs[]/_PL[] write-back order (printLhsLag emits macros only for the
+    // ones that are actually lagged)
+    return !(tb.lh[i] == isLHS || tb.lh[i] == isLHSstr ||
+             tb.lh[i] == isLhsStateExtra || tb.lh[i] == isLHSparam);
   case print_lastLhsValue:
     return !(tb.lh[i] == isLHS || tb.lh[i] == isLHSstr ||
              tb.lh[i] == isLhsStateExtra || tb.lh[i] == isLHSparam);
@@ -123,7 +180,13 @@ static inline int shouldSkipPrintLhsI(int scenario, int lhs, int i) {
   return (lhs && tb.lh[i]>0 && tb.lh[i] != isLHSparam);
 }
 
-static inline void printParamLags(char *buf, int *j) {
+static inline void printParamLags(char *buf, int *j, int i) {
+  // *j is the parameter's true index (this visits every parameter); only emit
+  // the history macros for parameters actually used in lag/lead/first/last/diff
+  if (tb.lag[i] == 0) {
+    j[0] = j[0] + 1;
+    return;
+  }
   sAppendN(&sbOut, "#undef diff_", 12);
   doDot(&sbOut, buf);
   sAppendN(&sbOut, "1\n", 2);
@@ -179,28 +242,105 @@ static inline void printParamLags(char *buf, int *j) {
   sAppendN(&sbOut, "#define lag_", 12);
   doDot(&sbOut, buf);
   sAppend(&sbOut, "(x,y) _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - (y))\n", *j);
+
+  // lag0()/diff0()/lead0(): same as above but yield 0 (not NA) with no prior value
+  sAppendN(&sbOut, "#undef lag0_", 12);
+  doDot(&sbOut, buf);
+  sAppendN(&sbOut, "1\n", 2);
+  sAppendN(&sbOut, "#define lag0_", 13);
+  doDot(&sbOut, buf);
+  sAppend(&sbOut, "1(x) (ISNA(_getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - 1)) ? 0.0 : _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - 1))\n", *j, *j);
+  sAppendN(&sbOut, "#undef lag0_", 12);
+  doDot(&sbOut, buf);
+  sAppendN(&sbOut, "\n", 1);
+  sAppendN(&sbOut, "#define lag0_", 13);
+  doDot(&sbOut, buf);
+  sAppend(&sbOut, "(x,y) (ISNA(_getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - (y))) ? 0.0 : _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - (y)))\n", *j, *j);
+
+  sAppendN(&sbOut, "#undef diff0_", 13);
+  doDot(&sbOut, buf);
+  sAppendN(&sbOut, "1\n", 2);
+  sAppendN(&sbOut, "#define diff0_", 14);
+  doDot(&sbOut, buf);
+  sAppend(&sbOut, "1(x) (x - (ISNA(_getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - 1)) ? 0.0 : _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - 1)))\n", *j, *j);
+  sAppendN(&sbOut, "#undef diff0_", 13);
+  doDot(&sbOut, buf);
+  sAppendN(&sbOut, "\n", 1);
+  sAppendN(&sbOut, "#define diff0_", 14);
+  doDot(&sbOut, buf);
+  sAppend(&sbOut, "(x,y) (x - (ISNA(_getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - (y))) ? 0.0 : _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx - (y))))\n", *j, *j);
+
+  sAppendN(&sbOut, "#undef lead0_", 13);
+  doDot(&sbOut, buf);
+  sAppendN(&sbOut, "1\n", 2);
+  sAppendN(&sbOut, "#define lead0_", 14);
+  doDot(&sbOut, buf);
+  sAppend(&sbOut, "1(x) (ISNA(_getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx + 1)) ? 0.0 : _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx + 1))\n", *j, *j);
+  sAppendN(&sbOut, "#undef lead0_", 13);
+  doDot(&sbOut, buf);
+  sAppendN(&sbOut, "\n", 1);
+  sAppendN(&sbOut, "#define lead0_", 14);
+  doDot(&sbOut, buf);
+  sAppend(&sbOut, "(x,y) (ISNA(_getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx + (y))) ? 0.0 : _getParCov(_cSub, _solveData, %d, (&_solveData->subjects[_cSub])->idx + (y)))\n", *j, *j);
   j[0]=j[0]+1;
 }
 
-static inline void printLhsLag(char *buf, int *j) {
-  sAppendN(&sbOut, "#define lead_", 13);
-  doDot(&sbOut, buf);
-  sAppend(&sbOut, "1(x) _solveData->subjects[_cSub].lhs[%d]\n", *j);
-  sAppendN(&sbOut, "#define lead_", 13);
-  doDot(&sbOut, buf);
-  sAppend(&sbOut, "(x,y) _solveData->subjects[_cSub].lhs[%d]\n", *j);
-  sAppendN(&sbOut, "#define diff_", 13);
-  doDot(&sbOut, buf);
-  sAppend(&sbOut, "1(x) _solveData->subjects[_cSub].lhs[%d]\n", *j);
-  sAppendN(&sbOut, "#define diff_", 13);
-  doDot(&sbOut, buf);
-  sAppend(&sbOut, "(x,y) _solveData->subjects[_cSub].lhs[%d]\n", *j);
-  sAppendN(&sbOut, "#define lag_", 12);
-  doDot(&sbOut, buf);
-  sAppend(&sbOut, "1(x) _solveData->subjects[_cSub].lhs[%d]\n", *j);
-  sAppendN(&sbOut, "#define lag_", 12);
-  doDot(&sbOut, buf);
-  sAppend(&sbOut, "(x, y) _solveData->subjects[_cSub].lhs[%d]\n", *j);
+static inline void printLhsLag(char *buf, int *j, int i) {
+  // *j is the lhs ordinal (matches the _lhs[_LHS_*_] write-back and the
+  // sticky-variable _PL[_LHS_*_] load).  _PL (= _ind->lhs) holds the PREVIOUS
+  // record's lhs values during calc_lhs (write-back is at the end) and is reset
+  // to NA at the start of each individual, so lag/diff by 1 read the previous
+  // record's value and yield NA on the first record.  Deeper lags on an lhs are
+  // rejected at parse time (only lag(x,1)/diff(x,1) are supported).
+  if (tb.lag[i] != 0) {
+    sAppendN(&sbOut, "#define diff_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) ((x) - _PL[_LHS_%d_])\n", *j);
+    sAppendN(&sbOut, "#define diff_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "(x,y) ((x) - _PL[_LHS_%d_])\n", *j);
+    sAppendN(&sbOut, "#define lag_", 12);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) _PL[_LHS_%d_]\n", *j);
+    sAppendN(&sbOut, "#define lag_", 12);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "(x, y) _PL[_LHS_%d_]\n", *j);
+    // lead/first/last on an lhs have no well-defined value from the backward
+    // history; define them to the previous value so the symbol resolves (these
+    // are not meaningfully supported on lhs variables)
+    sAppendN(&sbOut, "#define lead_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) _PL[_LHS_%d_]\n", *j);
+    sAppendN(&sbOut, "#define lead_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "(x,y) _PL[_LHS_%d_]\n", *j);
+    sAppendN(&sbOut, "#define first_", 14);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) _PL[_LHS_%d_]\n", *j);
+    sAppendN(&sbOut, "#define last_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) _PL[_LHS_%d_]\n", *j);
+    // lag0()/diff0()/lead0(): same as above but yield 0 (not NA) on the first
+    // record, so downstream arithmetic stays finite
+    sAppendN(&sbOut, "#define diff0_", 14);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) ((x) - (ISNA(_PL[_LHS_%d_]) ? 0.0 : _PL[_LHS_%d_]))\n", *j, *j);
+    sAppendN(&sbOut, "#define diff0_", 14);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "(x,y) ((x) - (ISNA(_PL[_LHS_%d_]) ? 0.0 : _PL[_LHS_%d_]))\n", *j, *j);
+    sAppendN(&sbOut, "#define lag0_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) (ISNA(_PL[_LHS_%d_]) ? 0.0 : _PL[_LHS_%d_])\n", *j, *j);
+    sAppendN(&sbOut, "#define lag0_", 13);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "(x, y) (ISNA(_PL[_LHS_%d_]) ? 0.0 : _PL[_LHS_%d_])\n", *j, *j);
+    sAppendN(&sbOut, "#define lead0_", 14);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "1(x) (ISNA(_PL[_LHS_%d_]) ? 0.0 : _PL[_LHS_%d_])\n", *j, *j);
+    sAppendN(&sbOut, "#define lead0_", 14);
+    doDot(&sbOut, buf);
+    sAppend(&sbOut, "(x,y) (ISNA(_PL[_LHS_%d_]) ? 0.0 : _PL[_LHS_%d_])\n", *j, *j);
+  }
   j[0] = j[0]+1;
 }
 
@@ -291,6 +431,19 @@ static inline void printRInit(const char *libname, const char *libname2, const c
   sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sode_solver_get_solvedata\", (DL_FUNC) %sode_solver_get_solvedata);\n", libname, prefix, prefix);
   sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sF\", (DL_FUNC) %sF);\n", libname, prefix, prefix);
   sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sLag\", (DL_FUNC) %sLag);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdLag\", (DL_FUNC) %sdLag);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdF\", (DL_FUNC) %sdF);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdRate\", (DL_FUNC) %sdRate);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdDur\", (DL_FUNC) %sdDur);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sd2F\", (DL_FUNC) %sd2F);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sd2Lag\", (DL_FUNC) %sd2Lag);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sd2Rate\", (DL_FUNC) %sd2Rate);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sd2Dur\", (DL_FUNC) %sd2Dur);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sd3F\", (DL_FUNC) %sd3F);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdFQ\", (DL_FUNC) %sdFQ);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdLagJac\", (DL_FUNC) %sdLagJac);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdLagQ\", (DL_FUNC) %sdLagQ);\n", libname, prefix, prefix);
+  sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sdDurQ\", (DL_FUNC) %sdDurQ);\n", libname, prefix, prefix);
   sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sRate\", (DL_FUNC) %sRate);\n", libname, prefix, prefix);
   sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%sDur\", (DL_FUNC) %sDur);\n", libname, prefix, prefix);
   sAppend(&sbOut, "  R_RegisterCCallable(\"%s\",\"%smtime\", (DL_FUNC) %smtime);\n", libname, prefix, prefix);
@@ -324,7 +477,12 @@ void writeSb(sbuf *sbb, FILE *fp);
   writeSb(&sbOut, fpIO);
 
 SEXP _rxode2_codegen(SEXP c_file, SEXP prefix, SEXP libname,
-                          SEXP pMd5, SEXP timeId, SEXP mvLast, SEXP goodFuns);
+                          SEXP pMd5, SEXP timeId, SEXP mvLast, SEXP goodFuns,
+                          SEXP esDLagCode, SEXP esDFCode,
+                          SEXP esDRateCode, SEXP esDDurCode, SEXP esD2FCode,
+                          SEXP esD2LagCode, SEXP esD2RateCode, SEXP esD2DurCode,
+                          SEXP esD3FCode, SEXP esDFQCode, SEXP esDLagJacCode,
+                          SEXP esDLagQCode, SEXP esDDurQCode);
 
 extern int fullPrint;
 #endif // __CODEGEN_H__

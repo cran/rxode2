@@ -13,11 +13,14 @@ statement
   | alag       end_statement
   | rate       end_statement
   | dur        end_statement
+  | past       end_statement
   | derivative end_statement
   | dfdy       end_statement
   | mtime      end_statement
   | mat0       end_statement
   | matF       end_statement
+  | indLin_prop end_statement
+  | matExp_statement end_statement
   | printf_statement end_statement
   | param_statement end_statement
   | interp_statement end_statement
@@ -165,6 +168,7 @@ fbio        : ('f' | 'F')  '(' identifier_r_no_output ')' ('=' | '<-' | '~' ) lo
 alag        : ('alag' | 'lag')  '(' identifier_r_no_output ')' ('=' | '<-' | '~' ) logical_or_expression;
 rate        : 'rate'  '(' identifier_r_no_output ')' ('=' | '<-' | '~' ) logical_or_expression;
 dur        : 'dur'  '(' identifier_r_no_output ')' ('=' | '<-' | '~' ) logical_or_expression;
+past       : 'past'  '(' identifier_r_no_output ',' logical_or_expression ')' ('=' | '<-' | '~' ) logical_or_expression;
 
 
 
@@ -183,6 +187,10 @@ levels_str1 : 'levels' '(' identifier_r_no_output ')' ('=' | '<-' | '~' )
 mat0: '_rxM' '=' logical_or_expression;
 
 matF: '_rxF' '=' logical_or_expression;
+
+indLin_prop : 'indLin' '(' identifier_r_no_output ')' ('=' | '<-' | '~' ) logical_or_expression;
+
+matExp_statement : 'matExp' '(' ')' ;
 
 mtime     : 'mtime' '(' identifier_r_no_output ')' ('=' | '<-' | '~') logical_or_expression;
 
@@ -262,7 +270,7 @@ identifier_r: identifier_r_extra | identifier_r_1 | identifier_r_2 ;
 
 identifier_r_no_output: identifier_r_no_output_1 | identifier_r_no_output_2 | identifier_r_extra;
 
-identifier_r_extra: 'alag' | 'f'| 'F' | 'rate' | 'dur' | 'lag' |
+identifier_r_extra: 'alag' | 'f'| 'F' | 'rate' | 'dur' | 'lag' | 'past' |
   'evid_' | 'bolus' | 'infuse' | 'infuseDur' | 'splitBolus' | 'replace' |
   'reset';
 

@@ -881,7 +881,7 @@ List etTrans(List inData, const RObject &obj, bool addCmt=false,
   bool combineDvidB = false;
   Environment b=Rcpp::Environment::base_namespace();
   if (!combineDvid.isNull()){
-    combineDvidB = (as<LogicalVector>(combineDvid))[1];
+    combineDvidB = (as<LogicalVector>(combineDvid))[0];
   } else {
     Function getOption = b["getOption"];
     combineDvidB = as<bool>(getOption("rxode2.combine.dvid", true));
@@ -1113,17 +1113,18 @@ List etTrans(List inData, const RObject &obj, bool addCmt=false,
         stop(_("cannot specify 'method' in 'iCov'"));
       } else if (nmix > 0 && tmpS == "mixest") {
         // add it to the parameters
+        // NOTE: use liName[i] (iCov column name), NOT lName[i] (main data column name)
         if (hasMixUnif) stop(_("cannot have both 'mixest' and 'mixunif' in the same dataset"));
         CharacterVector parsNew = CharacterVector(pars.size()+1);
         for (j = pars.size(); j--;) parsNew[j] = pars[j];
-        parsNew[pars.size()] = lName[i];
+        parsNew[pars.size()] = liName[i];
         pars = parsNew;
         hasMixest = true;
       } else if (nmix > 0 && tmpS == "mixunif") {
         if (hasMixUnif) stop(_("cannot have both 'mixest' and 'mixunif' in the same dataset"));
         CharacterVector parsNew = CharacterVector(pars.size()+1);
         for (j = pars.size(); j--;) parsNew[j] = pars[j];
-        parsNew[pars.size()] = lName[i];
+        parsNew[pars.size()] = liName[i];
         pars = parsNew;
         hasMixUnif = true;
       }

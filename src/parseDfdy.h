@@ -49,6 +49,9 @@ static inline int handleLhsDf(nodeInfo ni, char *name, int i, D_ParseNode *xpn, 
     char *v = (char*)rc_dup_str(xpn->start_loc.s, xpn->end);
     // New statement
     aType(TJAC);
+    // A Jacobian entry df(state)/dy(var) is an integration-time expression, so
+    // delay()/rxDelayD() are valid here too (e.g. d f/d(param) = delay(state,T)).
+    tb.curDdt = 1;
     sb.o = 0; sbDt.o = 0;
     sbt.o = 0;
     sAppend(&sbDt,"__PDStateVar_%s_SeP_",v);
@@ -107,7 +110,16 @@ static inline int handleDy(nodeInfo ni, char *name, int i, D_ParseNode *xpn, int
       aAppendN(" = ", 3);
       sAppendN(&sbt ,"=", 1);
       if (*ii == 1){
-        new_or_ith(_gbuf.s);
+        // df(state)/dy(THETA[n]) or dy(ETA[n]): _gbuf holds the synthetic
+        // name (_THETA_n_ / _ETA_n_).  Unlike the identifier form -- which the
+        // tree walk already registered before this point -- that name is not a
+        // symbol yet, so new_or_ith() leaves tb.ix = -2.  Storing that into
+        // tb.dy[] makes assertCorrectDfDy() read tb.ss.line[-2] (out of
+        // bounds).  Register it and take its index, as handleIdentifier() does.
+        if (new_or_ith(_gbuf.s)) {
+          addSymbolStr(_gbuf.s);
+          tb.ix = NV - 1;
+        }
       } else {
         new_or_ith(v);
       }

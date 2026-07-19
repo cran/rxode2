@@ -124,9 +124,90 @@ lhs symbols?
   int evid_; // pushing evid_() flag
   int *splitBolus; // source then target de indexes (+1)
   int splitBolusN;
+  int isMexp;
+  int hasDdt;
+  int curDdt; // currently parsing the RHS of a d/dt() statement
+  int hasIndLinProp;
+  int hasDelay; // Has delay() function (delay differential equation)
 } symtab;
 
 extern symtab tb;
+
+static inline int parse_micro_constant(const char *name, char *cmt1, char *cmt2) {
+  int non_depleting = 0;
+  char name_copy[256];
+  int len = (int)strlen(name);
+  if (len >= 256) return 0;
+  strcpy(name_copy, name);
+
+  if (len > 3 && strcmp(name_copy + len - 3, "_nd") == 0) {
+    non_depleting = 1;
+    name_copy[len - 3] = '\0';
+  } else if (len > 3 && strcmp(name_copy + len - 3, ".nd") == 0) {
+    non_depleting = 1;
+    name_copy[len - 3] = '\0';
+  }
+
+  // Check for dot separator: k.cmt1.cmt2 or K.cmt1.cmt2
+  if ((name_copy[0] == 'k' || name_copy[0] == 'K') && name_copy[1] == '.') {
+    const char *first_dot = name_copy + 1;
+    const char *second_dot = strchr(first_dot + 1, '.');
+    if (second_dot && second_dot != first_dot + 1 && *(second_dot + 1) != '\0') {
+      if (strchr(second_dot + 1, '.') == NULL) {
+        int len1 = (int)(second_dot - (first_dot + 1));
+        if (len1 < 100) {
+          memcpy(cmt1, first_dot + 1, len1);
+          cmt1[len1] = '\0';
+          int len2 = (int)strlen(second_dot + 1);
+          if (len2 < 100) {
+            strcpy(cmt2, second_dot + 1);
+            return non_depleting ? 2 : 1;
+          }
+        }
+      }
+    }
+  }
+  // Check for underscore separator: k_cmt1_cmt2 or K_cmt1_cmt2
+  if ((name_copy[0] == 'k' || name_copy[0] == 'K') && name_copy[1] == '_') {
+    // 1. Try to match against existing compartments in tb.de.line
+    for (int i = 0; i < tb.de.n; i++) {
+      const char *c1 = tb.de.line[i];
+      int len1 = (int)strlen(c1);
+      if (strncmp(name_copy + 2, c1, len1) == 0 && name_copy[2 + len1] == '_') {
+        const char *c2_start = name_copy + 2 + len1 + 1;
+        // Verify c2_start is also a registered compartment
+        for (int j = 0; j < tb.de.n; j++) {
+          const char *c2 = tb.de.line[j];
+          if (strcmp(c2_start, c2) == 0) {
+            if (len1 < 100 && strlen(c2) < 100) {
+              strcpy(cmt1, c1);
+              strcpy(cmt2, c2);
+              return non_depleting ? 2 : 1;
+            }
+          }
+        }
+      }
+    }
+    // 2. Fallback: if there is exactly one more underscore in name (e.g. k_depot_central)
+    const char *first_us = name_copy + 1;
+    const char *second_us = strchr(first_us + 1, '_');
+    if (second_us && second_us != first_us + 1 && *(second_us + 1) != '\0') {
+      if (strchr(second_us + 1, '_') == NULL) {
+        int len1 = (int)(second_us - (first_us + 1));
+        if (len1 < 100) {
+          memcpy(cmt1, first_us + 1, len1);
+          cmt1[len1] = '\0';
+          int len2 = (int)strlen(second_us + 1);
+          if (len2 < 100) {
+            strcpy(cmt2, second_us + 1);
+            return non_depleting ? 2 : 1;
+          }
+        }
+      }
+    }
+  }
+  return 0;
+}
 
 extern vLines depotLines;
 extern vLines centralLines;
@@ -155,6 +236,7 @@ extern vLines sbPm, sbPmDt, sbNrmL;
 #define TLIN 21
 #define TNONE 22
 #define TEVID 23
+#define PAST 24
 
 // new de type
 #define fromDDT 2
@@ -206,6 +288,7 @@ typedef struct nodeInfo {
   int printf_statement;
   int prod;
   int rate;
+  int past;
   int selection_statement;
   int selection_statement__9;
   int break_statement;
@@ -238,9 +321,13 @@ typedef struct nodeInfo {
   int relational_op;
   int string;
   int mod_expression;
+  int indLin_prop;
+  int matExp_statement;
 } nodeInfo;
 
 static inline void niReset(nodeInfo *ni){
+  ni->indLin_prop = -1;
+  ni->matExp_statement = -1;
   ni->mtime = -1;
   ni->alag = -1;
   ni->assignment = -1;
@@ -278,7 +365,7 @@ static inline void niReset(nodeInfo *ni){
   ni->printf_statement = -1;
   ni->prod = -1;
   ni->rate = -1;
-  ni->rate = -1;
+  ni->past = -1;
   ni->selection_statement = -1;
   ni->selection_statement__9 = -1;
   ni->break_statement = -1;
@@ -341,7 +428,7 @@ extern int gBufFree;
 extern int gBufLast;
 
 extern int maxSumProdN, SumProdLD, foundF0, foundF, foundLag, foundRate, foundDur,
-  good_jac, extraCmt, badMd5, maxUdf;
+  foundPast, good_jac, extraCmt, badMd5, maxUdf;
 extern unsigned int found_jac, nmtime;
 
 extern sbuf sbNrm;
@@ -430,5 +517,15 @@ char *getLine (char *src, int line, int *lloc);
 
 #define propPodo0 32768
 #define propDose0 65536
+// compartment name referenced as a dose target (bolus/infuse/etc.) in a linCmt model;
+// not an ODE state -- prevents false conflict with addLinCmt's dprop==0 check
+#define propDoseRef 131072
+// ODE state referenced by delay(state, T): the solver records dense delay
+// history only for states carrying this bit.  Must match rxDelayStateProp in
+// inst/include/rxode2parseStruct.h.
+#define propDelay 262144
+// ODE state carrying a user-specified non-constant delay() pre-history via
+// past(state, tau) <- expr.
+#define propPast 524288
 
 #endif // __TRAN_H__

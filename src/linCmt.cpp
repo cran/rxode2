@@ -8,6 +8,7 @@
 #include "timsort.h"
 #define SORT gfx::timsort
 #include "linCmt.h"
+#include "linCmtSensType.h"
 
 
 extern rx_solving_options op_global;
@@ -122,7 +123,9 @@ RObject linCmtModelDouble(double dt,
   Eigen::Matrix<double, 7, 1> scale;
   scale.setZero();
 
-  lc.sensTheta(theta, thetaSens, sensType == 3, scale.data());
+  // sensType 3 (reverse AD) and 30 (forward AD, fvar) both use the unscaled
+  // (isAD = true) path so the Jacobian comes out in true-theta units.
+  lc.sensTheta(theta, thetaSens, sensType == 3 || sensType == 30, scale.data());
 
   double *a = new double[nAlast];
   double *asave = new double[nAlast];
@@ -158,6 +161,9 @@ RObject linCmtModelDouble(double dt,
       break;
     case 3:
       stan::math::jacobian(lc, thetaSens, fx, Js);
+      break;
+    case 30:  // forward-mode AD (fvar); should match case 3 to round-off
+      lc.linCmtFwdJac(thetaSens, fx, Js);
       break;
     case 10:
       h = Eigen::Matrix<double, Eigen::Dynamic, 1>::Constant(thetaSens.size(), sensH);
@@ -272,7 +278,11 @@ extern "C" double linCmtA(rx_solve *rx, int id,
   rx_solving_options_ind *ind = &(rx->subjects[id]);
   rx_solving_options *op = rx->op;
   // get the linear solved system object.
-  linA_t lca = __linCmtA[omp_get_thread_num()];
+  // rx_get_thread() honors the cross-DLL thread-id override (see rxData.cpp /
+  // setRxThreadId): under an external OpenMP team rxode2's omp_get_thread_num()
+  // would return 0 for every worker, collapsing this per-thread linCmt scratch
+  // onto slot 0.  __linCmtB (line ~489) already uses rx_get_thread().
+  linA_t &lca = __linCmtA[rx_get_thread((int)__linCmtA.size())];
   int idx = ind->idx;
   // Create the solved system object
   if (!lc.isSame(ncmt, oral0, trans, rx->ndiff)) {
@@ -386,17 +396,26 @@ extern "C" double linCmtA(rx_solve *rx, int id,
 #undef yp
 }
 
+// These scaling/step-size helpers are read from the finite-difference H setup
+// (shi21ForwardH/gillForwardH) after ind_linCmtFH has populated THIS thread's
+// linCmtB slot, so they must read the same per-thread slot rx_get_thread()
+// selects -- not the hardcoded [0] slot, which another thread mutates (and may
+// resize) during a parallel linCmt solve.  rx_get_thread() takes an int, so the
+// size_t pool size is cast once to avoid a narrowing conversion.
 extern "C" double linCmtScaleInitPar(int which) {
-  return __linCmtB[0].lc.initPar(which);
+  int tid = rx_get_thread((int)__linCmtB.size());
+  return __linCmtB[tid].lc.initPar(which);
 }
 
 extern "C" double linCmtScaleInitN() {
-  Eigen::Matrix<double, Eigen::Dynamic, 1> theta = __linCmtB[0].lc.initPar();
+  int tid = rx_get_thread((int)__linCmtB.size());
+  Eigen::Matrix<double, Eigen::Dynamic, 1> theta = __linCmtB[tid].lc.initPar();
   return theta.size();
 }
 
 extern "C" int linCmtZeroJac(int i) {
-  return __linCmtB[0].lc.parDepV1(i);
+  int tid = rx_get_thread((int)__linCmtB.size());
+  return __linCmtB[tid].lc.parDepV1(i);
 }
 
 
@@ -475,6 +494,10 @@ extern "C" int linCmtZeroJac(int i) {
  * @author Matthew Fidler
  *
 */
+// linCmtSensIsAD() (the AD jacobian classifier; forward-mode fvar 3/30,
+// reverse-mode 31, auto 100 -> unscaled thetaSens + passthrough trueTheta; the
+// finite-difference methods keep the scaled path) lives in linCmtSensType.h so
+// linCmt.cpp, par_solve.cpp and rxData.cpp share one definition.
 extern "C" double linCmtB(rx_solve *rx, int id,
                           double _t, int linCmt,
                           int ncmt, int oral0,
@@ -562,7 +585,10 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
     thetaSens(getLinCmtDoubleAddr(lcb, linCmtBaddrThetaSens), lcb.numSens);
 
-  lc.sensTheta(theta, thetaSens, rx->sensType == 3, rx->linCmtScale);
+  // isAD (unscaled thetaSens + passthrough trueTheta) is used by every AD
+  // jacobian path: forward-mode (3/30/auto), reverse-mode (31). The finite
+  // difference methods keep the scaled path.
+  lc.sensTheta(theta, thetaSens, linCmtSensIsAD(rx->sensType), rx->linCmtScale);
   if (ind->linSS == linCmtSsInf) {
     lc.setSsInf(ind->linSSvar, ind->linSStau);
   } else if (ind->linSS == linCmtSsBolus) {
@@ -670,9 +696,14 @@ extern "C" double linCmtB(rx_solve *rx, int id,
           lc.fEndpoint5Jac(thetaSens, ind->linH, fx, Js);
           break;
 
-        case 3:
-        default:
+        case 31: // reverse-mode AD (escape hatch / validation)
           stan::math::jacobian(lc, thetaSens, fx, Js);
+          break;
+
+        case 3:  // "AD": now forward-mode (fvar); matches reverse to round-off
+        case 30: // explicit forward-mode AD
+        default: // auto and anything unspecified -> forward-mode AD
+          lc.linCmtFwdJac(thetaSens, fx, Js);
           break;
         }
         lc.updateJfromJs(J, Js);

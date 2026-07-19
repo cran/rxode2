@@ -6,6 +6,7 @@ struct rx_globals {
   double *gSolveLast2;
   double *gSolveLast;
   double *gSolveSave;
+  double *gEsPendingJump;  // per-thread neq scratch: deferred non-dosed dtau jump
   int *gon;
   double *gIndSim;
   double *gsolve;
@@ -63,6 +64,8 @@ struct rx_globals {
   bool zeroOmega = false;
   bool zeroSigma = false;
   int *gindLin = NULL;
+  int *gdelayState = NULL; /* delay() history column -> ODE state index */
+  int *gdelayCol = NULL;   /* ODE state index -> delay() history column (-1 if none) */
   int **pendingDoses = NULL;
   int *  nPendingDoses = NULL;
   int *  nAllocPendingDoses = NULL;
@@ -81,7 +84,9 @@ struct rx_globals {
   double *grtol2Thread = NULL;
   double *gssAtolThread = NULL;
   double *gssRtolThread = NULL;
-  double *geta_pre = NULL;
-  int geta_pre_n = 0;
+  double *geta_pre = NULL;      // active pointer (NULL when deactivated)
+  double *geta_pre_alloc = NULL; // actual allocated buffer (survives deactivate)
+  int geta_pre_n = 0;            // capacity of geta_pre_alloc
   bool alloc=false;
+  int64_t gall_times_n = 0; // actual allocation count of gall_times (representative, not expanded)
 };

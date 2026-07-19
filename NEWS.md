@@ -1,3 +1,333 @@
+# rxode2 5.1.3
+
+## Breaking / compatibility changes
+
+- The `ar` column that had been added to `$predDf` was removed.  `$predDf` and
+  `$iniDf` are a stable, exported interface relied on by reverse dependencies
+  (nlmixr2est, babelmixr2, ...) and by fits saved with earlier versions, so
+  their schema must not grow.  Instead, a numeric literal supplied to an
+  error-model function (e.g. `add(0.7)`, `prop(0.1)`, `ar(0.5)`) is now parsed
+  into an auto-generated, uniquely named `rx`-prefixed **FIX** parameter in the
+  `$iniDf` (`rx.<endpoint>.<func>`), keyed to its endpoint through the existing
+  `err`/`condition` columns -- exactly like a user-written fixed residual
+  parameter.  (This also fixes literals such as `add(0.7)` that were previously
+  silently dropped.)  Estimated (`ar(rho)`) and modeled (`ar(corv)`)
+  correlations continue to work; the modeled correlation is recovered from the
+  endpoint's error expression rather than from a column.
+
+## New features
+
+- `rxOptExpr()` gains `chunkLines` and `parallel`, to optimize a large
+  machine-generated model (a sensitivity- or Jacobian-augmented model) in
+  contiguous cost-balanced chunks rather than in a single pass.  Normalizing a
+  model is strongly superlinear in its size, and for such a model it -- not the
+  common subexpression search -- is what dominates: optimizing a 275-line
+  augmented model takes ~113s, of which the subexpression search is only ~15s.
+  Chunking amortizes that parse, since each chunk is normalized on its own,
+  taking the same model to ~11s (10.7x; 5.7x at 149 lines, 2.5x at 119).
+
+  Chunking is now the default: a model over `chunkLines` (default 40) lines is
+  chunked, and the chunks are optimized in parallel `mirai` daemons.  `parallel`
+  carries `rxControl(cores=)`'s semantics: `0` (the default) resolves to the
+  rxode2 thread setting `rxCores()`, so CRAN and users tune it with the same
+  knob as the solver (`setRxThreads()`, `OMP_THREAD_LIMIT`, or `parallel=`
+  directly; `1` runs serially).  An existing `mirai` daemon pool is used as-is; otherwise a pool is
+  started only when the model splits into at least 4 chunks (its startup costs a
+  few seconds) and shut down when the call returns.  A model at or under
+  `chunkLines` lines is optimized whole, exactly as before; `chunkLines = 0`
+  forces that for any model.  `mirai` moved from `Suggests` to `Imports`.
+
+  Common subexpressions are only shared within a chunk, so chunking does not give
+  the same optimized text as the whole-model call -- it carries more temporaries
+  -- but it gives an equivalent model: the same states and parameters, the same
+  solution, and the same errors.  The extra temporaries cost no measurable solve
+  time, though they do make the C compilation somewhat slower.
+
+  Compartment-scoped assignments (a `state(0)=` initial condition or an
+  `f`/`alag`/`lag`/`rate`/`dur` dosing modifier) are disguised in place while the
+  chunks are optimized, so they can be chunked without being separated from their
+  `d/dt()`.  A `delay(state, T)` call (or its `rxDelayD`/`rxDelayD2`/`rxDelayD3`
+  sensitivity derivatives) that a chunk boundary separates from its `d/dt(state)`
+  is likewise disguised and restored, so a large DDE (sensitivity) model chunks
+  without falling back; a call in the same chunk as its `d/dt()` still joins the
+  common-subexpression pool.  A chunk is only a fragment and so can fail to
+  optimize where the whole model would not; if any chunk fails the whole model is
+  optimized instead, so a malformed model still raises the error the unchunked
+  call raises.
+
+- Delay differential equations: `delay(state, T)` evaluates an ODE state at
+  `t - T` (Monolix semantics), with `past(state, T) <- expr` defining the
+  pre-history.  Delayed states are interpolated from the solver's dense output;
+  delay models default to the `"dop853+ros4"` composite and cap the step size
+  to the smallest delay.  The dense-output/history machinery is adapted from
+  the 'dde' package (Rich FitzJohn, Wes Hinsley, Imperial College), whose
+  authors are added as contributors.
+
+- Forward sensitivities for delay models, so `delay()` models estimate with
+  gradient-based methods such as FOCEi.  Parameter-dependent delays are
+  supported at first order (`rxDelayD()`); second/third order are generated for
+  constant delays (`rxDelayD2()`/`rxDelayD3()`) and rejected for
+  parameter-dependent delays (use a numeric or Gauss-Newton Hessian there).
+
+- Many new ODE solver methods: a large suite of explicit Runge-Kutta tableaus
+  (orders 3-14), stiff Rosenbrock and implicit Runge-Kutta methods (`"ros43"`,
+  `"ros6"`, `"radauiia5"`, `"gauss6"`, `"sdirk43"`, `"backwardEuler"`, ...),
+  symplectic steppers, SUNDIALS CVODE (`"cvode"`, linear solver selectable via
+  `cvodeLinSolver=`), and LSODE/BDF.  Implicit methods auto-generate an
+  analytic Jacobian.  New helpers `rxIsStiff()`, `rxIsNonStiff()`,
+  `rxIsImplicit()`, `rxIsDense()`, and `rxIsAutoSwitch()` classify methods; see
+  the new "ODE solvers" article.
+
+- AutoSwitch composite methods written `"primary+secondary"` (e.g.
+  `"dop853+ros4"`): a non-stiff primary with reactive fallback to a stiff
+  secondary, in both the standard and dense-output paths.
+
+- Adjoint sensitivity solving: `rxSolveAdjoint()` and `rxSolveAdjointRk4()`
+  return the same `rx__sens_<state>_BY_<param>__` output as forward
+  sensitivities via a backward sweep.  Exact discrete adjoints exist for the
+  one-step methods (`"s"` suffix, e.g. `"dop853s"`), `"liblsodaadj"`, and
+  `"cvodesadj"`, including event jumps (dose/reset/replace/multiply), modeled
+  `alag`/`rate`/`dur`, and steady state.  Stiff adjoint and forward-sensitivity
+  solvers integrate the augmented system with its analytic Jacobian.
+
+- Jump sensitivities for dosing events (based on
+  https://github.com/dkaschek/EventSensitivities), replacing finite differences
+  as the default (`rxode2.eventSens` option: `"jump"`, `"fd"`, `"both"`).
+  Hybrid jump sensitivities are used for matrix exponential and `linCmt()`
+  models (up to 3rd order for the ODE/matrix exponential cases).
+
+- Automatic conversion of linear ODE models to `linCmt()` at solve time
+  (`rxSolve(..., useLinCmt=TRUE)`, the default), passing detected PK parameters
+  explicitly.  Handles a central sub-system with an output-only peripheral
+  observable; systems `linCmt()` cannot represent stay explicit ODEs, and a
+  conversion that will not compile falls back to the ODE (only rxode2).
+
+- Adaptive dosing helpers (`bolus()`, `infuse()`, `replace()`, etc.) now work
+  inside `linCmt()` and mixed `linCmt()`+ODE models, with Jacobian handling of
+  the dosing events; `odeToLin()` preserves and renames them when converting.
+
+- `linCmt()` sensitivity (`linCmtB`) solves now run in parallel across subjects
+  on the default forward-mode AD Jacobian path (`linCmtSensType="AD"`), which is
+  stack-local with no shared Stan arena.  The reverse-mode AD (`"ADr"`) and
+  finite-difference paths remain single threaded.
+
+- Inductive linearization and matrix exponentials rewritten with a more
+  NONMEM-like interface (automatic ODE->syntax translation retained) and
+  symbolic-differentiation gradients.
+
+- Added a forward automatic-derivative linear compartment model.
+
+- `ar(cor)` residual term simulating continuous-time AR(1) residuals for
+  normal, t, and cauchy error models, addable per endpoint alongside any
+  transform; `cor` is in `[0, 1)` and the lag correlation decays as
+  `cor^(time gap)` (Karlsson, Beal and Sheiner 1995).  Estimation is supported
+  in nlmixr2est (nlm and focei families).
+
+- `lag0()`/`lead0()`/`diff0()`: like `lag()`/`lead()`/`diff()` but return `0`
+  instead of `NA` when there is no prior/following record.  A calculated
+  variable may now reference itself through `lag()`/`lag0()`/`diff()` (a
+  first-order recurrence); a non-lag self-reference is still a required input
+  parameter.
+
+- `rxOmegaVarCovDeriv()`: non-Cholesky `Omega` path returning `Omega^{-1}`,
+  `log|Omega|`, and their first/second derivatives with respect to each free
+  variance-covariance element.
+
+- `rxExpandSens3_()` generates analytic third-order forward sensitivity
+  equations; `.rxSens()` gained a `vars3` argument.
+
+- For downstream packages: `rxSetSolveAtolRtol()`/`rxGetSolveAtolRtol()` in the
+  C function-pointer API, and `setRxThreadId()` so a package can drive the
+  per-subject solve from its own OpenMP team.
+
+- `rxTest()` test blocks now muffle stray progress messages (e.g. "calculate
+  sensitivities"); set `options(rxode2.test.verbose = TRUE)` to see them.
+  Messages asserted with `expect_message()` are unaffected.
+
+- `coef()` methods for `rxUi` models (and model functions).  By default
+  `coef()` returns the fixed-effect (`theta`) estimates; `coef(model,
+  level = "omega")` returns the random-effect variability matrix and
+  `coef(model, level = "all")` returns both.  `nlme::fixef()` continues to
+  return the fixed effects.
+
+## Bug fixes
+
+- The C accessors exposed through the function-pointer API (`getRxNsub()`,
+  `getSolvingOptions()`, `getSolvingOptionsInd()`, and the other `rx_solve*`
+  accessors) no longer segfault when handed a `NULL` or uninitialized solve.
+  They fall back to the global solve; a scalar counter/flag accessor (`nsub`,
+  `nall`, `nobs`, `npars`, ...) simply reports zero before any solve, exactly as
+  before, so downstream code that probes those counts at load time keeps working
+  (for example babelmixr2's PopED integration, which queries them from
+  `.onLoad`).  An accessor that must dereference a per-subject record
+  (`getSolvingOptionsInd()`) instead raises a normal catchable R error stating
+  that the solving environment is not set up, rather than dereferencing a `NULL`
+  pointer and crashing the R process.  This hardens downstream packages that call
+  an accessor before their solve pointer has been populated (for example a cold
+  first `nls`/`nlm` fit in `nlmixr2est`).
+
+- A Jacobian entry `df(state)/dy(THETA[n])` or `df(state)/dy(ETA[n])` (a
+  bracketed parameter reference, which the grammar accepts) no longer segfaults.
+  The synthetic `_THETA_n_`/`_ETA_n_` symbol was never registered, so its index
+  stayed `-2` and the model validator read `tb.ss.line[-2]` out of bounds.  This
+  crashed `nlm`/FOCEi fits that re-parse their generated `calcJac` model (whose
+  parameters are `THETA[n]`) in the residual/table step -- notably for a
+  delay-differential-equation model whose delay parameter appears in a product
+  of delayed states.
+
+- `past(state, tau)` on a state with no `d/dt(state)` now reports that cleanly
+  instead of corrupting the heap.  The error path appended nothing to the
+  message buffer and then trimmed a trailing `', ` that was never written,
+  moving the write offset before the start of the buffer; the damage surfaced
+  as a `double free or corruption` abort on a *later*, unrelated parse rather
+  than at the offending model.  The message now names the property
+  (`'past(G)' present, but d/dt(G) not defined`), and a property with no
+  message branch can no longer underflow the buffer.
+
+- `rxOptExpr()` no longer fails on a model that uses `past(state, tau)` and is
+  long enough to be optimized in chunks.  A `past()` line only parses in a
+  chunk that also holds the matching `d/dt()`, and sensitivity augmentation
+  appends `past()` after every `d/dt()` -- so it reliably landed in a chunk of
+  its own.  It is now disguised for the duration of the optimization like any
+  other compartment-scoped left-hand side, and restored byte-exactly
+  afterwards.  Together with the fix above this unblocks estimating a
+  non-constant-history DDE (e.g. the rheumatoid arthritis model of Koch et al.
+  2014, J Pharmacokinet Pharmacodyn 41:291-318, Example 6).
+
+- `rxAppendModel()` now warns (instead of erroring) when the appended models
+  have no variables in common, so the combined model is still returned; use
+  `common=FALSE` to suppress the warning (#520).
+
+- `rxFixPop()` no longer tries to literally substitute a fixed mixture
+  proportion (`mix()`).  A mixture proportion must stay a named model-block
+  variable, so substituting its value made the re-parse throw from `mix()`
+  ("the probabilities in a mixture must be in the model block ..."); a downstream
+  caller wrapping `rxFixPop()` in `try()` leaked that error to the console during
+  otherwise-successful mixture fits.  Fixed mixture proportions are now excluded
+  from the substitution.
+
+- Tests that use datasets from the suggested `nlmixr2data` package (`theo_sd`,
+  `warfarin`, `nmtest`) now guard their use with
+  `skip_if_not_installed("nlmixr2data")`, so the test suite runs cleanly when
+  `nlmixr2data` is not installed (#95).
+
+### Estimation / symengine translation (`rxFromSE()`)
+
+- Convert raw R comparison/logical operators (`>`, `==`, `&`, ...), not only
+  their `rxGt()`/`rxEq()` symengine forms; fixes "user function '>' requires 0
+  arguments" in FOCEi models with inter-occasion variability
+  (nlmixr2/nlmixr2#390).
+
+- Recognize bare relationals on the second conversion pass of a `Subs()` over a
+  `Derivative()`; unblocks FOCEi IOV models that also have a between-subject
+  eta on a parameter without IOV.
+
+- The numeric-constant canonicalization now evaluates operands in `baseenv()`
+  only and guards zero-length results, fixing an "argument is of length zero"
+  error and silent substitution of user-workspace variables (#1109).
+
+- A trig function (`sin`/`cos`/`tan`) whose argument is a compound expression
+  divided by something (for example `sin(2 * 3.14 * (time - mtime1) / period)`)
+  no longer drops its whole argument.  The division branch fell through without
+  returning when the numerator was not a single token, so the argument became
+  `NULL` and the emitted C code was `sin()` -- which failed to compile with "too
+  few arguments to function 'sin'".  Such models (for example an enterohepatic
+  gallbladder model with a sinusoidal release) now build and fit
+  (nlmixr2/nlmixr2est#513).
+
+### Model parsing / mu-referencing
+
+- Summing two or more population parameters in an expression that has no
+  random effect (for example a combined residual error
+  `W <- sqrt(sigma.1. + sigma.2.)`) is no longer misreported as
+  "2+ single population parameters in a single mu-referenced expression".
+  That check now fires only for a genuine mu-referenced expression (one that
+  also contains an eta), and the message names the parameters that were
+  actually summed instead of the first parameters in the model (#471).
+
+### Delay models
+
+- `calcJac=TRUE` rewriting (also used by the stiff `ros4`/`dop853+ros4` path)
+  no longer breaks delay models declaring literal `THETA_n_`/`ETA_n_`
+  parameters: constant `~` intermediates stay bound, the literal names are
+  restored, and `past()` history lines are re-emitted.
+
+- A state read by `delay()` is always kept as a real ODE, so delayed states
+  named like sensitivities (`rx__sens_*`) keep their defining `d/dt()` and can
+  use the stiff/dense composite directly.
+
+- Delay models whose analytic Jacobian cannot be generated now fall back to
+  `dop853` (dense) instead of `liblsoda`, which recorded no delay history and
+  silently returned pre-history values.
+
+- An lhs reading `delay()` is now reported correctly in the output data frame
+  (#1140).  The dense delay history was freed at the end of each subject's
+  solve, so the post-solve lhs recalculation returned the constant pre-history
+  (0) at every record even though the delayed value drove the ODE.  The history
+  is now kept until `rxSolveFree()` releases the subject, which also plugs a
+  leak on the discrete-adjoint (`rk4s`) path where it was never freed.
+
+### `linCmt()` models
+
+- Fixed a compartment-indexing bug where a model with both an error model and
+  an in-equation compartment reference (e.g. `Cp <- peripheral1 / vp`) read an
+  unwritten slot.
+
+- `tad(<state>)`/`tlast(<state>)` no longer return `NA` or the wrong value when
+  the model also declares an extra `cmt()` for an algebraic observable
+  (nlmixr2est#685).
+
+- The automatic `linCmt()` conversion no longer fires on a nonlinear model
+  whose nonlinearity is written through a state-derived observable (e.g.
+  Michaelis-Menten via `Cc <- central / vc`).
+
+- The automatic `linCmt()` conversion no longer changes results when the event
+  data addresses a compartment (in a dose or an observation record) by the
+  *name* of an ODE compartment the conversion renames (e.g. an ODE `centre`
+  compartment addressed as `CMT = "centre"`, which the conversion renames to
+  `central`).  Such a solve now falls back to the original ODE model instead of
+  routing the record nowhere and returning all-zero predictions.
+
+- Fixed the automatic `linCmt()` conversion cache reusing the first model's
+  initial estimates for a later model that shares the same `model({})`
+  equations but has a different `ini({})` block, which made structurally
+  identical models with different parameters return identical predictions.
+
+- Fixed the string form of the compartment argument in the adaptive dosing
+  helpers (e.g. `bolus(50, cmt = "depot")`).
+
+### Solving
+
+- Zero the LSODA solver work memory on allocation (`alloc_mem`, `calloc` instead
+  of `malloc`).  The shared work block (Nordsieck history `yh`, Jacobian
+  workspace `wm`, `acor`/`savf`, ...) was left uninitialised and parts are read
+  before the integrator writes them on some paths (e.g. a first stiff/BDF step at
+  an extreme point), making a solve non-deterministic.  Surfaced by valgrind as
+  reads of uninitialised LSODA memory inside FOCEi/impmap inner solves, and
+  downstream as an occasional blown-up importance-sampling fit run after a prior
+  (parallel) fit.  Solving is otherwise unchanged.
+
+- `lag()`/`diff()` (and `first()`/`last()`) previously returned a constant
+  instead of the prior record's value for calculated variables and time-varying
+  covariates; they now read the prior record (`NA` on each individual's first
+  record) and work through the estimation/symengine path.  Only
+  `lag(x, 1)`/`diff(x, 1)` are supported for calculated variables.
+
+- Bug fix for `mix()` models and `iCov` models.
+
+- The `rxMemoryEstimate()` RAM detection no longer calls the defunct
+  `utils::memory.limit()` (which warned on every Windows solve); total RAM is
+  now queried natively in C (`GlobalMemoryStatusEx` on Windows,
+  `sysctl` on macOS, `sysconf` on Linux) and available memory reuses the
+  allocator preflight estimate (`rxAvailableMemoryBytes()`).  This also drops
+  the `memuse` suggested dependency and the shell-command fallbacks.
+
+- Fixed out-of-bounds heap reads (AddressSanitizer-confirmed; results
+  unchanged): `rxSolve()` parameter setup when subjects share one event table
+  in an `nsim > 1` sorted solve; `syncIdx()` dose-index lookup; `cvPost()` with
+  a 1x1 `omega`; `linCmt.h` `linCmtStan2ssInf8`; `etTran()` `combineDvid`;
+  `rxDerived()` `derived1`.
+
 # rxode2 5.1.2
 
 - `geom_cens()` / `stat_cens()` no longer emit "Ignoring unknown
@@ -19,6 +349,26 @@
   focei.
 
 - Parallelized the `rxode2` data.frame creation.
+
+- Added parallel solving `mirai` for clusters and HPC support.
+
+- Added out of memory solve using `arrow`/`duckdb`.  These
+  out-of-memory (`rxSolveOom`) solves behave like a standard
+  solved object: it prints the `$params` and `$inits` (mirroring the
+  `rxSolve` console output), supports `$`, `head()`, `nrow()`,
+  `ncol()`/`dim()` and the usual `as.data.frame()`/`as_tibble()`/
+  `as.data.table()` coercions, and exposes the per-subject parameter
+  table and initial conditions that are now persisted alongside the
+  chunked data.  A DuckDB query layer over the parquet chunks is used
+  for lazy access (`head()`, single-column extraction, schema) when
+  available.  The chunks can also be queried lazily with `dplyr` (via
+  `as.arrow()` or `arrow::to_duckdb()`) so that filtering and
+  aggregation are pushed down to the on-disk chunks and a possibly
+  out-of-memory result never has to be fully materialized.  The
+  storage/query engine can be pinned with the
+  `rxode2.oom.backend` option (`"auto"`, `"duckdb"`, `"arrow"` or
+  `"rds"`); the option is also forwarded to parallel (`mirai`)
+  workers.
 
 - Use ALTREP for `id`, `sim.id`, repeated simulation event columns
   (`evid`, `cmt`, `ss`, `amt`, `rate`, `dur`, `ii`, `time`),
@@ -103,6 +453,8 @@
 
 - Add `serializeFile` as an option to save the rxode2 C fitting data and
   then restore as needed.
+
+- Add out of memory solve capabilities
 
 # rxode2 5.0.2
 

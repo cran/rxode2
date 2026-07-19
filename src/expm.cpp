@@ -256,19 +256,18 @@ int meOnly(int cSub, double *yc_, double *yp_, double tp, double tf, double tcov
   // arma::mat mexp;
   // arma::mat ypout;
   unsigned int i, nInf=0;
-  arma::vec ypExtra(neq);
   arma::mat m0extra(neq, neq, arma::fill::zeros);
   for (i = 0; i < (unsigned int)neq; i++){
     if (InfusionRate[i] != 0.0){
       nInf++;
       m0extra[neq*(nInf-1)+i]=1;
-      ypExtra[i] = InfusionRate[i];
     }
   }
   if (nInf == 0){
     arma::mat expAT(neq, neq);
     expAT = matrixExp(m0, tf-tp, type, order);
-    yc = expAT*yp;
+    arma::vec yc_temp = expAT*yp;
+    std::copy(yc_temp.begin(), yc_temp.end(), yc_);
     return 1;
   } else {
     arma::mat mout(neq+nInf, neq+nInf, arma::fill::zeros);
@@ -280,7 +279,13 @@ int meOnly(int cSub, double *yc_, double *yp_, double tp, double tf, double tcov
       std::copy(m0extra.colptr(j),m0extra.colptr(j)+neq, mout.colptr(neq+j));
     }
     std::copy(yp.begin(),yp.end(),ypout.begin());
-    std::copy(ypExtra.begin(),ypExtra.end(), ypout.begin()+neq);
+    int cur_nInf = 0;
+    for (i = 0; i < (unsigned int)neq; i++){
+      if (InfusionRate[i] != 0.0){
+        ypout[neq + cur_nInf] = InfusionRate[i];
+        cur_nInf++;
+      }
+    }
     arma::vec meSol(neq+nInf);
     arma::mat expAT(neq+nInf, neq+nInf);
     // Unfortunately the tf-tp may change so we can not cache this.
@@ -332,91 +337,64 @@ extern "C" int indLin(int cSub, rx_solving_options *op, rx_solving_options_ind *
   // double phiAnorm = op->indLinPhiAnorm;
 
   int locf=(op->is_locf!=2);
-  double tcov = tf;
-  if (locf) tcov = tp;
-  switch(doIndLin){
-  case 1: {
-    return meOnly(cSub, yp_, yp_, tp, tf, tcov, InfusionRate_, on_, ME, op, ind);
+  // Relinearization step cap: indLin's premise is a CONSTANT Jacobian/ME
+  // over each `meOnly()` call's interval, evaluated ONCE at the interval's
+  // start (`ME(cSub, tcov, tf, ..., yc_)` uses the CURRENT state) -- exact
+  // for a true (state-independent) matExp() model, but only a first-order
+  // approximation for a state-dependent (indLin-forcing, e.g. Michaelis-
+  // Menten) one.  Previously this whole `[tp,tf]` interval -- exactly the
+  // gap between the caller's requested output times -- was treated as ONE
+  // relinearization step with NO internal refinement at all, so `hmax`
+  // (and `ind->HMAX`'s auto-computed default) were silently ignored:
+  // solving with a coarser output/sampling grid gave a coarser, silently
+  // WRONG answer for nonlinear indLin models, with no way for a user to
+  // ask for more accuracy short of resampling their own output times.
+  // Found while investigating task #8 (matExp+indLin primal-trajectory
+  // accuracy for MM elimination): error scaled linearly with output grid
+  // spacing (a classic "zero internal step refinement" signature), and
+  // `hmax` had ZERO effect on the result at any value. Fixed by honoring
+  // `HMAX` (per-subject, `ind->HMAX`, falling back to `op->hmax2` when
+  // `ind` is unavailable -- same fallback pattern as `rtol`/`atol` above)
+  // as a genuine relinearization step cap: subdivide `[tp,tf]` into equal
+  // substeps no longer than `HMAX`, re-evaluating `ME`/`IndF` (via a fresh
+  // `meOnly()` call using the just-updated state) at each substep boundary.
+  // For a true matExp() model (state-independent ME) this changes nothing
+  // but the number of (mathematically equivalent) matrix exponentials
+  // computed; for indLin-forcing models it is the actual fix.
+  double _hmax = (ind != NULL) ? ind->HMAX : op->hmax2;
+  int _nSub = 1;
+  if (_hmax > 0.0 && std::isfinite(_hmax) && (tf - tp) > _hmax) {
+    _nSub = (int) std::ceil((tf - tp) / _hmax);
+    if (_nSub < 1) _nSub = 1;
   }
-  case 3: {
-    // Matrix exponential  +  inductive linearzation
-    arma::vec wLast(neq);
-    arma::vec w(yp_, neq);
-    arma::vec y0 = w;
-    // Update first value
-    meOnly(cSub, w.memptr(), y0.memptr(), tp, tf, tcov, InfusionRate_, on_, ME, op, ind);
-    // Don't update rest
-    wLast = w;
-    meOnly(cSub, w.memptr(), y0.memptr(), tp, tf, tcov, InfusionRate_, on_, ME, op, ind);
-    bool converge = false;
-    for (int i = 0; i < maxsteps; ++i){
-      converge=true;
-      for (int j=op->indLinN;j--;){
-    	if (fabs(w[op->indLin[j]]-wLast[op->indLin[j]]) >= rtol[op->indLin[j]]*fabs(w[op->indLin[j]])+
-	    atol[op->indLin[j]]){
-    	  converge = false;
-    	  break;
-    	}
-      }
-      if (converge){
-    	break;
-      }
-      wLast = w;
-      meOnly(cSub, w.memptr(), y0.memptr(), tp, tf, tcov, InfusionRate_, on_, ME, op, ind);
+  double _dt = (tf - tp) / (double) _nSub;
+  double _subTp = tp;
+  int _ret = 1;
+  arma::vec u;
+  if (doIndLin == 2) {
+    u.zeros(neq);
+  }
+  for (int _sub = 0; _sub < _nSub; _sub++) {
+    // Avoid floating-point drift on the final substep by snapping to `tf`.
+    double _subTf = (_sub == _nSub - 1) ? tf : _subTp + _dt;
+    double tcov = locf ? _subTp : _subTf;
+    switch(doIndLin){
+    case 1: {
+      _ret = meOnly(cSub, yp_, yp_, _subTp, _subTf, tcov, InfusionRate_, on_, ME, op, ind);
+      break;
     }
-    std::copy(w.begin(), w.begin()+neq, yp_);
-    return 1;
-  }
-  case 2: {
-    // This will not changed with IndLin
-    arma::vec u(neq);
-    arma::vec yp(yp_, neq, false, false);
-    IndF(cSub, tcov, tf, u.memptr());
-    arma::mat m0(neq, neq);
-    ME(cSub, tcov, tf, m0.memptr(), yp_);
-    arma::vec w = phiv((tf-tp), m0, u, yp, op);
-    std::copy(w.begin(), w.begin()+neq, yp_);
-    return 1;
-  }
-  case 4: {
-    // Matrix exponential with + u and inductive linearization
-    // This will not changed with IndLin
-    arma::vec u(neq);
-    IndF(cSub, tcov, tf, u.memptr());
-    arma::mat m0(neq, neq);
-    ME(cSub, tcov, tf, m0.memptr(), yp_);
-    arma::vec wLast(neq);
-    arma::vec w(yp_, neq);
-    arma::vec yp(yp_, neq, false, false);
-    // Update first value
-    w = phiv((tf-tp), m0, u, yp, op);
-    wLast = w;
-    // Now update matrix
-    ME(cSub, tcov, tf, m0.memptr(), w.memptr());
-    w = phiv((tf-tp), m0, u, yp, op);
-    bool converge = false;
-    for (int i = 0; i < maxsteps; ++i){
-      converge=true;
-      for (int j=op->indLinN;j--;){
-    	if (fabs(w[op->indLin[j]]-wLast[op->indLin[j]]) >= rtol[op->indLin[j]]*fabs(w[op->indLin[j]])+
-	    atol[op->indLin[j]]){
-    	  converge = false;
-    	  break;
-    	}
-      }
-      if (converge){
-    	break;
-      }
-      wLast = w;
-      ME(cSub, tcov, tf, m0.memptr(), w.memptr());
-      w = phiv((tf-tp), m0, u, yp, op);
+    case 2: {
+      IndF(cSub, tcov, _subTf, u.memptr());
+      _ret = meOnly(cSub, yp_, yp_, _subTp, _subTf, tcov, u.memptr(), on_, ME, op, ind);
+      break;
     }
-    std::copy(w.begin(), w.begin()+neq, yp_);
-    return 1;
+    default:
+      stop(_("unsupported indLin code: %d"), doIndLin);
+    }
+    if (_ret <= 0) return _ret;
+    _subTp = _subTf;
   }
-  default:
-    stop(_("unsupported indLin code: %d"), doIndLin);
-  }
+  return _ret;
   // if (doIndLin == 0){
   //   // Total possible enhanced matrix is (neq+neq)x(neq+neq)
   //   // Total possible initial value is (neq+neq)

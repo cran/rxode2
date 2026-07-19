@@ -59,7 +59,43 @@ NA_LOGICAL <- NA # nolint
 #'     compiled with verbose debugging information turned on.
 #'
 #' @param calcSens boolean indicating if rxode2 will calculate the
-#'     sensitivities according to the specified ODEs.
+#'     sensitivities according to the specified ODEs.  May also be a
+#'     character vector of the states/parameters whose first-order
+#'     sensitivities (`rx__sens_<state>_BY_<param>__`) should be
+#'     generated.
+#'
+#' @param calcSens2 character vector (or `NULL`) requesting
+#'     second-order sensitivities in addition to the first-order ones
+#'     from `calcSens`.  When supplied, rxode2 also generates the
+#'     `rx__sens_<state>_BY_<p>_BY_<q>__` compartments (the Hessian
+#'     path), where `p` ranges over `calcSens` and `q` over
+#'     `calcSens2`.  Used, for example, for population (`THETA`)
+#'     second-order event sensitivities.  `NULL` (the default) skips the
+#'     second-order generation.
+#'
+#' @param calcSens3 character vector (or `NULL`) requesting third-order
+#'     sensitivities in addition to the first- and second-order ones.
+#'     Requires `calcSens2` to also be supplied (every `calcSens3`
+#'     parameter needs its own already-built second-order sensitivity
+#'     compartment, from the pairing of `calcSens2` with `calcSens3`, to
+#'     reference -- so `calcSens3` should be a subset of `calcSens2`,
+#'     which itself should be a subset of `calcSens`, mirroring how
+#'     `calcSens2` is used everywhere else in rxode2 today).  When
+#'     supplied, generates the `rx__sens_<state>_BY_<p>_BY_<q>_BY_<r>__`
+#'     compartments, where `p` ranges over `calcSens`, `q` over
+#'     `calcSens2`, and `r` over `calcSens3`, via `rxExpandSens3_()`.
+#'     `NULL` (the default) skips the third-order generation.
+#'
+#' @param eventSens controls how dosing/event-parameter (alag, F, rate,
+#'     dur, amt) sensitivities are computed when sensitivities are
+#'     generated: `"jump"` injects the analytic event ("jump")
+#'     sensitivities into the sensitivity states at each dosing event,
+#'     `"fd"` keeps the legacy finite-difference behavior (the
+#'     backward-compatible opt-out), and `"both"` computes both for
+#'     cross-checking.  `NULL` (the default) uses
+#'     `getOption("rxode2.eventSens", "fd")`.  When not `"fd"` and
+#'     `calcSens` is supplied, `calcJac` is forced to `TRUE` so the
+#'     Jacobian is available for the jump injection.
 #'
 #' @param calcJac boolean indicating if rxode2 will calculate the
 #'     Jacobain according to the specified ODEs.
@@ -257,7 +293,7 @@ NA_LOGICAL <- NA # nolint
 #' @importFrom PreciseSums fsum
 #' @importFrom Rcpp evalCpp
 #' @importFrom checkmate qassert
-#' @importFrom utils getFromNamespace assignInMyNamespace download.file head sessionInfo compareVersion packageVersion
+#' @importFrom utils getFromNamespace assignInMyNamespace download.file head sessionInfo compareVersion packageVersion removeSource
 #' @importFrom stats setNames update dnorm integrate
 #' @importFrom methods signature is
 #' @importFrom memoise memoise is.memoised
@@ -269,9 +305,12 @@ rxode2 <- # nolint
   function(model, modName = basename(wd),
            wd = getwd(),
            filename = NULL, extraC = NULL, debug = FALSE, calcJac = NULL, calcSens = NULL,
+           calcSens2 = NULL,
+           calcSens3 = NULL,
            collapseModel = FALSE, package = NULL, ...,
            linCmtSens = c("linCmtA", "linCmtB"),
            indLin = FALSE,
+           eventSens = NULL,
            verbose = FALSE,
            fullPrint=getOption("rxode2.fullPrint", FALSE),
            envir=parent.frame()) {
@@ -357,9 +396,29 @@ rxode2 <- # nolint
       }
     }
     .env <- new.env(parent = baseenv())
-    .env$.mv <- rxGetModel(model, calcSens = calcSens, calcJac = calcJac, collapseModel = collapseModel, indLin = indLin)
+    ## Event ("jump") sensitivities: when enabled, the runtime jump injection
+    ## needs the full state Jacobian, which is otherwise generated only on
+    ## demand -- force it on.  See ~/src/rxode2-event-sensitivities-plan.md.
+    .eventSensMode <- .rxEventSensMode(eventSens)
+    .eventSensActiveReq <- !missing(eventSens) && !identical(.eventSensMode, "fd")
+    .eventSensNeedsJac <- .eventSensActiveReq && !is.null(calcSens)
+    ## Fold the mode into the parsed md5/cache key for the duration of this build
+    ## (reset after) so "fd" and "jump" of the same model do not collide in the
+    ## compiled-DLL cache.  "fd" -> "" -> md5 unchanged.
+    assignInMyNamespace(".rxEventSensCacheKey",
+                        if (.eventSensActiveReq) .eventSensMode else "")
+    on.exit(assignInMyNamespace(".rxEventSensCacheKey", ""), add = TRUE)
+    .env$.mv <- rxGetModel(model, calcSens = calcSens, calcJac = calcJac, collapseModel = collapseModel, indLin = indLin, calcSens2 = calcSens2, calcSens3 = calcSens3)
     assignInMyNamespace(".linCmtSens", linCmtSens)
-    if (.Call(`_rxode2_isLinCmt`) == 1L) {
+    .isLinCmt <- .Call(`_rxode2_isLinCmt`) == 1L
+    if (.eventSensNeedsJac && !.isLinCmt && !isTRUE(calcJac)) {
+      calcJac <- TRUE
+      .env$.mv <- rxGetModel(model, calcSens = calcSens, calcJac = calcJac,
+                             collapseModel = collapseModel, indLin = indLin,
+                             calcSens2 = calcSens2, calcSens3 = calcSens3)
+      .isLinCmt <- .Call(`_rxode2_isLinCmt`) == 1L
+    }
+    if (.isLinCmt) {
       .env$.linCmtM <- rxNorm(.env$.mv)
       .vars <- c(.env$.mv$params, .env$.mv$lhs, .env$.mv$slhs)
       .env$.mv <- rxGetModel(.Call(
@@ -372,7 +431,9 @@ rxode2 <- # nolint
           )[match.arg(linCmtSens)],
           NULL
         ), verbose
-      ))
+      ),
+      calcSens = calcSens, calcJac = calcJac, collapseModel = collapseModel,
+      indLin = indLin, calcSens2 = calcSens2, calcSens3 = calcSens3)
     }
     model <- rxNorm(.env$.mv)
     class(model) <- "rxModelText"
@@ -399,6 +460,47 @@ rxode2 <- # nolint
     .env$debug <- debug
     .env$calcJac <- calcJac
     .env$calcSens <- calcSens
+    .eventSensEffectiveMode <- .rxEventSensEffectiveMode(.eventSensMode, .env$.mv)
+    ## Warn when sensitivities are requested on a linCmt() model whose ODE
+    ## compartment name collides with a linCmt reserved name: the ODE state loses
+    ## its sensitivity expansion, so its sensitivities are silently incorrect.
+    if (!is.null(calcSens)) {
+      .linCollide <- .rxLinCmtNameCollision(.env$.mv)
+      if (length(.linCollide) > 0L) {
+        warning("ODE compartment(s) '", paste(.linCollide, collapse = "', '"),
+                "' share a name with linCmt() reserved compartments; ",
+                "sensitivities will be incorrect -- rename them", call. = FALSE)
+      }
+    }
+    .indLinSens <- length(.env$.mv$indLin) > 0L &&
+      length(.env$.mv$sens) > 0L
+    if (.indLinSens) {
+      .eventSensEffectiveMode <- "jump"
+    }
+    .eventSensActive <- (!missing(eventSens) && !identical(.eventSensEffectiveMode, "fd")) ||
+      .indLinSens
+    .eventSensOdeStates <- setdiff(.env$.mv$normal.state, .rxLinCmt(.env$.mv))
+    .eventSensNeedsJac <- .eventSensActive && !is.null(calcSens) &&
+      length(.eventSensOdeStates) > 0L
+    if (.eventSensNeedsJac && !isTRUE(calcJac)) {
+      calcJac <- TRUE
+      .env$.mv <- rxGetModel(rxNorm(.env$.mv), calcSens = calcSens,
+                             calcJac = calcJac, collapseModel = collapseModel,
+                             indLin = indLin, calcSens2 = calcSens2, calcSens3 = calcSens3)
+      .eventSensOdeStates <- setdiff(.env$.mv$normal.state, .rxLinCmt(.env$.mv))
+    }
+    .eventSensCacheKey <- if (.eventSensActive) .eventSensEffectiveMode else ""
+    if (!identical(.eventSensCacheKey, .rxEventSensCacheKey)) {
+      assignInMyNamespace(".rxEventSensCacheKey", .eventSensCacheKey)
+      .env$.mv <- rxGetModel(rxNorm(.env$.mv), calcSens = calcSens,
+                             calcJac = calcJac, collapseModel = collapseModel,
+                             indLin = indLin, calcSens2 = calcSens2, calcSens3 = calcSens3)
+      .eventSensOdeStates <- setdiff(.env$.mv$normal.state, .rxLinCmt(.env$.mv))
+    }
+    .env$eventSens <- .eventSensEffectiveMode
+    ## Phase-A event-sensitivity metadata (index map + dosing-parameter total
+    ## derivatives); NULL for mode "fd" or models without sensitivities.
+    .env$eventSensInfo <- if (.eventSensActive) .rxEventSensInfo(.env$.mv, .eventSensEffectiveMode) else NULL
     .env$collapseModel <- collapseModel
 
     .env$wd <- wd
@@ -417,16 +519,21 @@ rxode2 <- # nolint
         })
         .rx$.rxWithWd(wd, {
           rxode2::.extraC(extraC)
+          ## Event ("jump") sensitivities: dLag/dF body lines passed straight to
+          ## codegen (empty for mode "fd" or models without sensitivities).
+          .esCode <- .rx$.rxEventSensCodeStrings(eventSensInfo)
           if (missing.modName) {
             .rxDll <- .rx$rxCompile(.mv,
                                     debug = debug,
-                                    package = .(.env$package)
+                                    package = .(.env$package),
+                                    eventSensCode = .esCode
                                     )
           } else {
             .rxDll <- .rx$rxCompile(.mv,
                                     dir = mdir,
                                     debug = debug, modName = modName,
-                                    package = .(.env$package)
+                                    package = .(.env$package),
+                                    eventSensCode = .esCode
                                     )
           }
           .rxDll$linCmtM <- .(ifelse(exists(".linCmtM", .env),
@@ -582,6 +689,19 @@ rxode2 <- # nolint
     tmp <- list2env(tmp, parent = .env)
     class(tmp) <- "RxCompilationManager"
     .env$cmpMgr <- tmp
+    ## Strip source refs from the generated helper closures.  Under
+    ## devtools::load_all() (keep.source=TRUE) each eval(bquote(function(){...}))
+    ## closure carries a srcref to the pkgload srcfile of rxode2.R, whose lazy
+    ## `lines` promise captures the entire session -- serializing any one of them
+    ## drags the whole session into the rds.  removeSource() drops the srcref
+    ## (no-op for installed/source-less builds).
+    for (.n in ls(.env, all.names = TRUE)) {
+      if (is.function(.env[[.n]])) assign(.n, removeSource(.env[[.n]]), envir = .env)
+    }
+    for (.n in ls(.env$cmpMgr, all.names = TRUE)) {
+      .f <- get(.n, envir = .env$cmpMgr)
+      if (is.function(.f)) assign(.n, removeSource(.f), envir = .env$cmpMgr)
+    }
     .env$calcJac <- (length(.mv$dfdy) > 0)
     .env$calcSens <- (length(.mv$sens) > 0)
     class(.env) <- "rxode2"
@@ -621,13 +741,73 @@ rxode <- rxode2
 
 #' Get model properties without compiling it.
 #'
-#' @param model rxode2 specification
-#' @inheritParams rxode2
+#' @param mv rxode2 model variables
+#'
+#' Sensitivity-named states (`rx__sens_<state>_BY_<var>__`) are
+#' stripped of their `d/dt()` when calcJac/calcSens regenerate the
+#' sensitivity block.  A state that is read by `delay()` is a
+#' load-bearing ODE (`delay(X, T)` requires `d/dt(X)`), so it must
+#' never be stripped -- e.g. nlmixr2est's analytic-cov augmented model
+#' supplies delayed sensitivity ODEs directly.  Returns the sens
+#' states safe to strip (those not referenced by any delay() term).
+#'
 #' @return rxode2 trans list
+#'
 #' @author Matthew L. Fidler
+.rxSensStrippable <- function(mv) {
+  .sens <- mv$sens
+  if (length(.sens) == 0) return(.sens)
+  if (!isTRUE(mv$flags[["hasDelay"]] == 1L)) return(.sens)
+  .delayed <- tryCatch(.rxDelayTerms(mv)$state, error = function(e) NULL)
+  setdiff(.sens, .delayed)
+}
+
+## symengine rewrites a literal `THETA_1_`/`ETA_1_` parameter to the reserved
+## indexed form `THETA[1]`/`ETA[1]` inside expressions, but the Jacobian dy()
+## targets and the original param() declaration keep the literal form.  In a
+## calcJac/calcSens reassembly the two forms then coexist and rxode2 treats them
+## as two distinct parameters (so `params=` keyed by the literal name cannot fill
+## the indexed one).  Restore the literal name for exactly the indices the
+## original model declared as literals -- native `THETA[1]` models (whose params
+## are the indexed form) declare no such literal and are left untouched.
+.rxRestoreLiteralThetaEta <- function(txt, params) {
+  .lit <- grep("^(THETA|ETA)_[0-9]+_$", params, value = TRUE)
+  for (.p in .lit) {
+    .m <- regmatches(.p, regexec("^(THETA|ETA)_([0-9]+)_$", .p))[[1]]
+    txt <- gsub(paste0(.m[2], "[", .m[3], "]"), .p, txt, fixed = TRUE)
+  }
+  txt
+}
+
+#' Get the rxode2 model variables without compiling the model
+#'
+#' Normalizes the input to an `rxModelVars` object and optionally
+#' rewrites the model text first: adding/stripping forward
+#' sensitivity equations (`calcSens`/`calcSens2`/`calcSens3`),
+#' adding/removing the `df()/dy()` Jacobian block (`calcJac`),
+#' dropping LHS definitions (`collapseModel`), or converting to an
+#' inductive linearization model (`indLin`).
+#'
+#' @param model The model to get the model variables from.  It can
+#'   be: rxode2 model text (a character string, `rxModelText`, or a
+#'   `{}` expression), a function or call whose body is the model, an
+#'   `rxode2` object, an `rxModelVars` object, an `rxDll` object, or
+#'   anything else `rxModelVars()` accepts.
+#'
+#' @inheritParams rxode2
+#'
+#' @return An `rxModelVars` object of the (possibly rewritten) model
+#'
+#' @author Matthew L. Fidler
+#'
+#' @examples
+#'
+#' rxGetModel("d/dt(depot) = -ka*depot; d/dt(central) = ka*depot - kel*central")
+#'
 #' @export
 #' @keywords internal
-rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = NULL, indLin = FALSE) {
+rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = NULL, indLin = FALSE,
+                       calcSens2 = NULL, calcSens3 = NULL) {
   if (is(substitute(model), "call")) {
     model <- model
   }
@@ -661,6 +841,8 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
       stop("cannot figure out how to handle the model argument", call. = FALSE)
     }
   }
+  .oldEventSensKey <- .rxEventSensCacheKey
+  on.exit(assignInMyNamespace(".rxEventSensCacheKey", .oldEventSensKey), add = TRUE)
   .ret <- rxModelVars(model)
   if (!is.null(calcSens)) {
     .calcSens <- TRUE
@@ -677,6 +859,10 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
       .s <- .rxLoadPrune(.ret, FALSE)
       .s$..stateInfo <- .stateInfo
       .rxJacobian(.s)
+      ## base ODE states, captured BEFORE .rxSens splices in the rx__sens_*
+      ## variational compartments -- used to build the full-system stiff Jacobian
+      ## by reusing the F_X/F_p just computed (see .rxFwdSensJacBlock).
+      .baseState <- rxStateOde(.s)
       if (!is(calcJac, "logical")) {
         calcJac <- FALSE
       }
@@ -686,31 +872,107 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
           calcSens <- .rxParams(model, TRUE)
         }
       }
+      ## .rxSens augments the sensitivity ODEs with the delayed (variational)
+      ## terms for delay() models (no-op otherwise).
       .rxSens(.s, calcSens)
-      .tmp1 <- .s$..jacobian
-      if (!calcJac) .tmp1 <- ""
+      ## Second-order sensitivities (for a Hessian / population THETA path): the
+      ## 2nd-order ODEs reference the 1st-order sens compartments, so they are
+      ## generated *after* the 1st-order ones and both are emitted into the model.
+      ## `..sens2` stays NULL (dropped from the paste) when calcSens2 is absent.
+      .sens2 <- NULL
+      if (!is.null(calcSens2)) {
+        .rxSens(.s, calcSens, calcSens2)
+        .sens2 <- .s$..sens2
+      }
+      ## Third-order sensitivities (Phase H0): the 3rd-order ODEs reference
+      ## the 2nd-order sens compartments (the pair calcSens2/calcSens3), so
+      ## they are only generated when calcSens2 is *also* present; requires
+      ## rxExpandSens3_ (PR #1092), which .rxSens() already dispatches to
+      ## when given all three variable sets.
+      .sens3 <- NULL
+      if (!is.null(calcSens3)) {
+        if (is.null(calcSens2)) {
+          stop("'calcSens3' requires 'calcSens2' to be supplied", call. = FALSE)
+        }
+        .rxSens(.s, calcSens, calcSens2, calcSens3)
+        .sens3 <- .s$..sens3
+      }
       .tmp2 <- .s$..lhs
       if (collapseModel) .tmp2 <- ""
-      .new <- paste(c(
+      ## Jacobian for stiff (Rosenbrock/implicit) solvers.  `.rxJacobian(.s)`
+      ## above ran over the ORIGINAL states only (it feeds the variational
+      ## equations), so `.s$..jacobian` is the base-system Jacobian -- INCOMPLETE
+      ## for the expanded state, because each rx__sens_* variational compartment
+      ## adds its own nonzero Jacobian rows/cols (the sens x sens block is F_X,
+      ## sens x base couples through dF_X/dy).  A stiff solver integrates the
+      ## FULL expanded system, so it needs that system's Jacobian.  Recompute
+      ## calcJac AFTER the sensitivity expansion: assemble the expanded model
+      ## once with no Jacobian, reload it (registers base + sens as ODE states),
+      ## and take .rxJacobian over the full state, then splice that df()/dy()
+      ## block back in.  Without it the stiff solvers get J == 0 and boost's
+      ## rosenbrock4 cannot even find a step size (others fall back to a costly
+      ## numeric Jacobian).
+      ## The df()/dy() Jacobian block must come AFTER every d/dt definition it
+      ## references -- the full-system Jacobian references the rx__sens_* sens
+      ## compartments, so it is spliced in after .sens/.sens2/.sens3 (a base-only
+      ## Jacobian could sit above them, the full one cannot).
+      .assembleSens <- function(.jacBlock) paste(c(
         .s$..stateInfo["state"],
         .s$..lhs0,
         .s$..ddt,
-        .tmp1,
         .s$..sens,
+        .sens2,
+        .sens3,
+        .jacBlock,
+        ## DDE non-constant pre-history: base past(state,tau)<-expr (dropped from
+        ## ..ddt by the symengine interception) + per-sens-compartment histories
+        ## past(rx__sens_state_BY_p__,tau)=d expr/d p.  Placed after every d/dt so
+        ## the referenced (sensitivity) compartments are already defined.
+        .s$..pastLines,
+        ## DDE param-dependent-delay dose-jump: alag()/f() on the sens compartments
+        ## (no-op unless rxSolve adds the mirroring sens-compartment doses).
+        .s$..sensDelayAlagF,
+        ## DDE param-dependent-delay 2nd-order breaking-point jump: alag()/f() on
+        ## the 2nd-order sens compartments (no-op unless rxSolve adds the t0 doses).
+        .s$..sens2DelayAlagF,
         .tmp2,
         .s$..stateInfo["statef"],
         .s$..stateInfo["dvid"],
         ""
       ), collapse = "\n")
+      .jacBlock <- ""
+      if (calcJac) {
+        ## Ordinary ODE forward sensitivities: build the full-system Jacobian by
+        ## REUSING the F_X/F_p already computed for the variational equations,
+        ## computing only the sens x base block (== 0 for linear F).  Fall back to
+        ## a fresh full-system .rxJacobian when 2nd/3rd-order sens compartments are
+        ## present (their block structure is not covered by the reuse), or if the
+        ## reuse errors for any reason.  (For ODE models the eventSens jump uses a
+        ## central difference of dydt, not calc_jac, so this fuller Jacobian only
+        ## ever feeds the stiff ODE steppers.  indLin / matExp models are a
+        ## matrix-exponential method, out of scope for stiff ODE stepping.)
+        .jacLines <- NULL
+        if (is.null(calcSens2) && is.null(calcSens3)) {
+          .jacLines <- tryCatch(.rxFwdSensJacBlock(.s, .baseState, calcSens),
+                                 error = function(e) NULL)
+        }
+        if (is.null(.jacLines)) {
+          .sj <- .rxLoadPrune(rxModelVars(.assembleSens("")), FALSE)
+          .jacLines <- .rxJacobian(.sj, FALSE)
+        }
+        .jacBlock <- paste(.jacLines, collapse = "\n")
+      }
+      .new <- .assembleSens(.jacBlock)
       .ret <- rxModelVars(.new)
     } else {
       ## calcSens=FALSE removes the sensitivity equations.
       .stateInfo <- .rxGenFunState(.ret)
       .s <- .rxLoadPrune(.ret, FALSE)
       .s$..stateInfo <- .stateInfo
-      if (length(.ret$sens) != 0) {
+      .sensStrip <- .rxSensStrippable(.ret)
+      if (length(.sensStrip) != 0) {
         .new <- setNames(gsub(
-          rex::rex("d/dt(", or(.ret$sens), ")=", anything, "\n"), "",
+          rex::rex("d/dt(", or(.sensStrip), ")=", anything, "\n"), "",
           .ret$model["normModel"]
         ), NULL)
         .ret <- rxModelVars(.new)
@@ -744,9 +1006,10 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
       .ret <- rxModelVars(.new)
     }
   } else if (!is.null(calcJac)) {
-    if (length(.ret$sens) != 0) {
+    .sensStrip <- .rxSensStrippable(.ret)
+    if (length(.sensStrip) != 0) {
       .new <- setNames(gsub(
-        rex::rex("d/dt(", or(.ret$sens), ")=", anything, "\n"), "",
+        rex::rex("d/dt(", or(.sensStrip), ")=", anything, "\n"), "",
         .ret$model["normModel"]
       ), NULL)
       .ret <- rxModelVars(.new)
@@ -757,6 +1020,7 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
         .calcJac <- FALSE
       }
     }
+    .litParams <- .ret$params
     if (.calcJac) {
       if (length(rxState(.ret)) <= 0) {
         ## Jacobian capitalized because it should be spelled with a capital
@@ -774,12 +1038,14 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
         .s$..stateInfo["state"],
         .s$..lhs0,
         .s$..ddt,
+        .rxPastBaseLinesFromEnv(.s),
         .tmp1,
         .tmp2,
         .s$..stateInfo["statef"],
         .s$..stateInfo["dvid"],
         ""
       ), collapse = "\n")
+      .new <- .rxRestoreLiteralThetaEta(.new, .litParams)
       .ret <- rxModelVars(.new)
     } else {
       ## remove Jacobian
@@ -792,19 +1058,49 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
         .s$..stateInfo["state"],
         .s$..lhs0,
         .s$..ddt,
+        .rxPastBaseLinesFromEnv(.s),
         .tmp2,
         .s$..stateInfo["statef"],
         .s$..stateInfo["dvid"],
         ""
       ), collapse = "\n")
+      .new <- .rxRestoreLiteralThetaEta(.new, .litParams)
       .ret <- rxModelVars(.new)
     }
   }
   if (indLin) {
-    .code <- .rxIndLin(.ret)
-    .new <- paste0(rxNorm(.ret), "\n", .code)
-    assignInMyNamespace(".rxMECode", .code)
-    .ret <- rxModelVars(.new)
+    ## Convert the ODE model to a pure matrix exponential model using
+    ## rxToIndLin() so it uses doIndLin == 1/2 (not the old 3/4 paths).
+    .mexpCode <- rxToIndLin(.ret, calcSens = calcSens)
+    .ret <- rxModelVars(.mexpCode)
+    assignInMyNamespace(".indLinInfo", .ret$indLin)
+  } else if (length(.ret$indLin) == 4L) {
+    ## NONMEM-like matrix exponential model: the parser already set up
+    ## a 4-element indLin list via genModelVars.c (when tb.isMexp=1).
+    ## Propagate it to .indLinInfo so codegen serializes it into the DLL.
+    assignInMyNamespace(".indLinInfo", .ret$indLin)
+  } else {
+    ## This model has NO indLin structure -- `.indLinInfo` MUST be reset
+    ## here rather than left as-is, or it silently carries over the LAST
+    ## matExp/indLin model's 4-element descriptor into this (unrelated)
+    ## plain-ODE model's compiled vars via rxCompile.rxModelVars()'s
+    ## `.rxModelVarsLast[[17]] <- .indLinInfo` line. `.clearME()` resets
+    ## this too, but only fires via `on.exit()` on the FULL compile
+    ## closure (R/rxode2.R's `.env$compile`) -- code paths that call
+    ## rxGetModel()/rxSensMatExp() WITHOUT ever fully compiling/solving a
+    ## model (e.g. inspecting rxSensMatExp()'s generated text directly, as
+    ## in several test-mexp-nonmem.R tests) never reach that on.exit, so
+    ## `.indLinInfo` leaked forward and corrupted the NEXT unrelated
+    ## model's `mv$indLin` (and hence its solve-time method dispatch:
+    ## rxSolve.default force-selects method="indLin" whenever
+    ## `length(rxModelVars(object)$indLin) > 0L`) -- confirmed by FD/CI as
+    ## a real, reproducible "C stack overflow" / uncaught Rcpp::exception
+    ## crash (`unsupported indLin code: 0`) when an unrelated population
+    ## solve ran right after such a test. Resetting unconditionally here
+    ## (whenever THIS model isn't indLin) closes the leak at its source.
+    if (length(.indLinInfo) > 0L) {
+      assignInMyNamespace(".indLinInfo", list())
+    }
   }
   return(.ret)
 }
@@ -1112,6 +1408,17 @@ rxMd5 <- function(model, # Model File
 #'     embed the md5 into DLL, and then provide for functions like
 #'     [rxModelVars()].
 #'
+#' @param eventSensKey event ("jump") sensitivity mode key folded into
+#'     the parsed md5 cache key so the same model text translated in
+#'     different modes (e.g. `"fd"` vs `"jump"`) compiles to distinct
+#'     DLLs instead of colliding on a cached translation.  Defaults to
+#'     the session global `.rxEventSensCacheKey` (set by [rxode2()]
+#'     before parsing); an empty string leaves the md5 unchanged so the
+#'     legacy `"fd"` path keeps existing caches valid.  It is a formal
+#'     argument (rather than read from the global in the body) because
+#'     `rxTrans.character` is memoised and `memoise` keys on
+#'     default-valued formals, so the cache distinguishes the modes.
+#'
 #' @param ... Ignored parameters.
 #'
 #'
@@ -1154,6 +1461,12 @@ rxTrans.default <- function(model,
 
 .rxMECode <- ""
 
+## Event ("jump") sensitivities: current mode folded into the parsed md5 (cache
+## key) so that the same model text built in different modes compiles to distinct
+## DLLs.  Empty for the default "fd" path -> md5 unchanged (existing caches stay
+## valid).  Set by rxode2() before parsing; see .rxEventSensMode().
+.rxEventSensCacheKey <- ""
+
 #' @rdname rxTrans
 #' @export
 rxTrans.character <- memoise::memoise(function(model,
@@ -1161,7 +1474,15 @@ rxTrans.character <- memoise::memoise(function(model,
                                                md5 = "", # Md5 of model
                                                modName = NULL, # Model name for DLL
                                                modVars = FALSE, # Return modVars
+                                               eventSensKey = .rxEventSensCacheKey, # nolint
                                                ...) {
+  ## `eventSensKey` MUST be a formal (defaulting to the session global) rather
+  ## than read from `.rxEventSensCacheKey` inside the body: memoise keys on the
+  ## arguments (including default-valued ones), so a body-read global would make
+  ## "fd" and "jump" builds of the same model text share one memoise entry -- the
+  ## first builder's mode-folded parsed_md5 would then be reused for the other
+  ## mode and compiled with the wrong (empty/stale) dLag/dF.  As a formal it is
+  ## part of the key, so each mode gets its own entry and its own parsed_md5.
   ## rxTrans returns a list of compiled properties
   if (file.exists(model)) {
     .isStr <- 0L
@@ -1186,13 +1507,29 @@ rxTrans.character <- memoise::memoise(function(model,
     }
     stop("cannot create rxode2 model", call. = FALSE)
   }
-  md5 <- c(file_md5 = md5, parsed_md5 = rxMd5(c(
+  .parsedMd5 <- rxMd5(c(
     .ret$model,
     .ret$ini,
     .ret$state,
     .ret$params,
     .ret$lhs
-  ))$digest)
+  ))$digest
+  ## Fold the event-sensitivity mode into the parsed md5 so that the same
+  ## normalized model built as "fd" vs "jump" compiles to distinct DLLs.  This is
+  ## required for correctness independent of the codegen channel: the compiled
+  ## DLL is keyed by parsed_md5, and a cache hit SKIPS codegen entirely -- so the
+  ## mode-dependent dLag/dF bodies (which are NOT part of the normalized model
+  ## text and so do not affect the base md5) must be reflected here, or a prior fd
+  ## build (empty dLag/dF) is silently reused for a jump solve.  The fold must be
+  ## a real re-digest: `rxMd5()` hashes only the `normModel`/`indLin` slots of its
+  ## argument and ignores any extra vector elements, so appending the key to its
+  ## input is a no-op.  "" (the "fd" default) leaves the md5 unchanged, preserving
+  ## existing fd caches.
+  if (nzchar(eventSensKey)) {
+    .parsedMd5 <- digest::digest(c(.parsedMd5, paste0("eventSens=", eventSensKey)),
+                                 serialize = TRUE, algo = "md5")
+  }
+  md5 <- c(file_md5 = md5, parsed_md5 = .parsedMd5)
   .ret$timeId <- .rxTimeId(md5["parsed_md5"])
   .ret$md5 <- md5
   if (.isStr == 1L) {
@@ -1240,6 +1577,16 @@ rxDllLoaded <- rxIsLoaded
 #' @param force is a boolean stating if the (re)compile should be
 #'     forced if rxode2 detects that the models are the same as already
 #'     generated.
+#'
+#' @param eventSensCode character vector of length 13 giving the C body
+#'     lines for the event ("jump") sensitivity helper functions
+#'     `dLag`/`dF`/`dRate`/`dDur`/`d2F`/`d2Lag`/`d2Rate`/`d2Dur`/`d3F`/`dFQ`/
+#'     `dLagJac`/`dLagQ`/`dDurQ` (in that order).  These are the per-model
+#'     dosing-parameter total-derivative assignments produced by the
+#'     event-sensitivity code generator and are emitted verbatim into the
+#'     corresponding generated functions.  The default of thirteen empty
+#'     strings produces trivial (no-op) helpers, which is what
+#'     non-sensitivity models and `eventSens = "fd"` models use.
 #'
 #' @param ... Other arguments sent to the [rxTrans()]
 #'     function.
@@ -1388,6 +1735,7 @@ rxCompile.rxModelVars <- function(model, # Model
                                   force = FALSE, # Force compile
                                   modName = NULL, # Model Name
                                   package = NULL,
+                                  eventSensCode = rep("", 13L), # dLag/dF/dRate/dDur/d2F/d2Lag/d2Rate/d2Dur/d3F/dFQ/dLagJac/dLagQ/dDurQ body lines
                                   ...) {
   assignInMyNamespace(".pkg", package)
   ## rxCompile returns the DLL name that was created.
@@ -1523,7 +1871,11 @@ rxCompile.rxModelVars <- function(model, # Model
           .Call(
             `_rxode2_codegen`, .cFile, prefix, .libname,
             .trans["parsed_md5"], paste(.rxTimeId(.trans["parsed_md5"])),
-            .rxModelVarsLast, .rxSupportedFuns()
+            .rxModelVarsLast, .rxSupportedFuns(),
+            eventSensCode[1], eventSensCode[2], eventSensCode[3], eventSensCode[4],
+            eventSensCode[5], eventSensCode[6], eventSensCode[7], eventSensCode[8],
+            eventSensCode[9], eventSensCode[10], eventSensCode[11], eventSensCode[12],
+            eventSensCode[13]
           )
         } else {
           .libname <- gsub(.Platform$dynlib.ext, "", basename(.cDllFile))
@@ -1531,7 +1883,11 @@ rxCompile.rxModelVars <- function(model, # Model
           .Call(
             `_rxode2_codegen`, .cFile, prefix, .libname,
             .trans["parsed_md5"], paste(.rxTimeId(.trans["parsed_md5"])),
-            .rxModelVarsLast, .rxSupportedFuns()
+            .rxModelVarsLast, .rxSupportedFuns(),
+            eventSensCode[1], eventSensCode[2], eventSensCode[3], eventSensCode[4],
+            eventSensCode[5], eventSensCode[6], eventSensCode[7], eventSensCode[8],
+            eventSensCode[9], eventSensCode[10], eventSensCode[11], eventSensCode[12],
+            eventSensCode[13]
           )
         }
         .defs <- ""
@@ -1631,9 +1987,13 @@ rxCompile.rxModelVars <- function(model, # Model
       .badBuild("Error, model doesn't have correct model variables.")
     }
   }
-  .call <- function(...) {
+  ## removeSource() so this generated closure does not carry a srcref back to
+  ## the (pkgload) srcfile of rxode2.R -- under load_all that srcfile holds a
+  ## lazy `lines` promise capturing the whole session, which would balloon any
+  ## saveRDS() of a model/fit (see the fit-fixture size regression).
+  .call <- removeSource(function(...) {
     return(.Call(...))
-  }
+  })
   .args <- list(
     model = model, dir = .dir, prefix = prefix,
     force = force, modName = modName,
@@ -1805,6 +2165,8 @@ rxNorm <- function(obj, condition = NULL, removeInis, removeJac, removeSens) {
 .rxModelVarsCCache <- NULL
 .rxModelVarsLast <- NULL
 .rxModelVarsCharacter <- function(obj) {
+  .oldEventSensKey <- .rxEventSensCacheKey
+  on.exit(assignInMyNamespace(".rxEventSensCacheKey", .oldEventSensKey), add = TRUE)
   if (length(obj) == 1) {
     .parseModel <- tempfile("parseModel4")
     .prefix <- paste0(basename(.parseModel), "_", .Platform$r_arch, "_")

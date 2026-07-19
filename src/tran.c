@@ -103,7 +103,7 @@ const char *model_prefix = NULL;
 const char *me_code = NULL;
 const char *md5 = NULL;
 int badMd5 = 0;
-int foundF=0,foundLag=0, foundRate=0, foundDur=0, foundF0=0, needSort=0;
+int foundF=0,foundLag=0, foundRate=0, foundDur=0, foundPast=0, foundF0=0, needSort=0;
 
 sbuf sbOut;
 
@@ -179,6 +179,7 @@ static inline int parseNodePossiblySkipRecursion(nodeInfo ni, char *name, D_Pars
       handleInfuseDurStatement(ni, name, i, nch, pn) ||
       handleReplaceStatement(ni, name, i, nch, pn) ||
       handleResetStatement(ni, name, i, nch, pn) ||
+      handleMatExpStatement(ni, name, i, nch, pn) ||
       handleMultiplyStatement(ni, name, i, nch, pn) ||
       handlePhantomStatement(ni, name, i, nch, pn) ||
       handleStringEqualityStatements(ni, name, *i, xpn) ||
@@ -197,7 +198,7 @@ static inline int parseNodeAfterRecursion(nodeInfo ni, char *name, D_ParseNode *
   if (handlePrintf(ni, name, *i, xpn) ||
       handleJac(ni, name, *i, xpn, ii, found) ||
       handleLogicalExpr(ni, name, *i, pn, xpn, isWhile) ||
-      handleCmtProperty(ni, name, *i, xpn) ||
+      handleCmtProperty(ni, name, *i, pn, xpn) ||
       handleDdtAssign(ni, name, *i, pn, xpn) ||
       handleDdtRhs(ni, name, xpn) ||
       handleStrAssign(ni, name, *i, pn, xpn) ||
@@ -459,6 +460,11 @@ void reset(void) {
   tb.nLlik      = 0;
   tb.hasMix     = 0;
   tb.evid_      = 0;
+  tb.isMexp     = 0;
+  tb.hasDdt     = 0;
+  tb.curDdt     = 0;
+  tb.hasIndLinProp = 0;
+  tb.hasDelay   = 0;
   tb.strCmpCurCov = NULL;
   tb.strCmpCurStr = NULL;
   tb.strCmpCurType = -1;
@@ -485,6 +491,7 @@ void reset(void) {
   foundF=0;
   foundLag=0;
   foundRate=0;
+  foundPast=0;
   gBufLast=0;
   lastStrLoc=0;
   lastSyntaxErrorLine=0;
@@ -512,6 +519,14 @@ static inline void assertCorrectDfDy(void) {
   char *buf1, *buf2, bufe[2048];
   int i, j, found, islhs;
   for (i=0; i<tb.ndfdy; i++) {                     /* name state vars */
+    // A df()/dy() whose numerator or denominator never resolved to a symbol
+    // (e.g. a re-parsed df(state)/dy(THETA[n]) Jacobian where the THETA index
+    // was not registered) leaves tb.df[i]/tb.dy[i] negative; indexing
+    // tb.ss.line with it reads out of bounds and crashes.  Such an entry
+    // cannot be validated, so skip it rather than segfault.
+    if (tb.df[i] < 0 || tb.df[i] >= NV || tb.dy[i] < 0 || tb.dy[i] >= NV) {
+      continue;
+    }
     buf1=tb.ss.line[tb.df[i]];
     found=0;
     for (j=0; j<tb.de.n; j++) {                     /* name state vars */
@@ -600,6 +615,49 @@ void trans_internal(const char* parse_file, int isStr){
     wprint_parsetree(parser_tables_rxode2parse, _pn, 0, wprint_node, NULL);
     // Determine Jacobian vs df/dvar
     assertCorrectDfDy();
+
+    if (tb.isMexp && tb.hasDdt) {
+      trans_syntax_error_report_fn0("Matrix exponential models cannot be used with any ODEs");
+    }
+    if (tb.hasIndLinProp && !tb.isMexp) {
+      trans_syntax_error_report_fn0("indLin() cannot be used without matExp() defined in the model");
+    }
+    nodeInfo dummyNi;
+    niReset(&dummyNi);
+    for (int j = 0; j < NV; j++) {
+      char cmt1[100];
+      char cmt2[100];
+      if (parse_micro_constant(tb.ss.line[j], cmt1, cmt2)) {
+        if (!strcmp(cmt1, cmt2)) {
+          updateSyntaxCol();
+          trans_syntax_error_report_fn0("transfer from a compartment to itself (e.g., k_cmt1_cmt1) is not allowed");
+        }
+        if (tb.isMexp) {
+          if (new_de(cmt1, fromCMT)) {
+            add_de(dummyNi, "matExp", cmt1, 0, fromCMT);
+          }
+          if (new_de(cmt2, fromCMT)) {
+            add_de(dummyNi, "matExp", cmt2, 0, fromCMT);
+          }
+        }
+      }
+    }
+    if (tb.isMexp) {
+      for (int i = 0; i < tb.de.n; i++) {
+        const char *name = tb.de.line[i];
+        if (strncmp(name, "rx", 2) != 0) {
+          if (strchr(name, '_') != NULL || strchr(name, '.') != NULL) {
+            updateSyntaxCol();
+            trans_syntax_error_report_fn0("compartments in matrix exponential models cannot contain '_' or '.' unless they start with 'rx'");
+          }
+        }
+      }
+      tb.statei = tb.de.n;
+      for (int i = 0; i < tb.de.n; i++) {
+        tb.didx[i] = abs(tb.didx[i]);
+        tb.idu[i] = 1;
+      }
+    }
   }
 }
 

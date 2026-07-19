@@ -73,6 +73,9 @@ extern "C" {
   // Get the index of the current solve
   int getIndIdx(rx_solving_options_ind* ind);
 
+  // Per-observation endpoint from the CMT covariate (cached op->cmtCov); 1 if none
+  int getIndCmt(rx_solving_options* op, rx_solving_options_ind* ind, int kk);
+
   // Get the mixest of the current solve
   int getIndMixest(rx_solving_options_ind* ind);
 
@@ -131,6 +134,9 @@ extern "C" {
 
   // Get the number of observations excluding evid=2
   int getRxNobs2(rx_solve *rx);
+
+  // Get the number of simulations (nsim); equals nPopPar/nsub when evenly divisible
+  int getRxNsim(rx_solve *rx);
 
   // Get the number of parameters loaded
   int getRxNpars(rx_solve *rx);

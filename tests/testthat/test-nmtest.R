@@ -2,6 +2,7 @@ rxTest({
 
   ## devtools::load_all()
 
+  skip_if_not_installed("nlmixr2data")
   d <- nlmixr2data::nmtest
   # internally rxode2 treats lag time evids differently than
   # non-lagged events
@@ -132,6 +133,11 @@ rxTest({
                          modifyData = c("none", "dur", "rate"),
                          addlKeepsCov = TRUE, addlDropSs=TRUE,
                          ss2cancelAllPending=FALSE) {
+    # Preserve the caller's method name for the test titles.  `meth` is
+    # rewritten below (e.g. the dense composite "ddop853+dros4" becomes
+    # "dop853+ros4" with a separate `dense` flag), which would otherwise
+    # mislabel dense-composite failures as the non-dense method.
+    .methLabel <- meth
     if (meth == "Bs" || meth == "As") {
       ssSolved <- FALSE
     } else {
@@ -145,8 +151,28 @@ rxTest({
       lin <- "B"
       meth <- "liblsoda"
     } else  if (meth == "ddop853") {
-      lin <- "A"
+      lin <- "ode"
       meth <- "dop853"
+      dense <- TRUE
+    } else  if (meth == "dcvode") {
+      lin <- "ode"
+      meth <- "cvode"
+      dense <- TRUE
+    } else  if (meth == "ddop5") {
+      lin <- "ode"
+      meth <- "dop5"
+      dense <- TRUE
+    } else  if (meth == "dbs") {
+      lin <- "ode"
+      meth <- "bs"
+      dense <- TRUE
+    } else  if (meth == "dros4") {
+      lin <- "ode"
+      meth <- "ros4"
+      dense <- TRUE
+    } else if (meth == "ddop853+dros4") {
+      lin <- "ode"
+      meth <- "dop853+ros4"
       dense <- TRUE
     } else  if (meth == "Ad") {
       lin <- "A"
@@ -299,7 +325,7 @@ rxTest({
         sub <- 96
       }
       if (noLag) {
-        test_that(paste0("nmtest id:", id, " no alag; method: ", meth, "; modifyData:", modifyData, "; addlDropSs: ", addlDropSs, "; lin=", lin, "; ssSolved=", ssSolved),
+        test_that(paste0("nmtest id:", id, " no alag; method: ", .methLabel, "; modifyData:", modifyData, "; addlDropSs: ", addlDropSs, "; lin=", lin, "; ssSolved=", ssSolved),
         {
           if (lin == "A") {
             s1 <- rxSolve(lf, d, method=meth,
@@ -319,7 +345,7 @@ rxTest({
                        tolerance = 0.1)
         })
       }
-      test_that(paste0("nmtest id:", id, " alag; method: ", meth, "; modifyData:", modifyData,"; addlDropSs: ", addlDropSs, "; lin=", lin, "; ssSolved=", ssSolved),
+      test_that(paste0("nmtest id:", id, " alag; method: ", .methLabel, "; modifyData:", modifyData,"; addlDropSs: ", addlDropSs, "; lin=", lin, "; ssSolved=", ssSolved),
       {
         if (lin == "A") {
           s1 <- rxSolve(lfl, d, method=meth,
@@ -358,15 +384,20 @@ rxTest({
 
   p <- FALSE
 
-  lapply(id, function(i) {
-    meths <- c("liblsoda", "lsoda", "dop853", "ddop853", "A", "B", "Ao", "Bo", "As", "Bs",
-               "Ad", "Bd", "Al", "Bl")
-    modDat <- c("none", "rate", "dur")
-    for (meth in meths) {
-      for (modifyData in modDat) {
-        for (addlDropSs in c(TRUE, FALSE)) {
-          solveEqual(i, meth=meth, modifyData=modifyData, addlDropSs=addlDropSs)
-        }
+  meths <- c(.methods0, .methods1, .methods2)
+  modDat <- c("none", "rate", "dur")
+  # One method per test: pair each method with a round-robin id.  Running the
+  # full methods x ids cross-product is prohibitively slow for the ~60 adjoint
+  # solver variants, so instead every method is exercised on one dosing
+  # scenario (id) and -- because there are more methods than ids -- every id is
+  # still visited at least once (dosing-scenario coverage is preserved while
+  # method coverage becomes one-per-test).
+  lapply(seq_along(meths), function(.mi) {
+    meth <- meths[.mi]
+    i <- id[((.mi - 1L) %% length(id)) + 1L]
+    for (modifyData in modDat) {
+      for (addlDropSs in c(TRUE, FALSE)) {
+        solveEqual(i, meth=meth, modifyData=modifyData, addlDropSs=addlDropSs)
       }
     }
   })

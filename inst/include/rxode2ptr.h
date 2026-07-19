@@ -10,6 +10,58 @@ extern "C" {
   typedef SEXP (*_rxode2_rxRmvnSEXP_t)(SEXP nSSEXP, SEXP muSSEXP, SEXP sigmaSSEXP, SEXP lowerSSEXP, SEXP upperSSEXP, SEXP ncoresSSEXP, SEXP isCholSSEXP, SEXP keepNamesSSEXP, SEXP aSSEXP, SEXP tolSSEXP, SEXP nlTolSSEXP, SEXP nlMaxiterSSEXP);
   extern _rxode2_rxRmvnSEXP_t _rxode2_rxRmvnSEXP_;
 
+  // Adjoint objective-gradient backward sweep (src/adjoint.cpp); installed into
+  // the downstream package's function-pointer table by iniRxodePtrs().
+  typedef void (*rxode2AdjointSweep_t)(double *tg, double *J, double *dP, double *cover, int *obsK, int ns, int np, int nt, int nobs, double *out, int nCj, int *cjK, int *cjCmt, double *cjAlpha, int nDual, int *dualK, double *dualW, double *dualC);
+  extern rxode2AdjointSweep_t rxode2AdjointSweep;
+
+  // Full-trajectory adjoint sweep: dy_k(t_i)/dp for every state of interest,
+  // output time, and parameter (adjoint counterpart of forward sensitivity's
+  // rx__sens_<state>_BY_<param>__ columns); see src/adjoint.cpp for the layout.
+  typedef void (*rxode2AdjointTrajSweep_t)(double *tg, double *J, double *dP, int ns, int np, int nt, int *outK, int nOut, int *stateIdx, int nStates, double *result, int nCj, int *cjK, int *cjCmt, double *cjAlpha, int nDual, int *dualK, double *dualW, double *dualC);
+  extern rxode2AdjointTrajSweep_t rxode2AdjointTrajSweep;
+
+  // Set / get the current solve's exact ODE atol/rtol (for tightening the cov step).
+  typedef void (*rxSetSolveAtolRtol_t)(double atol, double rtol);
+  extern rxSetSolveAtolRtol_t rxSetSolveAtolRtol;
+  typedef void (*rxGetSolveAtolRtol_t)(double *atol, double *rtol);
+  extern rxGetSolveAtolRtol_t rxGetSolveAtolRtol;
+
+  // threefry RNG engine entry points (src/rxthreefry.cpp); downstream packages
+  // seed a per-subject stream with setSeedEng1(getRxSeed1(cores) + id) -- after
+  // setRxThreadId() sets the OpenMP thread -- then draw with rxNormEng().
+  typedef uint32_t (*getRxSeed1_t)(int ncores);
+  extern getRxSeed1_t getRxSeed1;
+  typedef void (*setSeedEng1_t)(uint32_t seed);
+  extern setSeedEng1_t setSeedEng1;
+  typedef void (*seedEng_t)(int ncores);
+  extern seedEng_t seedEng;
+  typedef double (*rxNormEng_t)(double mean, double sd);
+  extern rxNormEng_t rxNormEng;
+  typedef double (*rxUnifEng_t)(double low, double hi);
+  extern rxUnifEng_t rxUnifEng;
+  typedef int (*getIndCmt_t)(rx_solving_options* op, rx_solving_options_ind* ind, int kk);
+  extern getIndCmt_t getIndCmt;
+
+  // Per-individual ODE solve buffer-pointer swap (nlmixr2est impmap gradient):
+  // save the originals, install private larger buffers for a higher-state
+  // sensitivity solve (with setOpNeq), then restore.  getIndSolve() already
+  // returns ind->solve.
+  typedef void (*setIndSolvePtr_t)(rx_solving_options_ind* ind, double* solve);
+  extern setIndSolvePtr_t setIndSolvePtr;
+  typedef double *(*getIndSolveSave_t)(rx_solving_options_ind* ind);
+  extern getIndSolveSave_t getIndSolveSave;
+  typedef void (*setIndSolveSave_t)(rx_solving_options_ind* ind, double* solveSave);
+  extern setIndSolveSave_t setIndSolveSave;
+  typedef double *(*getIndSolveLast_t)(rx_solving_options_ind* ind);
+  extern getIndSolveLast_t getIndSolveLast;
+  typedef void (*setIndSolveLast_t)(rx_solving_options_ind* ind, double* solveLast);
+  extern setIndSolveLast_t setIndSolveLast;
+  typedef double *(*getIndSolveLast2_t)(rx_solving_options_ind* ind);
+  extern getIndSolveLast2_t getIndSolveLast2;
+  typedef void (*setIndSolveLast2_t)(rx_solving_options_ind* ind, double* solveLast2);
+  extern setIndSolveLast2_t setIndSolveLast2;
+
   typedef int (*par_progress_t)(int c, int n, int d, int cores, clock_t t0, int stop);
   extern par_progress_t par_progress;
 
@@ -206,7 +258,7 @@ extern "C" {
 
   typedef int (*solveMethodThreadSafe_t)(rx_solving_options* op);
   extern solveMethodThreadSafe_t solveMethodThreadSafe;
-  // Thread-safe C-level tolerance adjustment — no Rcpp/PROTECT overhead, safe from OMP threads
+  // Thread-safe C-level tolerance adjustment -- no Rcpp/PROTECT overhead, safe from OMP threads
   typedef void (*atolRtolFactor_t)(double factor);
   extern atolRtolFactor_t atolRtolFactor_;
 
@@ -215,6 +267,12 @@ extern "C" {
 
   typedef double (*rxReal_t)(SEXP x, R_xlen_t i);
   extern rxReal_t rxReal;
+
+  typedef int (*getRxNsim_t)(rx_solve *rx);
+  extern getRxNsim_t getRxNsim;
+
+  typedef void (*setRxThreadId_t)(int id);
+  extern setRxThreadId_t setRxThreadId;
 
   static inline SEXP iniRxodePtrs0(SEXP p) {
     if (_rxode2_rxRmvnSEXP_ == NULL) {
@@ -282,6 +340,25 @@ extern "C" {
       atolRtolFactor_ = (atolRtolFactor_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 61));
       rxInt = (rxInt_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 62));
       rxReal = (rxReal_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 63));
+      getRxNsim = (getRxNsim_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 64));
+      setRxThreadId = (setRxThreadId_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 65));
+      rxode2AdjointSweep = (rxode2AdjointSweep_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 66));
+      rxode2AdjointTrajSweep = (rxode2AdjointTrajSweep_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 67));
+      rxSetSolveAtolRtol = (rxSetSolveAtolRtol_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 68));
+      rxGetSolveAtolRtol = (rxGetSolveAtolRtol_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 69));
+      getRxSeed1 = (getRxSeed1_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 70));
+      setSeedEng1 = (setSeedEng1_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 71));
+      seedEng = (seedEng_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 72));
+      rxNormEng = (rxNormEng_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 73));
+      rxUnifEng = (rxUnifEng_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 81));
+      getIndCmt = (getIndCmt_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 82));
+      setIndSolvePtr = (setIndSolvePtr_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 74));
+      getIndSolveSave = (getIndSolveSave_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 75));
+      setIndSolveSave = (setIndSolveSave_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 76));
+      getIndSolveLast = (getIndSolveLast_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 77));
+      setIndSolveLast = (setIndSolveLast_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 78));
+      getIndSolveLast2 = (getIndSolveLast2_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 79));
+      setIndSolveLast2 = (setIndSolveLast2_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 80));
     }
     return R_NilValue;
   }
@@ -351,6 +428,25 @@ extern "C" {
   atolRtolFactor_t atolRtolFactor_ = NULL;              \
   rxInt_t rxInt = NULL;                                 \
   rxReal_t rxReal = NULL;                               \
+  getRxNsim_t getRxNsim = NULL;                         \
+  setRxThreadId_t setRxThreadId = NULL;                 \
+  rxode2AdjointSweep_t rxode2AdjointSweep = NULL;        \
+  rxode2AdjointTrajSweep_t rxode2AdjointTrajSweep = NULL; \
+  rxSetSolveAtolRtol_t rxSetSolveAtolRtol = NULL;        \
+  rxGetSolveAtolRtol_t rxGetSolveAtolRtol = NULL;        \
+  getRxSeed1_t getRxSeed1 = NULL;                       \
+  setSeedEng1_t setSeedEng1 = NULL;                     \
+  seedEng_t seedEng = NULL;                             \
+  rxNormEng_t rxNormEng = NULL;                         \
+  rxUnifEng_t rxUnifEng = NULL;                         \
+  getIndCmt_t getIndCmt = NULL;                         \
+  setIndSolvePtr_t setIndSolvePtr = NULL;               \
+  getIndSolveSave_t getIndSolveSave = NULL;             \
+  setIndSolveSave_t setIndSolveSave = NULL;             \
+  getIndSolveLast_t getIndSolveLast = NULL;             \
+  setIndSolveLast_t setIndSolveLast = NULL;             \
+  getIndSolveLast2_t getIndSolveLast2 = NULL;           \
+  setIndSolveLast2_t setIndSolveLast2 = NULL;           \
   SEXP iniRxodePtrs(SEXP ptr) {                         \
     return iniRxodePtrs0(ptr);                          \
   }                                                     \

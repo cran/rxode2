@@ -45,9 +45,14 @@
   }
   if (requireNamespace("tibble", quietly = TRUE)) {
     .s3register("tibble::as_tibble", "rxEt")
+    .s3register("tibble::as_tibble", "rxSolveOom")
   }
   if (requireNamespace("data.table", quietly = TRUE)) {
     .s3register("data.table::as.data.table", "rxEt")
+    .s3register("data.table::as.data.table", "rxSolveOom")
+  }
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    .s3register("arrow::as_arrow_table", "rxSolveOom")
   }
   if (requireNamespace("dplyr", quietly=TRUE)) {
     .s3register("dplyr::dplyr_reconstruct", "rxEt")
@@ -227,11 +232,28 @@ rxCreateCache <- function() {
 #' @return nothing; called for side effects
 #' @keywords internal
 #' @export
+## Cache of memoised function names; computed once on first rxForget() call.
+.rxMemoisedFns <- NULL
+
+#' Clear memoise caches for rxode2
+#'
+#' @return nothing; called for side effects
+#' @keywords internal
+#' @export
 rxForget <- function() {
-  for (fn in ls(envir = getNamespace("rxode2"))) {
-    if (memoise::is.memoised(getFromNamespace(fn, "rxode2"))) {
-      memoise::forget(getFromNamespace(fn, "rxode2"))
-    }
+  if (is.null(.rxMemoisedFns)) {
+    .ns <- getNamespace("rxode2")
+    .fns <- Filter(
+      function(fn) {
+        .v <- get(fn, envir=.ns, inherits=FALSE)
+        is.function(.v) && memoise::is.memoised(.v)
+      },
+      ls(envir=.ns)
+    )
+    assignInMyNamespace(".rxMemoisedFns", .fns)
+  }
+  for (.fn in .rxMemoisedFns) {
+    memoise::forget(getFromNamespace(.fn, "rxode2"))
   }
 }
 

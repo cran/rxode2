@@ -34,8 +34,11 @@
 // individual pred-mode solve writes and reads at the same compact stride
 // without mutating shared op->neq from a parallel worker thread.
 // NOTE: getAdvan() + neqOverride is unsupported when op->numLin > 0
-// (op->linOffset is computed from the full neq layout).  In nlmixr2est's
-// FOCEi flow the predNoLhs model has numLin == 0, so this is fine.
+// (op->linOffset is computed from the full neq layout).  A linCmt() model
+// mixed with ODEs does reach nlmixr2est's FOCEi flow with numLin > 0 on the
+// predNoLhs model, so this is NOT covered by the model itself; nlmixr2est
+// translates those models with linToOde() before estimating (its issue #286),
+// which leaves numLin == 0 here.
 static inline int rxEffNeq(const rx_solving_options_ind *ind,
                            const rx_solving_options *op) {
   int o = ind->neqOverride;
@@ -45,12 +48,14 @@ static inline int rxEffNeq(const rx_solving_options_ind *ind,
 #define getAdvan(idx) ind->solve + op->linOffset + (rxEffNeq(ind, op))*(idx)
 #endif
 
-#ifdef _isrxode2_
-
+#ifndef max2
 #define max2( a , b )  ( (a) > (b) ? (a) : (b) )
+#endif
 #define isSameTime(xout, xp) (fabs((xout)-(xp))  <= 2.0*DBL_EPSILON*max2(fabs(xout),fabs(xp)))
 // use ~dop853 definition of same time
 #define isSameTimeDop(xout, xp) (0.1 * fabs((xout)-(xp)) <= fabs(xout) * 2.3E-16)
+
+#ifdef _isrxode2_
 
 #else
 
@@ -87,8 +92,25 @@ typedef rx_solve *(*t_get_solve)(void);
 
 typedef void *(*t_assignFuns)(void);
 
+// Adjoint objective-gradient backward sweep (src/adjoint.cpp).  Its address is
+// exported to downstream packages through the rxode2 function-pointer table
+// (see _rxode2_rxode2Ptr in src/init.c and rxode2ptr.h); this direct declaration
+// is used only when building rxode2 itself (guarded off once rxode2ptr.h has
+// redeclared the name as a function pointer).
 #ifndef __RXODE2PTR_H__
+void rxode2AdjointSweep(double *tg, double *J, double *dP, double *cover,
+                        int *obsK, int ns, int np, int nt, int nobs, double *out,
+                        int nCj, int *cjK, int *cjCmt, double *cjAlpha,
+                        int nDual, int *dualK, double *dualW, double *dualC);
+void rxode2AdjointTrajSweep(double *tg, double *J, double *dP, int ns, int np,
+                            int nt, int *outK, int nOut, int *stateIdx,
+                            int nStates, double *result, int nCj, int *cjK,
+                            int *cjCmt, double *cjAlpha, int nDual, int *dualK,
+                            double *dualW, double *dualC);
 rx_solve *getRxSolve_(void);
+void rxSetSolveAtolRtol(double atol, double rtol);
+void rxGetSolveAtolRtol(double *atol, double *rtol);
+int getIndCmt(rx_solving_options* op, rx_solving_options_ind* ind, int kk);
 #endif
 rx_solve *getRxSolve2_(void);
 rx_solve *getRxSolve(SEXP ptr);
@@ -378,6 +400,106 @@ static inline double _powerDDD(double x, double lambda, int yj0, double low, dou
   return NA_REAL;
 }
 
+// Box-Cox VALUE lambda-derivatives at base b (>0), exponent lam.  y=(b^lam-1)/lam;
+// near lam=0, y ~ ln b + lam*(ln b)^2/2 + lam^2*(ln b)^3/6 gives the removable-singularity limits.
+static inline double _bcDL(double b, double lam) __attribute__((unused));
+static inline double _bcDL(double b, double lam){ // dy/dlam
+  if (b <= _eps) b = _eps;
+  double lb = log(b);
+  if (lam == 0.0) return 0.5*lb*lb;
+  double bl = pow(b, lam);
+  return bl*lb/lam - (bl - 1.0)/(lam*lam);
+}
+static inline double _bcDLx(double b, double lam) __attribute__((unused));
+static inline double _bcDLx(double b, double lam){ // d2y/(dlam db)
+  if (b <= _eps) b = _eps;
+  return pow(b, lam - 1.0)*log(b);
+}
+static inline double _bcDL2(double b, double lam) __attribute__((unused));
+static inline double _bcDL2(double b, double lam){ // d2y/dlam2
+  if (b <= _eps) b = _eps;
+  double lb = log(b);
+  if (lam == 0.0) return lb*lb*lb/3.0;
+  double bl = pow(b, lam);
+  return bl*lb*lb/lam - 2.0*bl*lb/(lam*lam) + 2.0*(bl - 1.0)/(lam*lam*lam);
+}
+// Yeo-Johnson VALUE lambda-derivatives (x>=0: base x+1, exp lam; x<0: base 1-x, exp 2-lam,
+// with the extra chain-rule signs from d(2-lam)/dlam=-1 and d(1-x)/dx=-1).
+static inline double _yjDL(double x, double lam) __attribute__((unused));
+static inline double _yjDL(double x, double lam){
+  if (x >= 0) return _bcDL(x + 1.0, lam);
+  return _bcDL(1.0 - x, 2.0 - lam);
+}
+static inline double _yjDLx(double x, double lam) __attribute__((unused));
+static inline double _yjDLx(double x, double lam){
+  if (x >= 0) return _bcDLx(x + 1.0, lam);
+  return -_bcDLx(1.0 - x, 2.0 - lam);
+}
+static inline double _yjDL2(double x, double lam) __attribute__((unused));
+static inline double _yjDL2(double x, double lam){
+  if (x >= 0) return _bcDL2(x + 1.0, lam);
+  return -_bcDL2(1.0 - x, 2.0 - lam);
+}
+
+// d(tbs)/dlambda -- the VALUE lambda-derivative of the both-sides transform (rxTBSdL).
+static inline double _powerDLambda(double x, double lambda, int yj0, double low, double high) __attribute__((unused));
+static inline double _powerDLambda(double x, double lambda, int yj0, double low, double high){
+  if (!R_finite(x)) return NA_REAL;
+  double p; int yj, dist;
+  _splitYj(&yj0, &dist, &yj);
+  switch(yj){
+  case 0: return _bcDL(x, lambda);                     // boxCox
+  case 1: return _yjDL(x, lambda);                     // yeoJohnson
+  case 2: case 3: case 4: case 6: return 0.0;          // norm/logNorm/logit/probit: no lambda
+  case 5: // logit then yeoJohnson
+    p = (x-low)/(high-low); if (p >= 1 || p <= 0) return R_NaN; p = -log(1/p-1);
+    return _yjDL(p, lambda);
+  case 7: // probit then yeoJohnson
+    p = (x-low)/(high-low); if (p >= 1 || p <= 0) return R_NaN; p = Rf_qnorm5(p, 0, 1, 1, 0);
+    return _yjDL(p, lambda);
+  }
+  return NA_REAL;
+}
+// d2(tbs)/dlambda2 (rxTBSdL2).
+static inline double _powerDLambda2(double x, double lambda, int yj0, double low, double high) __attribute__((unused));
+static inline double _powerDLambda2(double x, double lambda, int yj0, double low, double high){
+  if (!R_finite(x)) return NA_REAL;
+  double p; int yj, dist;
+  _splitYj(&yj0, &dist, &yj);
+  switch(yj){
+  case 0: return _bcDL2(x, lambda);
+  case 1: return _yjDL2(x, lambda);
+  case 2: case 3: case 4: case 6: return 0.0;
+  case 5:
+    p = (x-low)/(high-low); if (p >= 1 || p <= 0) return R_NaN; p = -log(1/p-1);
+    return _yjDL2(p, lambda);
+  case 7:
+    p = (x-low)/(high-low); if (p >= 1 || p <= 0) return R_NaN; p = Rf_qnorm5(p, 0, 1, 1, 0);
+    return _yjDL2(p, lambda);
+  }
+  return NA_REAL;
+}
+// d2(tbs)/(dlambda dx) (rxTBSdLx).  For the logit/probit-composed cases the inner transform p
+// is lambda-free, so d/dx chains through dp/dx = _powerDD(x, lambda, <innerYj>, low, high).
+static inline double _powerDLambdaX(double x, double lambda, int yj0, double low, double high) __attribute__((unused));
+static inline double _powerDLambdaX(double x, double lambda, int yj0, double low, double high){
+  if (!R_finite(x)) return NA_REAL;
+  double p; int yj, dist;
+  _splitYj(&yj0, &dist, &yj);
+  switch(yj){
+  case 0: return _bcDLx(x, lambda);
+  case 1: return _yjDLx(x, lambda);
+  case 2: case 3: case 4: case 6: return 0.0;
+  case 5:
+    p = (x-low)/(high-low); if (p >= 1 || p <= 0) return R_NaN; p = -log(1/p-1);
+    return _yjDLx(p, lambda)*_powerDD(x, lambda, 4, low, high);
+  case 7:
+    p = (x-low)/(high-low); if (p >= 1 || p <= 0) return R_NaN; p = Rf_qnorm5(p, 0, 1, 1, 0);
+    return _yjDLx(p, lambda)*_powerDD(x, lambda, 6, low, high);
+  }
+  return NA_REAL;
+}
+
 static inline double _powerL(double x, double lambda, int yj0, double low, double high) __attribute__((unused));
 static inline double _powerL(double x, double lambda, int yj0, double low, double high){
   if (!R_finite(x)) return NA_REAL;
@@ -503,11 +625,69 @@ static inline double dabs2(double x) {
   extern "C" rx_solving_options op_global;
   extern "C" rx_solving_options_ind *inds_global;
   extern "C" rx_solving_options_ind *inds_thread;
+  // Event ("jump") sensitivities: model dF/dLag/dydt functions + runtime dims
+  // (defined in par_solve.cpp); used by handle_evid to inject dosing-parameter
+  // jumps.  dydt provides the Jacobian column by central difference.
+  extern "C" t_dF dF;
+  extern "C" t_dLag dLagEs;
+  extern "C" t_dRate dRateEs;
+  extern "C" t_dDur dDurEs;
+  extern "C" t_dF d2FEs;
+  extern "C" t_dLag d2LagEs;
+  extern "C" t_dRate d2RateEs;
+  extern "C" t_dDur d2DurEs;
+  extern "C" t_dF d3FEs;
+  extern "C" t_dF dFQEs;
+  extern "C" t_dLag dLagJacEs;
+  extern "C" t_dLag dLagQEs;
+  extern "C" t_dDur dDurQEs;
+  extern "C" t_DUR durEsFn;
+  extern "C" t_dydt dydtEs;
+  // matExp()/indLin() models have no functional dydt() (the primal system is
+  // solved by matrix-exponential propagation, not RHS evaluation), so the
+  // dtau/lag jump row's usual central-difference-of-dydt Jacobian column is
+  // always zero for them. `_rxEsUseCalcJac` (set alongside the dims, from the
+  // model's `mv$indLin`) tells handle_evid to read the Jacobian column from
+  // `calc_jac` instead for such models (populated via explicit df/dy lines
+  // rxSensMatExp() emits from its already-known Jacobian).
+  extern "C" t_calc_jac calc_jac;
+  extern "C" int _rxEsUseCalcJac;
+  extern "C" int _rxEsActive;
+  extern "C" int _rxEsNState;
+  extern "C" int _rxEsNParam;
+  extern "C" int _rxEsNParam2;
+  extern "C" int _rxEsNParam3;
+  extern "C" int _esSSDurOffCmt;
+  extern "C" int _esSSRateOffCmt;
 #else
   extern rx_solve rx_global;
   extern rx_solving_options op_global;
   extern rx_solving_options_ind *inds_global;
   extern rx_solving_options_ind *inds_thread;
+  extern t_dF dF;
+  extern t_dLag dLagEs;
+  extern t_dRate dRateEs;
+  extern t_dDur dDurEs;
+  extern t_dF d2FEs;
+  extern t_dLag d2LagEs;
+  extern t_dRate d2RateEs;
+  extern t_dDur d2DurEs;
+  extern t_dF d3FEs;
+  extern t_dF dFQEs;
+  extern t_dLag dLagJacEs;
+  extern t_dLag dLagQEs;
+  extern t_dDur dDurQEs;
+  extern t_DUR durEsFn;
+  extern t_dydt dydtEs;
+  extern t_calc_jac calc_jac;
+  extern int _rxEsUseCalcJac;
+  extern int _rxEsActive;
+  extern int _rxEsNState;
+  extern int _rxEsNParam;
+  extern int _rxEsNParam2;
+  extern int _rxEsNParam3;
+  extern int _esSSDurOffCmt;
+  extern int _esSSRateOffCmt;
 #endif
 
 

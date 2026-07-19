@@ -13,6 +13,27 @@ rxTest({
     expect_equal(rxFromSE(tmp), "d/dt(E)")
   })
 
+  test_that("rxFromSE() round-trips raw comparison/logical operators", {
+    # The Subs handler re-parses converted text with R's parser, which turns
+    # rxGt()/rxEq() back into raw `>`/`==` operator calls; .rxFromSE() must
+    # accept those so a comparison inside a Derivative(linCmtB(...)) does not
+    # error with "user function '>' requires 0 arguments" (nlmixr2/nlmixr2#390).
+    expect_equal(rxFromSE("a > b"), "(a>b)")
+    expect_equal(rxFromSE("a < b"), "(a<b)")
+    expect_equal(rxFromSE("a >= b"), "(a>=b)")
+    expect_equal(rxFromSE("a <= b"), "(a<=b)")
+    expect_equal(rxFromSE("a == b"), "(a==b)")
+    expect_equal(rxFromSE("a != b"), "(a!=b)")
+    expect_equal(rxFromSE("exp(x + (a > 0))"), "exp(x+((a>0)))")
+    # the derivative of a linCmtB() whose parameter contains a comparison
+    # (as produced for IOV + linCmt() FOCEi models) must convert without error
+    .x <- paste0("Subs(Derivative(linCmtB(rx__PTR__, t, 2.0, 1.0, 1.0, -1.0, ",
+                 "-1.0, 1.0, exp(THETA_2_ + rxGt(THETA_5_, 0.0)*rxEq(occ, 1.0)), ",
+                 "exp(THETA_3_), 0.0, 0.0, 0.0, 0.0, _xi_15), _xi_15), ",
+                 "(_xi_15), (exp(THETA_1_)))")
+    expect_error(rxFromSE(.x), NA)
+  })
+
   test_that("df(x)/dy(x) parsing", {
     expect_equal(rxToSE(df(matt) / dy(ruth)), "rx__df_matt_dy_ruth__")
     expect_equal(rxFromSE(rx__df_matt_dy_ruth__), "df(matt)/dy(ruth)")
@@ -69,6 +90,18 @@ rxTest({
     expect_equal(rxToSE(tanpi(a)), "tan(pi*(a))")
     expect_equal(rxFromSE(tan(pi * a)), "tanpi(a)")
     expect_equal(rxFromSE("tan(pi/2)"), "tanpi(1/2)")
+
+    ## nlmixr2est#513: a trig argument that is a compound expression divided by
+    ## something (eg sin(2*3.14*(time-mtime1)/period)) must keep its argument;
+    ## the `/` branch used to fall through and drop the whole argument -> sin()
+    expect_equal(rxFromSE("sin(2 * 3.14 * (time-mtime1)/period)"),
+                 "sin((2*3.14*(time-mtime1))/period)")
+    expect_equal(rxFromSE("cos((time-mtime1)/period)"),
+                 "cos((time-mtime1)/period)")
+    ## a pi factor buried in a compound numerator still folds to sinpi and keeps
+    ## precedence-correct parentheses
+    expect_equal(rxFromSE("sin(pi * (time-mtime1)/period)"),
+                 "sinpi((time-mtime1)/period)")
 
     expect_equal(rxToSE(log1pmx(a)), "(log(1+a)-(a))")
     expect_equal(rxToSE(expm1(a)), "(exp(a)-1)")
@@ -257,6 +290,20 @@ rxTest({
     expect_equal(
       rxFromSE("(2*a + b)*Subs(Derivative(rxTBS(_xi_1, b, c, d, f), _xi_1), (_xi_1), (a*b + a^2))"),
       "(2*a+b)*rxTBSd(a*b+Rx_pow_di(a,2),b,c,d,f)"
+    )
+    ## A Subs() over a Derivative whose body carries a relational (rxGt/rxEq,
+    ## e.g. from abs() or an occasion indicator, as generated for FOCEi IOV
+    ## models) must not error: the Derivative conversion turns the relational
+    ## into an R `>`/`==`, and the substituted expression is converted a second
+    ## time, so those bare operators have to be recognized rather than treated as
+    ## unknown user functions (previously "user function '>' requires 0 arguments").
+    expect_equal(
+      rxFromSE("Subs(Derivative(rxTBS(_xi_1, rxGt(b, 0), c, d, f), _xi_1), (_xi_1), (a))"),
+      "rxTBSd(a,(b>0),c,d,f)"
+    )
+    expect_equal(
+      rxFromSE("Subs(Derivative(rxTBS(_xi_1, rxEq(occ, 1), c, d, f), _xi_1), (_xi_1), (a))"),
+      "rxTBSd(a,(occ==1),c,d,f)"
     )
   })
 
@@ -1416,5 +1463,23 @@ rxTest({
     }
   }
 
+  test_that(".rxFromSEnum handles empty input (#1109)", {
+    expect_equal(.rxFromSEnum(numeric(0)), character(0))
+    expect_equal(.rxFromSEnum(character(0)), character(0))
+  })
+
+  test_that("rxFromSE does not leak user-workspace variables (#1109)", {
+    # a variable in the global environment named like a model symbol must
+    # neither error (zero-length) nor be substituted into the conversion
+    assign("rxFromSE1109center", numeric(0), envir = globalenv())
+    on.exit(rm("rxFromSE1109center", envir = globalenv()), add = TRUE)
+    .x <- symengine::S("exp(ETA_3_ + THETA_3_ - (ETA_3_ + THETA_3_))*rx__sens_x_BY_ETA_1___/rxFromSE1109center")
+    expect_equal(
+      rxFromSE(.x),
+      "exp(ETA[3]+THETA[3]-(ETA[3]+THETA[3]))*rx__sens_x_BY_ETA_1___/rxFromSE1109center")
+    assign("rxFromSE1109center", 42, envir = globalenv())
+    .y <- symengine::S("rx__sens_x_BY_ETA_1___/rxFromSE1109center")
+    expect_equal(rxFromSE(.y), "rx__sens_x_BY_ETA_1___/rxFromSE1109center")
+  })
 
 })

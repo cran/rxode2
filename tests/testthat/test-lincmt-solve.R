@@ -3,6 +3,7 @@ if (tolower(Sys.info()[["sysname"]]) == "linux") {
 
     test_that("table step for linCmtB", {
 
+      skip_if_not_installed("nlmixr2data")
       pars <- test_path("lincmt-solve-focei-sol.qs2")
       skip_if_not(file.exists(pars))
       pars <- qs2::qs_read(pars)
@@ -2225,7 +2226,7 @@ if (tolower(Sys.info()[["sysname"]]) == "linux") {
 
     d$ID <- 1
 
-    for (meth in c("liblsoda", "lsoda", "dop853")) {
+    for (meth in c("liblsoda", "lsoda", "dop853", "f78")) {
       dOde <- rxSolve(ode, d, meth=meth)
 
       dLin <- rxSolve(lin, d, meth=meth)

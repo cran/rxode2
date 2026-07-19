@@ -502,7 +502,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
   // nlhs
   for (i = i0; i < i0+nlhs; i++){
     if (op->lhs_str[i-i0] == 1) {
-      // factor; from string expression — use whatever getDfLevels returns.
+      // factor; from string expression -- use whatever getDfLevels returns.
       // If no factor levels are registered (e.g. lhs_str corrupted by cens
       // memory overlap, or genuinely no levels), getDfLevels returns a
       // NumericVector; assigning it directly avoids a malformed factor.
@@ -570,7 +570,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
     df[i] = NumericVector(doseTimeNrow);
   }
   // Now create the data frame
-  // Pre-extract raw column data pointers — safe as long as no R API calls
+  // Pre-extract raw column data pointers -- safe as long as no R API calls
   // occur inside the parallel fill region below.
   std::vector<double*> colR(ncol, nullptr);
   std::vector<int*>    colI(ncol, nullptr);
@@ -583,7 +583,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
     case REALSXP: colR[_c] = REAL(_col); break;
     case INTSXP:
     case LGLSXP:
-      // Leave nullptr for ALTREP columns — values are computed on-the-fly;
+      // Leave nullptr for ALTREP columns -- values are computed on-the-fly;
       // do not call INTEGER() which would materialise them.
       colI[_c] = ALTREP(_col) ? nullptr : INTEGER(_col);
       break;
@@ -598,6 +598,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
   std::vector<SEXP *> strLevelCache(ncol, nullptr);
   std::vector<int>    strLevelCount(ncol, 0);
   std::vector<SEXP>   colSEXP(ncol, R_NilValue);
+  std::vector<int *>  strIdx(ncol, nullptr);
   if (nkeep && hasStrCol) {
     for (int _j = 0; _j < nkeep; _j++) {
       int _jj = _jj_keep_base + _j;
@@ -612,6 +613,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
         for (int _k = 0; _k < _nLev; _k++)
           _lc[_k + 1] = STRING_ELT(_lvl, _k);
         strLevelCache[_jj] = _lc;
+        strIdx[_jj] = (int *)R_alloc(covKeepNrow, sizeof(int));
       }
     }
   }
@@ -656,7 +658,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
           mdFilled = true;
         } else if (!lvlI.empty() && !isIdentity && nsim > 1) {
           // Non-sequential integer IDs, multi-sim: build rep_int(base, nsim)
-          // directly from lvlI.  Allocates only nsub*rows0 (one sim block) —
+          // directly from lvlI.  Allocates only nsub*rows0 (one sim block) --
           // avoids the O(nr) fill + uniformity scan in the old rxData.cpp re-wrap.
           int baseLen = nsub * rows0;
           IntegerVector _bp(baseLen);
@@ -668,7 +670,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
           jj_alt++;
           mdFilled = true;
         }
-        // lvlI.empty() (character IDs): no ALTREP — fill loop writes csub_par+1
+        // lvlI.empty() (character IDs): no ALTREP -- fill loop writes csub_par+1
         // and factor conversion in rxData.cpp attaches character levels.
         // !isIdentity && nsim==1: fill loop writes lvlI[csub_par] directly.
       }
@@ -1001,7 +1003,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
                 jj_p++;
               } else {
                 // Numeric column (including lhs_str==1 with no registered
-                // factor levels — getDfLevels returned NumericVector).
+                // factor levels -- getDfLevels returned NumericVector).
                 if (colR[jj_p] != nullptr) colR[jj_p][ii] = ind->lhs[j];
                 jj_p++;
               }
@@ -1058,7 +1060,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
               } else if (colType[jj_p] == STRSXP) {
                 int _idx = (R_IsNA(_fv) || std::isnan(_fv)) ? 0 : (int)_fv;
                 if (_idx < 0 || _idx > strLevelCount[jj_p]) _idx = 0;
-                SET_STRING_ELT(colSEXP[jj_p], ii, strLevelCache[jj_p][_idx]);
+                strIdx[jj_p][ii] = _idx;
               } else if (colType[jj_p] == LGLSXP) {
                 if (ISNA(_fv) || std::isnan(_fv)) colI[jj_p][ii] = NA_LOGICAL;
                 else                              colI[jj_p][ii] = (int)(_fv);
@@ -1088,6 +1090,20 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
       }
       ind->inLhs = 0;
     } // end for (solveid)
+
+    // Safely assign strings outside of OpenMP
+    if (nkeep && hasStrCol) {
+      for (int _j = 0; _j < nkeep; _j++) {
+        int _jj = _jj_keep_base + _j;
+        if (colType[_jj] == STRSXP && strIdx[_jj] != nullptr) {
+          int writeLimit = covKeepShrunk ? rowsPerSimUniform : rx->nr;
+          for (int _ii = 0; _ii < writeLimit; _ii++) {
+            SET_STRING_ELT(colSEXP[_jj], _ii, strLevelCache[_jj][strIdx[_jj][_ii]]);
+          }
+        }
+      }
+    }
+
   // Emit bad-dose warnings (R API not allowed inside the fill loop).
   for (int _csub = 0; _csub < nsub; _csub++) {
     rx_solving_options_ind *_ind = &(rx->subjects[_csub]); // csim==0 subjects
@@ -1123,7 +1139,7 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
       }
       if (out != R_NilValue) SET_VECTOR_ELT(df, _c, out);
     };
-    // Dose/time columns: pre-sized to one block when doseTimeShrunk → direct wrap.
+    // Dose/time columns: pre-sized to one block when doseTimeShrunk -> direct wrap.
     // Otherwise fall through to rxCanRepBySim for the full-size columns.
     std::vector<int> repCols;
     if (doDose) {
@@ -1139,14 +1155,14 @@ SEXP rxode2_df(int doDose0, int doTBS, std::vector<int>& lvlI, bool isIdentity) 
         if (doseTimeShrunk) _wrapDirect(colAt); else repCols.push_back(colAt); colAt++;  // ii
       }
     } else if (nevid2col) {
-      repCols.push_back(colAt++); // evid — not doseTimeShrunk path
+      repCols.push_back(colAt++); // evid -- not doseTimeShrunk path
     }
     // time
     if (doseTimeShrunk) _wrapDirect(colAt); else repCols.push_back(colAt);
     // Shared column-start for cov/keep and TBS blocks.
     int _covColStart = colAt + 1 + nlhs + nPrnState;
     int _tbsColStart = _covColStart + ncols2;
-    // Cov/keep: pre-sized when covKeepShrunk → direct wrap; otherwise rxCanRepBySim.
+    // Cov/keep: pre-sized when covKeepShrunk -> direct wrap; otherwise rxCanRepBySim.
     if (!covKeepShrunk && ncols2 > 0) {
       for (int _c = _covColStart; _c < _covColStart + ncols2 && _c < ncol; _c++) {
         repCols.push_back(_c);

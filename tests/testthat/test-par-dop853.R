@@ -6,7 +6,7 @@ rxTest({
     d/dt(peri)  <- Q / V * centr - Q / V2 * peri
   })
 
-  # 16 subjects — large enough to span multiple OMP threads
+  # 16 subjects -- large enough to span multiple OMP threads
   p <- data.frame(
     KA = 0.3,
     CL = seq(1, 8, length.out = 16),
@@ -74,6 +74,7 @@ rxTest({
   })
 
   # nmtest dataset: dense vs non-dense must give identical cp for ODE model
+  skip_if_not_installed("nlmixr2data")
   d <- nlmixr2data::nmtest
 
   f <- rxode2({

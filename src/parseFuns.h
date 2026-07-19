@@ -175,6 +175,7 @@ typedef struct transFunctions {
   int isFirst;
   int isLast;
   int isDiff;
+  int is0; // lag0()/diff0()/lead0(): return 0 instead of NA on the first record
   int isLinB;
   int isPnorm;
 
@@ -197,6 +198,8 @@ typedef struct transFunctions {
   int isTfirst0;
 
   int isInd;
+
+  int isDelay;
   nodeInfo ni;
   char *name;
   int *i;
@@ -223,6 +226,7 @@ static inline void transFunctionsIni(transFunctions *tf) {
   tf->isFirst=0;
   tf->isLast=0;
   tf->isDiff=0;
+  tf->is0=0;
   tf->isLinB=0;
   tf->isPnorm=0;
 
@@ -246,6 +250,8 @@ static inline void transFunctionsIni(transFunctions *tf) {
   tf->isTfirst0 = 0;
 
   tf->isInd=0;
+
+  tf->isDelay=0;
 }
 
 transFunctions _tf;
@@ -355,6 +361,7 @@ static inline int handleFunctionSum(transFunctions *tf) {
 
 static inline int handleFunctionsExceptLinCmt(transFunctions *tf) {
   return handleFunctionDosenum(tf) ||
+    handleFunctionDelay(tf) ||
     handleFunctionTad(tf) ||
     handleFunctionSum(tf) ||
     handleFunctionLogit(tf) ||
@@ -557,6 +564,7 @@ static inline const char *rxPushDoseCmtExpr(nodeInfo ni, char *name, char *vCmt)
   int hasLhs = isCmtLhsStatement(ni, name, vCmt);
   if (new_de(vCmt, fromCMTprop)) {
     add_de(ni, name, vCmt, hasLhs, fromCMTprop);
+    tb.dprop[tb.id] |= propDoseRef;  // dose target -- not an ODE state, must not conflict with linCmt
     aProp(tb.de.n);
   } else {
     new_or_ith(vCmt);
@@ -836,6 +844,21 @@ static inline int handleResetStatement(nodeInfo ni, char *name, int *i, int nch,
   return 0;
 }
 
+static inline int handleMatExpStatement(nodeInfo ni, char *name, int *i, int nch,
+                                         D_ParseNode *pn) {
+  if (nodeHas(matExp_statement) && *i == 0) {
+    tb.isMexp = 1;
+    *i = nch; // skip all children
+    sb.o = 0; sbDt.o = 0; sbt.o = 0;
+    sAppend(&sbt, "matExp();");
+    sAppend(&sbNrm, "%s\n", sbt.s);
+    addLine(&sbNrmL, "%s\n", sbt.s);
+    ENDLINE;
+    return 1;
+  }
+  return 0;
+}
+
 static inline int handleEvidStatement(nodeInfo ni, char *name, int *i, int nch,
                                        D_ParseNode *pn) {
   if (nodeHas(evid_statement) && *i == 0) {
@@ -888,7 +911,7 @@ static inline int handlePrintf(nodeInfo ni, char *name, int i, D_ParseNode *xpn)
       sbt.o=0;
       tb.thread = notThreadSafe;
       aType(PPRN);
-      aAppendN("Rprintf(", 8);
+      aAppendN("_rxPrintf(", 10);
       sAppendN(&sbt,"printf(", 7);
       sb.o--;sbDt.o--;sbt.o--;
     }

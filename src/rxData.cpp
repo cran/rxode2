@@ -53,9 +53,11 @@ extern "C" void ensureRworkPool(int nCores, int lrw, int liw);
 
 #include "cbindThetaOmega.h"
 #include "../inst/include/rxode2parseHandleEvid.h"
+#include "../inst/include/rxode2parseGetTime.h" // defines updateRate/updateDur forward-declared in handleEvid.h
 #include "rxThreadData.h"
 
 #include "threadSafeConstants.h"
+#include "linCmtSensType.h"
 //#include "seed.h"
 
 SEXP rxSaveState_();         // defined in rxSerialize.cpp
@@ -1484,24 +1486,26 @@ extern "C" {
   // Ensure buffer has at least nsolve*neta doubles. Returns pointer to buffer.
   double* rxEtaPreGetOrAlloc(int nsolve_neta) {
     if (nsolve_neta > _globals.geta_pre_n) {
-      free(_globals.geta_pre);
-      _globals.geta_pre   = (double*)malloc((size_t)nsolve_neta * sizeof(double));
-      _globals.geta_pre_n = (_globals.geta_pre ? nsolve_neta : 0);
+      free(_globals.geta_pre_alloc);
+      _globals.geta_pre_alloc = (double*)malloc((size_t)nsolve_neta * sizeof(double));
+      _globals.geta_pre_n     = (_globals.geta_pre_alloc ? nsolve_neta : 0);
     }
+    _globals.geta_pre = _globals.geta_pre_alloc;
     return _globals.geta_pre;
   }
 
   // Return current pre-gen buffer (NULL if not allocated / not active).
   double* rxGetEtaPre(void) { return _globals.geta_pre; }
 
-  // Deactivate: set pointer to NULL without freeing (keep allocation for reuse).
+  // Deactivate: set active pointer to NULL, keep underlying allocation for reuse.
   void rxEtaPreDeactivate(void) { _globals.geta_pre = NULL; }
 
   // Free buffer and reset counters.
   void rxEtaPreFree(void) {
-    free(_globals.geta_pre);
-    _globals.geta_pre   = NULL;
-    _globals.geta_pre_n = 0;
+    free(_globals.geta_pre_alloc);
+    _globals.geta_pre_alloc = NULL;
+    _globals.geta_pre       = NULL;
+    _globals.geta_pre_n     = 0;
   }
 
   // Number of omega matrices (1 = same for all sims, >1 = per-sim omega).
@@ -1512,26 +1516,47 @@ extern "C" {
 
 } // extern "C"
 
+// --- Cross-DLL OpenMP thread-id override (Windows static-libgomp fix) --------
+// When rxode2's per-individual solve is driven from an EXTERNAL OpenMP team
+// (e.g. nlmixr2est's FOCEi innerOpt), rxode2's own statically-linked libgomp
+// returns omp_get_thread_num()==0 for every foreign thread, collapsing all
+// per-thread buffers (LSODA ctx pool, glhs, gon, tol arrays, ...) onto slot 0
+// -> concurrent writes / lsoda_free -> heap corruption (Windows segment heap;
+// benign on Linux's single shared libgomp).  The external driver supplies the
+// correct per-thread id via setRxThreadId(); when set (>=0) rxode2 uses it
+// instead of omp_get_thread_num().  thread_local is compiler TLS (per-OS-
+// thread), so the same OS thread that sets the id also runs the solve.  Inside
+// rxode2's own par_solve the override stays -1 and omp_get_thread_num()
+// (correct within rxode2's own team) is used.
+static thread_local int _rxThreadIdOverride = -1;
+extern "C" void setRxThreadId(int id) { _rxThreadIdOverride = id; }
+extern "C" int getRxThreadId(void) { return _rxThreadIdOverride; }
+static inline int _rxTid(void) {
+  int t = _rxThreadIdOverride;
+  if (t < 0) t = omp_get_thread_num();
+  return (t < 0) ? 0 : t;
+}
+
 static inline double *getLinCmtSaveThread() {
   rx_solve* rx = getRxSolve_();
   rx_solving_options* op = rx->op;
-  return _globals.gLinSave + (op->numLinSens+op->numLin)*omp_get_thread_num();
+  return _globals.gLinSave + (op->numLinSens+op->numLin)*_rxTid();
 }
 
 static inline double *getLinCmtDummyThread() {
   rx_solve* rx = getRxSolve_();
   rx_solving_options* op = rx->op;
-  return _globals.gLinDummy + (op->neq)*omp_get_thread_num();
+  return _globals.gLinDummy + (op->neq)*_rxTid();
 }
 
 static inline double *getAlagFamilyPointerFromThreadId(double *ptr) {
   rx_solve* rx = getRxSolve_();
   rx_solving_options* op = rx->op;
-  return ptr + (op->neq + op->extraCmt)*omp_get_thread_num();
+  return ptr + (op->neq + op->extraCmt)*_rxTid();
 }
 
 static inline double *getInfusionRateThread() {
-  return _globals.gInfusionRate[omp_get_thread_num()];
+  return _globals.gInfusionRate[_rxTid()];
 }
 
 static inline double *getTlastSThread() {
@@ -1559,30 +1584,31 @@ extern "C" void _setIndPointersByThread(rx_solving_options_ind *ind) {
     ind->linCmtSave = getLinCmtSaveThread();
     ind->linCmtDummy = getLinCmtDummyThread();
 
-    ind->ignoredDoses = _globals.ignoredDoses[omp_get_thread_num()];
-    ind->ignoredDosesN = &(_globals.nIgnoredDoses[omp_get_thread_num()]);
+    ind->ignoredDoses = _globals.ignoredDoses[_rxTid()];
+    ind->ignoredDosesN = &(_globals.nIgnoredDoses[_rxTid()]);
     ind->ignoredDosesN[0] = 0; // reset
-    ind->ignoredDosesAllocN = &(_globals.nAllocIgnoredDoses[omp_get_thread_num()]);
+    ind->ignoredDosesAllocN = &(_globals.nAllocIgnoredDoses[_rxTid()]);
 
-    ind->pendingDoses = _globals.pendingDoses[omp_get_thread_num()];
-    ind->pendingDosesN = &(_globals.nPendingDoses[omp_get_thread_num()]);
+    ind->pendingDoses = _globals.pendingDoses[_rxTid()];
+    ind->pendingDosesN = &(_globals.nPendingDoses[_rxTid()]);
     ind->pendingDosesN[0] = 0; // reset
-    ind->pendingDosesAllocN = &(_globals.nAllocPendingDoses[omp_get_thread_num()]);
+    ind->pendingDosesAllocN = &(_globals.nAllocPendingDoses[_rxTid()]);
 
-    ind->extraDoseN = &(_globals.extraDoseN[omp_get_thread_num()]);
+    ind->extraDoseN = &(_globals.extraDoseN[_rxTid()]);
     ind->extraDoseN[0] = 0; //reset
-    ind->extraDoseAllocN = &(_globals.extraDoseAllocN[omp_get_thread_num()]);
-    ind->extraDoseTimeIdx = _globals.extraDoseTimeIdx[omp_get_thread_num()];
-    ind->extraDoseTime = _globals.extraDoseTime[omp_get_thread_num()];
-    ind->extraDoseEvid = _globals.extraDoseEvid[omp_get_thread_num()];
-    ind->extraDoseDose = _globals.extraDoseDose[omp_get_thread_num()];
+    ind->extraDoseAllocN = &(_globals.extraDoseAllocN[_rxTid()]);
+    ind->extraDoseTimeIdx = _globals.extraDoseTimeIdx[_rxTid()];
+    ind->extraDoseTime = _globals.extraDoseTime[_rxTid()];
+    ind->extraDoseEvid = _globals.extraDoseEvid[_rxTid()];
+    ind->extraDoseDose = _globals.extraDoseDose[_rxTid()];
     ind->idxExtra = 0;
     ind->extraSorted = 0;
 
-    ind->on = _globals.gon + ncmt*omp_get_thread_num();
-    ind->solveSave = _globals.gSolveSave + op->neq*omp_get_thread_num();
-    ind->solveLast = _globals.gSolveLast + op->neq*omp_get_thread_num();
-    ind->solveLast2 = _globals.gSolveLast2 + op->neq*omp_get_thread_num();
+    ind->on = _globals.gon + ncmt*_rxTid();
+    ind->solveSave = _globals.gSolveSave + op->neq*_rxTid();
+    ind->solveLast = _globals.gSolveLast + op->neq*_rxTid();
+    ind->solveLast2 = _globals.gSolveLast2 + op->neq*_rxTid();
+    ind->esPendingJump = _globals.gEsPendingJump + op->neq*_rxTid();
   } else {
     ind->InfusionRate = NULL;
     ind->tlastS = NULL;
@@ -1592,26 +1618,27 @@ extern "C" void _setIndPointersByThread(rx_solving_options_ind *ind) {
     ind->solveSave = NULL;
     ind->solveLast = NULL;
     ind->solveLast2 = NULL;
+    ind->esPendingJump = NULL;
     ind->linCmtSave = NULL;
   }
   if (rx->nMtime > 0) {
-    ind->mtime0 = _globals.gmtime0 + rx->nMtime * omp_get_thread_num();
+    ind->mtime0 = _globals.gmtime0 + rx->nMtime * _rxTid();
   } else {
     ind->mtime0 = NULL;
   }
   if (!ind->indOwnAlloc) {
-    ind->timeThread = _globals.timeThread + rx->maxAllTimes*omp_get_thread_num();
+    ind->timeThread = _globals.timeThread + rx->maxAllTimes*_rxTid();
   }
-  ind->llikSave = _globals.gLlikSave + op->nLlik*rxLlikSaveSize*omp_get_thread_num();
-  ind->lhs = _globals.glhs+op->nlhs*omp_get_thread_num();
+  ind->llikSave = _globals.gLlikSave + op->nLlik*rxLlikSaveSize*_rxTid();
+  ind->lhs = _globals.glhs+op->nlhs*_rxTid();
   // Point the individual's tolerance arrays at the current thread's
   // slice.  iniSubject() will then multiply them by ind->tolFactor to
   // apply any sticky loosening.  No conditional needed here: tolFactor
   // is always valid (set to 1.0 by setupRxInd() on first allocation).
-  ind->atol2  = _globals.gatol2Thread  + op->neq * omp_get_thread_num();
-  ind->rtol2  = _globals.grtol2Thread  + op->neq * omp_get_thread_num();
-  ind->ssAtol = _globals.gssAtolThread + op->neq * omp_get_thread_num();
-  ind->ssRtol = _globals.gssRtolThread + op->neq * omp_get_thread_num();
+  ind->atol2  = _globals.gatol2Thread  + op->neq * _rxTid();
+  ind->rtol2  = _globals.grtol2Thread  + op->neq * _rxTid();
+  ind->ssAtol = _globals.gssAtolThread + op->neq * _rxTid();
+  ind->ssRtol = _globals.gssRtolThread + op->neq * _rxTid();
 }
 
 extern "C" void setZeroMatrix(int which) {
@@ -1649,9 +1676,9 @@ extern "C" void atolRtolFactorC_(double factor) {
   rx_solve *rx = getRxSolve_();
   rx_solving_options *op = rx->op;
 
-  // Modify only the current thread's tolerance arrays — fully thread-safe,
+  // Modify only the current thread's tolerance arrays -- fully thread-safe,
   // no critical section needed because each thread has its own slice.
-  int _threadId = omp_get_thread_num();
+  int _threadId = _rxTid();
   double *_atol2  = _globals.gatol2Thread  + op->neq * _threadId;
   double *_rtol2  = _globals.grtol2Thread  + op->neq * _threadId;
   double *_ssAtol = _globals.gssAtolThread + op->neq * _threadId;
@@ -1680,6 +1707,44 @@ extern "C" double * getAol(int n, double atol){
 
 extern "C" double * getRol(int n, double rtol) {
   return _globals.grtol2;
+}
+
+// Set the current solve's ODE absolute/relative tolerances to exact values (all
+// compartments and threads), clearing any sticky per-subject loosening.  Used by
+// downstream packages to tighten the covariance-step solves; pair with
+// rxGetSolveAtolRtol to save and restore.
+extern "C" void rxSetSolveAtolRtol(double atol, double rtol) {
+  rx_solve* rx = getRxSolve_();
+  if (rx == NULL) return;
+  rx_solving_options* op = rx->op;
+  if (op == NULL) return;
+  int neq = op->neq;
+  op->ATOL = atol;
+  op->RTOL = rtol;
+  for (int i = neq; i--;) {
+    _globals.gatol2[i]  = atol;
+    _globals.grtol2[i]  = rtol;
+    _globals.gssAtol[i] = atol;
+    _globals.gssRtol[i] = rtol;
+  }
+  int cores = op->cores;
+  for (int t = 0; t < cores; t++) {
+    double *a  = _globals.gatol2Thread  + neq*t;
+    double *r  = _globals.grtol2Thread  + neq*t;
+    double *sa = _globals.gssAtolThread + neq*t;
+    double *sr = _globals.gssRtolThread + neq*t;
+    for (int i = neq; i--;) { a[i]=atol; r[i]=rtol; sa[i]=atol; sr[i]=rtol; }
+  }
+  uint32_t nall = rx->nsub*rx->nsim;
+  for (uint32_t s = 0; s < nall; s++) rx->subjects[s].tolFactor = 1.0;
+}
+
+// Report the current solve's base ODE absolute/relative tolerances (op->ATOL/RTOL).
+extern "C" void rxGetSolveAtolRtol(double *atol, double *rtol) {
+  rx_solve* rx = getRxSolve_();
+  if (rx == NULL || rx->op == NULL) { *atol = NA_REAL; *rtol = NA_REAL; return; }
+  *atol = rx->op->ATOL;
+  *rtol = rx->op->RTOL;
 }
 // This sets up the constant covariates if ev1 is rxEtTran
 static inline void gparsCovSetupConstant(RObject &ev1, int npars){
@@ -1745,7 +1810,7 @@ static void rxAllocInd(rx_solving_options_ind *ind, rx_solving_options *op) {
   double *newAT    = nat > 0 ? (double*)calloc(nat + 1, sizeof(double)) : NULL;
   // Allocate solve with EVID_EXTRA_SIZE extra event slots so that _rxPushDose
   // can grow n_all_times by up to EVID_EXTRA_SIZE without OOB in the solve loop.
-  // updateSolve() will realloc further if needed (safe there — between ODE steps).
+  // updateSolve() will realloc further if needed (safe there -- between ODE steps).
   int solveN = nat + EVID_EXTRA_SIZE;
   double *newSolve = (double*)calloc((int64_t)op->neq * solveN, sizeof(double));
   // Extended ownership: evid, ix (sortInd re-initialises), timeThread (sortInd fills), idose
@@ -1802,6 +1867,16 @@ static void rxFreeInd(rx_solving_options_ind *ind) {
     free(ind->idose);      ind->idose = NULL;
     ind->indOwnAlloc = 0;
   }
+  // The delay() dense history is allocated by the solver (rxDelayHistSlot) and
+  // kept after the solve so the output data frame's lhs recalculation can still
+  // interpolate delayed states; it is released here with the subject.
+  free(ind->delayHist);
+  ind->delayHist = NULL;
+  ind->delayHistCap = 0;
+  ind->delayHistStride = 0;
+  ind->delayHistNeq = 0;
+  ind->delayHistN = 0;
+  ind->delayHistOn = 0;
 }
 
 extern "C" void gFree(){
@@ -1839,10 +1914,13 @@ extern "C" void gFree(){
   _globals.gevid=NULL;
   if (_globals.gall_times != NULL) free(_globals.gall_times);
   _globals.gall_times=NULL;
+  _globals.gall_times_n = 0;
   if (_globals.gcov != NULL) free(_globals.gcov);
   _globals.gcov=NULL;
   if (_rxGetErrs != NULL) free(_rxGetErrs);
   _rxGetErrs=NULL;
+  if (_globals.gdelayState != NULL) { R_Free(_globals.gdelayState); _globals.gdelayState = NULL; }
+  if (_globals.gdelayCol != NULL) { R_Free(_globals.gdelayCol); _globals.gdelayCol = NULL; }
   _globals.alloc = false;
 }
 
@@ -2787,7 +2865,7 @@ LogicalVector rxSolveFree(){
   if (rx->splitBolus != NULL) free(rx->splitBolus);
   rx->splitBolus = NULL;
   rx->splitBolusN = 0;
-  // linCmtScale points into an R vector (via REAL()), never malloc'd — just null it
+  // linCmtScale points into an R vector (via REAL()), never malloc'd -- just null it
   rx->linCmtScale = NULL;
   if (_globals.ordId != NULL) free(_globals.ordId);
   _globals.ordId = rx->ordId = NULL;
@@ -2873,11 +2951,15 @@ extern "C" double get_fkeep(int col, int id, rx_solving_options_ind *ind,int fid
         while (i >= fid && (R_IsNA(vals[i]) || R_IsNaN(vals[i]))) {
           i--;
         }
-        // if it can't be found find the next non-NA value
-        if (R_IsNA(vals[i]) || R_IsNaN(vals[i])) {
+        // if it can't be found (i < fid) find the next non-NA value;
+        // guard the index so we never dereference vals[fid-1] / past the id block
+        if (i < fid) {
           i = id;
-          while (i < fid  + ind->n_all_times && (R_IsNA(vals[i]) || R_IsNaN(vals[i]))) {
+          while (i < fid + ind->n_all_times && (R_IsNA(vals[i]) || R_IsNaN(vals[i]))) {
             i++;
+          }
+          if (i >= fid + ind->n_all_times) {
+            return val; // entire id block is NA
           }
         }
         return vals[i];
@@ -2887,11 +2969,14 @@ extern "C" double get_fkeep(int col, int id, rx_solving_options_ind *ind,int fid
         while (i < fid + ind->n_all_times && (R_IsNA(vals[i]) || R_IsNaN(vals[i]))) {
           i++;
         }
-        // if it can't be found find the previous non-NA value
-        if (R_IsNA(vals[i]) || R_IsNaN(vals[i])) {
+        // if it can't be found find the previous non-NA value; guard the index
+        if (i >= fid + ind->n_all_times) {
           i = id;
           while (i >= fid && (R_IsNA(vals[i]) || R_IsNaN(vals[i]))) {
             i--;
+          }
+          if (i < fid) {
+            return val; // entire id block is NA
           }
         }
         return vals[i];
@@ -3759,6 +3844,10 @@ extern "C" void setupRxInd(rx_solving_options_ind* ind, int first) {
   ind->isIni            = 0;
   ind->_update_par_ptr_in = 0;
   ind->linCmtHparIndex  = -2;
+  ind->autoMethod = 0;
+  ind->autoCount  = 0;
+  ind->autoHcur   = 0.0;
+  ind->autoLastSwitchIntervals = 0;
   if (first){
     ind->solveTime  = 0.0;
     ind->nBadDose = 0;
@@ -3910,6 +3999,7 @@ static inline void rxSolve_datSetupHmax(const RObject &obj, const List &rxContro
     rxOptionsIniEnsure(ntot, op->cores);
     if (_globals.gall_times != NULL) free(_globals.gall_times);
     _globals.gall_times = (double*)calloc(5*time0.size(), sizeof(double));
+    _globals.gall_times_n = (int64_t)time0.size();
     std::copy(time0.begin(), time0.end(), &_globals.gall_times[0]);
     _globals.gdv = _globals.gall_times + time0.size(); // Perhaps allocate zero size if missing?
     _globals.gamt = _globals.gdv + time0.size();
@@ -3947,6 +4037,7 @@ static inline void rxSolve_datSetupHmax(const RObject &obj, const List &rxContro
     IntegerVector interp0 = as<IntegerVector>(rxSolveDat->mv[RxMv_interp]);
     //
     bool isLinearOrMidpointInterp = op->is_locf == 0 || op->is_locf == 3;
+    op->cmtCov = -1;   // covariate index of the CMT covariate; -1 = none (single endpoint)
     for (i = dfN; i--;){
       for (j = rx->npars; j--;){
         if (pars[j] == dfNames[i]){
@@ -3956,6 +4047,11 @@ static inline void rxSolve_datSetupHmax(const RObject &obj, const List &rxContro
           // the rxControl() object
           const char *curDf = dfNames[i];
           int curDfN = strlen(curDf);
+          // cache the CMT covariate's covariate-index so getIndCmt can read the
+          // per-observation endpoint (cov_ptr) without a per-call name comparison.
+          if (op->cmtCov < 0 && curDfN == 3 && !strncmpci(curDf, "CMT", 3)) {
+            op->cmtCov = ncov;
+          }
           _globals.gpar_covInterp[ncov] = interp0[j] - 2;
           if ((isLinearOrMidpointInterp &&
                _globals.gpar_covInterp[ncov] == -1) ||
@@ -4638,11 +4734,24 @@ static inline void rxSolve_normalizeParms(const RObject &obj, const List &rxCont
           stop(_("ran out of memory"));
         }
         _globals.gamtS= _globals.gall_timesS + (rx->nsim-1)*rx->nall;
-        for (uint32_t iii = 0; iii < rx->nsim-1; ++iii) {
-          std::copy(_globals.gamt, _globals.gamt + rx->nall,
-                    _globals.gamtS + iii*rx->nall);
-          std::copy(_globals.gall_times, _globals.gall_times + rx->nall,
-                    _globals.gall_timesS + iii*rx->nall);
+        // _globals.gamt / _globals.gall_times hold _globals.gall_times_n base
+        // events.  When subjects share one event table that is a single
+        // subject's worth and rx->nall is the full per-sim total
+        // (== nsub * gall_times_n); copying rx->nall from the gall_times_n-sized
+        // source is a heap over-read.  Tile the base table across each
+        // replicate's nall-sized block so every subject sub-region is filled and
+        // the source is never read past its gall_times_n elements.
+        int64_t _base = (int64_t)_globals.gall_times_n;
+        if (_base > 0) {
+          for (uint32_t iii = 0; iii < rx->nsim-1; ++iii) {
+            for (int64_t _off = 0; _off < (int64_t)rx->nall; _off += _base) {
+              int64_t _len = ((int64_t)rx->nall - _off < _base) ? ((int64_t)rx->nall - _off) : _base;
+              std::copy(_globals.gamt, _globals.gamt + _len,
+                        _globals.gamtS + (int64_t)iii*rx->nall + _off);
+              std::copy(_globals.gall_times, _globals.gall_times + _len,
+                        _globals.gall_timesS + (int64_t)iii*rx->nall + _off);
+            }
+          }
         }
       }
       for (unsigned int simNum = rx->nsim; simNum--;) {
@@ -4687,6 +4796,9 @@ static inline void rxSolve_normalizeParms(const RObject &obj, const List &rxCont
             ind->nevid2 = indS.nevid2;
             ind->ii   = &(indS.ii[0]);
             ind->evid =&(indS.evid[0]);
+            ind->dv    = &(indS.dv[0]);
+            ind->limit = &(indS.limit[0]);
+            ind->cens  = &(indS.cens[0]);
             ind->id=id+1;
             ind->idReal = indS.idReal;
             if (rx->needSort == 0) {
@@ -5292,7 +5404,30 @@ static inline void iniRx(rx_solve* rx) {
   op->neq = 0;
   op->stiff = 0;
   op->useDense = 0;
+  op->adjoint = 0;
+  op->adjNbase = 0;
+  op->adjNp = 0;
+  op->adjFxOff = 0;
+  op->adjFpOff = 0;
+  op->adjDfOff = -1;
+  op->adjJpOff = -1;
+  op->adjJyOff = -1;
+  op->adjFxdOff = -1;
+  op->adjTauOff = -1;
+  op->adjDtauOff = -1;
+  op->adjDlagOff = -1;
+  op->adjDrateOff = -1;
+  op->adjSensOff = 0;
+  op->hasDelay = 0;
   op->ncov = 0;
+  op->stiff2 = 0;
+  op->autoSwitchMaxStiff    = 10;
+  op->autoSwitchMaxNonstiff = 3;
+  op->autoSwitchStiffFirst  = 0;
+  op->autoSwitchNonstifftol = 0.9;
+  op->autoSwitchStifftol    = 0.9;
+  op->autoSwitchDtfac       = 2.0;
+  op->autoSwitchSwitchMax   = 5;
   op->par_cov = NULL;
   op->par_cov_interp = NULL;
   op->lhs_str = NULL;
@@ -5334,6 +5469,7 @@ static inline void iniRx(rx_solve* rx) {
   rx->svar = _globals.gsvar;
   rx->ovar = _globals.govar;
   op->nLlik = 0;
+  op->cvodeLinSolver = 1;
 }
 
 static inline void rxLoadSplitBolus(List mv, rx_solve *rx) {
@@ -5375,7 +5511,7 @@ SEXP rxSolveFromRaw_(const RObject &obj, const RObject &rawObj,
   rxAssignPtr(SEXP(obj));
 
   // Build a minimal rxSolveDat for the finalize path.
-  // DO NOT memset — rxSolve_t contains Rcpp objects (List, RObject, etc.)
+  // DO NOT memset -- rxSolve_t contains Rcpp objects (List, RObject, etc.)
   // whose constructors initialize internal SEXP to R_NilValue; memset would
   // corrupt those to NULL pointer, causing VECTOR_ELT crashes.
   rxSolve_t rxSolveDat{};
@@ -5402,8 +5538,20 @@ SEXP rxSolveFromRaw_(const RObject &obj, const RObject &rawObj,
     ensureLinCmtB((int)op->cores);
     ensureLsodaCtxPool((int)op->cores);
     int _bneq = (int)op->neq;
-    int _lrw = 22 + _bneq * std::max(16, _bneq + 9);
-    int _liw = 20 + _bneq;
+    int _lrw, _liw;
+    if (op->stiff == 107) {
+      /* bdf: DVODE BDF (MF=22): LRW = 22+9*NEQ+2*NEQ^2, LIW = 30+NEQ */
+      _lrw = 22 + 9 * _bneq + 2 * _bneq * _bneq;
+      _liw = 30 + _bneq;
+    } else if (op->stiff == 106) {
+      /* lsode: DVODE Adams (MF=10): LRW = 20+16*NEQ, LIW = 30.
+       * Standard LSODA sizing covers LRW; use 30+NEQ for LIW. */
+      _lrw = 22 + _bneq * std::max(16, _bneq + 9);
+      _liw = 30 + _bneq;
+    } else {
+      _lrw = 22 + _bneq * std::max(16, _bneq + 9);
+      _liw = 20 + _bneq;
+    }
     ensureRworkPool((int)op->cores, _lrw, _liw);
   }
 
@@ -5412,7 +5560,9 @@ SEXP rxSolveFromRaw_(const RObject &obj, const RObject &rawObj,
 }
 extern "C" int solveMethodThreadSafe(rx_solving_options* op) {
   int stiff = op->stiff;
-  return stiff == 2 || stiff == 0;
+  /* lsoda (1), indLin (3), lsode (106), and bdf (107) use non-reentrant
+   * Fortran COMMON blocks and must run single-threaded. */
+  return stiff != 1 && stiff != 3 && stiff != 106 && stiff != 107;
 }
 
 
@@ -5527,22 +5677,8 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     } else {
       object = obj;
     }
-    if (method == 3){
-      rxSolveDat->mv = rxModelVars(object);
-      rxSolveFreeObj = object;
-      List indLin = rxSolveDat->mv[RxMv_indLin];
-      if (indLin.size() == 0){
-        Function rxode2 = getRxFn("rxode2");
-        object = rxode2(object, _["indLin"]=true);
-        rxSolveDat->mv = rxModelVars(object);
-        rxSolveFreeObj = object;
-      } // else {
-      //  object =obj;
-      // }
-    } else {
-      rxSolveDat->mv = rxModelVars(object);
-      rxSolveFreeObj = object;
-    }
+    rxSolveDat->mv = rxModelVars(object);
+    rxSolveFreeObj = object;
   }
   if (rxSolveDat->mv.size() == 0) {
     // sometimes the model variables have not been assigned, but this
@@ -5643,8 +5779,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     rx->linCmtSuspect = asDouble(rxControl[Rxc_linCmtSuspect], "linCmtSuspect");
     rx->linCmtForwardMax = asInt(rxControl[Rxc_linCmtForwardMax], "linCmtForwardMax");
 
-    // since linCmtB is not parallel, no need to copy into
-    // a different solving memory space
+    // linCmtScale is read-only during parallel solving; shared pointer is safe
     rx->linCmtScale = REAL(rxControl[Rxc_linCmtScale]);
 
     rx->needSort = as<int>(rxSolveDat->mv[RxMv_needSort]);
@@ -5662,8 +5797,81 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       op->indOwnAlloc = INTEGER(rxSolveDat->mv[RxMv_flags])[RxMvFlag_evid_];
     }
     op->useDense = (int)asBool(rxControl[Rxc_dense], "dense");
-    if (op->useDense && method != 3) {
-      op->useDense = 0;
+    op->hasDelay = INTEGER(rxSolveDat->mv[RxMv_flags])[RxMvFlag_hasDelay];
+    // Build the delay-history column map: record dense history only for the ODE
+    // states that delay() actually looks back on (propDelay bit in stateProp).
+    // delayState[col] = ODE state index for history column `col`; delayCol[state]
+    // is the inverse (-1 for states with no delay), used by _rxDelay to read its
+    // compacted column.  Both are indexed in increasing ODE-state order, the same
+    // order stateProp / the runtime dense coefficients use.
+    op->nDelayState = 0;
+    op->delayState = NULL;
+    op->delayCol = NULL;
+    if (op->hasDelay) {
+      IntegerVector _stateProp = rxSolveDat->mv[RxMv_stateProp];
+      int _nState = _stateProp.size();
+      int _nAlloc = _nState > 0 ? _nState : 1;
+      if (_globals.gdelayCol != NULL) R_Free(_globals.gdelayCol);
+      if (_globals.gdelayState != NULL) R_Free(_globals.gdelayState);
+      _globals.gdelayCol = R_Calloc(_nAlloc, int);
+      _globals.gdelayState = R_Calloc(_nAlloc, int);
+      int _col = 0;
+      for (int _s = 0; _s < _nState; _s++) {
+        if (_stateProp[_s] & rxDelayStateProp) {
+          _globals.gdelayCol[_s] = _col;
+          _globals.gdelayState[_col] = _s;
+          _col++;
+        } else {
+          _globals.gdelayCol[_s] = -1;
+        }
+      }
+      // Defensive fallback: if hasDelay is set but no state carried the bit
+      // (should not happen), record every state -- the pre-compaction behavior.
+      if (_col == 0) {
+        for (int _s = 0; _s < _nState; _s++) {
+          _globals.gdelayCol[_s] = _s;
+          _globals.gdelayState[_s] = _s;
+        }
+        _col = _nState;
+      }
+      op->nDelayState = _col;
+      op->delayState = _globals.gdelayState;
+      op->delayCol = _globals.gdelayCol;
+    }
+    op->cvodeLinSolver        = asInt(rxControl[Rxc_cvodeLinSolver], "cvodeLinSolver");
+    op->stiff2                = asInt(rxControl[Rxc_stiff2], "stiff2");
+    if (op->stiff2 > 0) {
+      /* LSODA (1,2), CVODE (21), DLSODE (106,107) have internal switching and
+         cannot be cleanly retried within an interval. */
+      if (op->stiff2 == 1 || op->stiff2 == 2 ||
+          op->stiff2 == 21 ||
+          op->stiff2 == 106 || op->stiff2 == 107) {
+        (Rf_error)("stiff2=%d is not allowed for AutoSwitch; use a single-step "
+                   "stiff method (e.g. ros4=13, grk4a=31)", op->stiff2);
+      }
+      if (method == 1 || method == 2 || method == 21 ||
+          method == 106 || method == 107) {
+        (Rf_error)("AutoSwitch (stiff2>0) requires a single-step primary method; "
+                   "stiff=%d is not compatible", method);
+      }
+    }
+    op->autoSwitchMaxStiff    = asInt(rxControl[Rxc_autoSwitchMaxStiff], "autoSwitchMaxStiff");
+    op->autoSwitchMaxNonstiff = asInt(rxControl[Rxc_autoSwitchMaxNonstiff], "autoSwitchMaxNonstiff");
+    op->autoSwitchStiffFirst  = asInt(rxControl[Rxc_autoSwitchStiffFirst], "autoSwitchStiffFirst");
+    op->autoSwitchNonstifftol = asDouble(rxControl[Rxc_autoSwitchNonstifftol], "autoSwitchNonstifftol");
+    op->autoSwitchStifftol    = asDouble(rxControl[Rxc_autoSwitchStifftol], "autoSwitchStifftol");
+    op->autoSwitchDtfac       = asDouble(rxControl[Rxc_autoSwitchDtfac], "autoSwitchDtfac");
+    op->autoSwitchSwitchMax   = asInt(rxControl[Rxc_autoSwitchSwitchMax], "autoSwitchSwitchMax");
+    if (op->useDense) {
+      /* Dense output is only supported for dop853(0), dop5(10), bs(11), ros4(13). */
+      int _primDense = (method == 0 || method == 10 || method == 11 || method == 13);
+      /* For AutoSwitch composites (stiff2>0), the stiff secondary must also be dense.
+         Among stiff methods, only ros4(13) supports dense output. */
+      int _autoActive = (op->stiff2 > 0);
+      int _stifDense = !_autoActive || (op->stiff2 == 13);
+      if (!_primDense || !_stifDense) {
+        op->useDense = 0;
+      }
     }
     if (op->useDense && (op->numLin > 0 || op->numLinSens > 0)) {
       Rf_warning("dense output not yet supported for linCmt models; using standard dop853");
@@ -5671,12 +5879,88 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     }
     op->stiff = method;
 
+    if (method == 206 || method == 239 || method == 240 || method == 241 || method == 210 || method == 200 || method == 207 || method == 265 || method == 227 || method == 228 || method == 229 || method == 205 || method == 213 || method == 236 || method == 233 || method == 234 || method == 238 || method == 235 || method == 231 || method == 232 || method == 237 || method == 243 || method == 225 || method == 221 || method == 202 || method == 226 || method == 230 || method == 208 || method == 282 || method == 300 || method == 301 || method == 302 || method == 304 || method == 267 || method == 268 || method == 270 || method == 271 || method == 272 || method == 273 || method == 274 || method == 275 || method == 276 || method == 277 || method == 279 || method == 280 || method == 281 || method == 283 || method == 284 || method == 285 || method == 286 || method == 287 || method == 288 || method == 289 || method == 290 || method == 291 || method == 292 || method == 293 || method == 295 || method == 296 || method == 297 || method == 298) {
+      // discrete-adjoint explicit-RK methods: rk4s (206), eulers (239),
+      // midpoints (240), heuns (241), dop5s (210, adaptive).  Derive the layout
+      // by scanning model names.
+      // States are [base ODE states..., rx__sens_* output slots...]; lhs carry
+      // the F_X (rx__adjFX_i_j__) then F_p (rx__adjFP_i_p__) blocks emitted by
+      // .rxAdjointExpand.  HARD GUARD: absent the F_X/F_p lhs, error (no silent
+      // bare-primal solve).
+      CharacterVector _adjSt = rxSolveDat->mv[RxMv_state];
+      CharacterVector _adjLhs = rxSolveDat->mv[RxMv_lhs];
+      int _nBase = 0;
+      for (int _i = 0; _i < _adjSt.size(); ++_i) {
+        if (strncmp(CHAR(_adjSt[_i]), "rx__sens_", 9) != 0) _nBase++;
+      }
+      int _fxOff = -1, _fpOff = -1, _dfOff = -1, _jpOff = -1, _jyOff = -1, _fxdOff = -1, _tauOff = -1, _dtauOff = -1, _dlagOff = -1, _drateOff = -1;
+      for (int _i = 0; _i < _adjLhs.size(); ++_i) {
+        const char *_s = CHAR(_adjLhs[_i]);
+        if (_fxOff < 0 && strcmp(_s, "rx__adjFX_0_0__") == 0) _fxOff = _i;
+        if (_fpOff < 0 && strcmp(_s, "rx__adjFP_0_0__") == 0) _fpOff = _i;
+        if (_dfOff < 0 && strcmp(_s, "rx__adjdF_0_0__") == 0) _dfOff = _i;
+        if (_jpOff < 0 && strcmp(_s, "rx__adjJp_0_0_0__") == 0) _jpOff = _i;
+        if (_jyOff < 0 && strcmp(_s, "rx__adjJy_0_0_0__") == 0) _jyOff = _i;
+        if (_fxdOff < 0 && strcmp(_s, "rx__adjFXd_0_0__") == 0) _fxdOff = _i;    // DDE delayed Jacobian
+        if (_tauOff < 0 && strcmp(_s, "rx__adjTau_0_0__") == 0) _tauOff = _i;    // DDE delay durations
+        if (_dtauOff < 0 && strcmp(_s, "rx__adjDtau_0_0_0__") == 0) _dtauOff = _i; // DDE dtau/dp (dose-jump)
+        if (_dlagOff < 0 && strcmp(_s, "rx__adjDlag_0_0__") == 0) _dlagOff = _i; // modeled-alag transversality
+        if (_drateOff < 0 && strcmp(_s, "rx__adjDrate_0_0__") == 0) _drateOff = _i; // modeled-rate infusion dual
+      }
+      int _nSens = (int)_adjSt.size() - _nBase;
+      if (_fxOff < 0 || _fpOff < 0 || _nBase <= 0) {
+        // A malformed expansion (has rx__sens_* output slots but is missing
+        // the F_X/F_p Jacobian lhs) is a hard error: solving would silently
+        // fill the sens columns with zeros.  A genuinely PLAIN model (no
+        // rx__sens_* slots at all) carries no sensitivity request, so an
+        // adjoint method may run FORWARD-ONLY on it (op->adjoint stays 0) --
+        // this lets the explicit/multistep adjoint variants be exercised as
+        // ordinary forward solvers (e.g. the cov/nmtest covariate + dosing
+        // regression suite).  The implicit/Rosenbrock/CVODES adjoint variants
+        // size their LU factorization from the adjoint-augmented system, so
+        // they cannot run forward-only (bare DGETRF dimension error / crash)
+        // -- keep the hard guard for those method codes.
+        int _stiffAdj = (method == 213 || method == 221 || method == 231 ||
+                         method == 232 || method == 233 || method == 234 ||
+                         method == 235 || method == 236 || method == 237 ||
+                         method == 238);
+        if (_nSens > 0 || _nBase <= 0 || _stiffAdj) {
+          (Rf_error)("method='rk4s' requires the adjoint expansion in the "
+                     "expanded ODE (build with calcSens / rxode2::.rxAdjointExpand); "
+                     "the rx__adjFX_*/rx__adjFP_* Jacobian lhs were not found");
+        }
+        // plain explicit/multistep model: forward-only, leave op->adjoint == 0
+      } else {
+        op->adjoint = 1;
+        op->adjNbase = _nBase;
+        op->adjNp = _nSens / _nBase;
+        op->adjFxOff = _fxOff;
+        op->adjFpOff = _fpOff;
+        op->adjDfOff = _dfOff;
+        op->adjJpOff = _jpOff;
+        op->adjJyOff = _jyOff;
+        op->adjFxdOff = _fxdOff;
+        op->adjTauOff = _tauOff;
+        op->adjDtauOff = _dtauOff;
+        op->adjDlagOff = _dlagOff;
+        op->adjDrateOff = _drateOff;
+        op->adjSensOff = _nBase;
+      }
+    }
+
     rxSolveDat->throttle = false;
     if (!solveMethodThreadSafe(op)) { // dop853 and liblsoda should be thread safe
       op->cores = 1;//getRxThreads(1, false);
     } else {
       op->cores = asInt(rxControl[Rxc_cores], "cores");
       int thread = INTEGER(rxSolveDat->mv[RxMv_flags])[RxMvFlag_thread];
+      // linCmtB is thread safe on the forward-mode AD Jacobian path: each thread
+      // evaluates its own subject on its own __linCmtB[rx_get_thread()] slot with
+      // stack-local fvar and no shared AD arena.  linCmtSensForwardAdThreadSafe()
+      // (linCmtSensType.h) is the shared classifier -- it excludes reverse-mode
+      // AD (31, Stan's shared ChainableStack) and the finite-difference paths
+      // (first-subject scaling/step setup), which keep the single-core guard.
+      int linCmtBThreadSafe = linCmtSensForwardAdThreadSafe(rx->sensType);
       if (op->cores == 0) {
         switch (thread) {
         case threadSafeRepNumThread:
@@ -5697,8 +5981,13 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
           rxSolveDat->throttle = false;
           break;
         case notThreadLinCmtB:
-          op->cores = 1;
-          rxSolveDat->throttle = false;
+          if (linCmtBThreadSafe) {
+            op->cores = getRxThreads(INT_MAX, false);
+            rxSolveDat->throttle = true;
+          } else {
+            op->cores = 1;
+            rxSolveDat->throttle = false;
+          }
           break;
         }
       } else {
@@ -5719,8 +6008,13 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
           rxSolveDat->throttle = false;
           break;
         case notThreadLinCmtB:
-          op->cores = 1;
-          rxSolveDat->throttle = false;
+          if (linCmtBThreadSafe) {
+            // Thread safe (forward-mode AD); keep the user-requested core count.
+            rxSolveDat->throttle = true;
+          } else {
+            op->cores = 1;
+            rxSolveDat->throttle = false;
+          }
           break;
         }
       }
@@ -5739,9 +6033,20 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
 
     CharacterVector _mvState = rxSolveDat->mv[RxMv_state];
     int _bneq = (int)_mvState.size();
-    int _lrw = 22 + _bneq * std::max(16, _bneq + 9);
-    int _liw = 20 + _bneq;
-    ensureRworkPool((int)op->cores, _lrw, _liw);
+    int _lrw2, _liw2;
+    if (op->stiff == 107) {
+      /* bdf: DVODE BDF (MF=22): 22+9N+2N^2 doubles, 30+N ints */
+      _lrw2 = 22 + 9 * _bneq + 2 * _bneq * _bneq;
+      _liw2 = 30 + _bneq;
+    } else if (op->stiff == 106) {
+      /* lsode: DVODE Adams (MF=10): LSODA sizing for doubles, 30+N ints */
+      _lrw2 = 22 + _bneq * std::max(16, _bneq + 9);
+      _liw2 = 30 + _bneq;
+    } else {
+      _lrw2 = 22 + _bneq * std::max(16, _bneq + 9);
+      _liw2 = 20 + _bneq;
+    }
+    ensureRworkPool((int)op->cores, _lrw2, _liw2);
 
     // Now set up events and parameters
     RObject par0 = params;
@@ -6022,12 +6327,13 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       (int64_t)scaleC.size(),                 /* n6_actual */
       &_mem);
 
-    // Guard 1: fast hard limit — n0 > INT_MAX means gsolve alone exceeds ~16 GB.
+    // Guard 1: fast hard limit -- n0 > INT_MAX means gsolve alone exceeds ~16 GB.
     // Portable, zero-cost backstop that catches the dominant overflow path.
     if (_mem.n0 > (int64_t)INT_MAX) {
       rxSolveFree();
       stop(_("the solver buffer (%lld elements, %.1f GB) is too large for rxSolve to handle; "
-             "reduce the number of timepoints or simulations"),
+             "reduce the number of timepoints or simulations; "
+             "use rxSolve(..., file = 'prefix') to solve in chunks"),
            (long long)_mem.n0, (double)_mem.n0 * sizeof(double) / 1e9);
     }
     // Guard 2: platform-specific available-memory check (advisory; see rxMemAvail.h).
@@ -6038,7 +6344,8 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       if (_avail != UINT64_MAX && _needed > _avail) {
         rxSolveFree();
         stop(_("the solver requires %.1f GB but only %.1f GB appears available; "
-               "reduce the number of timepoints or simulations"),
+               "reduce the number of timepoints or simulations; "
+               "use rxSolve(..., file = 'prefix') to solve in chunks"),
              (double)_needed / 1e9, (double)_avail / 1e9);
       }
     }
@@ -6053,13 +6360,14 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
       stop(_("could not allocate enough memory for solving (%.1f GB requested)"),
            (double)_mem.gsolve_total * sizeof(double) / 1e9);
     }
-    // Pointer layout within gsolve — field names match rx_mem_layout members.
+    // Pointer layout within gsolve -- field names match rx_mem_layout members.
     _globals.gLin        = _globals.gsolve     + _mem.n0;
     _globals.gLlikSave   = _globals.gLin        + _mem.nlin;
     _globals.gSolveSave  = _globals.gLlikSave   + _mem.nllik_c;
     _globals.gSolveLast  = _globals.gSolveSave  + _mem.nsave;
     _globals.gSolveLast2 = _globals.gSolveLast  + _mem.nsave;
-    _globals.gmtime      = _globals.gSolveLast2 + _mem.nsave;
+    _globals.gEsPendingJump = _globals.gSolveLast2 + _mem.nsave;
+    _globals.gmtime      = _globals.gEsPendingJump + _mem.nsave;
     // gInfusionRate is now allocated per-thread independently (see below)
     _globals.ginits      = _globals.gmtime      + _mem.n2;
     std::copy(rxSolveDat->initsC.begin(), rxSolveDat->initsC.end(), &_globals.ginits[0]);
@@ -6843,12 +7151,12 @@ void rxAssignPtr(SEXP object = R_NilValue){
 }
 
 extern "C" void updateExtraDoseGlobals(rx_solving_options_ind* ind) {
-  _globals.ignoredDoses[omp_get_thread_num()] = ind->ignoredDoses;
-  _globals.pendingDoses[omp_get_thread_num()] = ind->pendingDoses;
-  _globals.extraDoseTimeIdx[omp_get_thread_num()] = ind->extraDoseTimeIdx;
-  _globals.extraDoseTime[omp_get_thread_num()] = ind->extraDoseTime;
-  _globals.extraDoseEvid[omp_get_thread_num()] = ind->extraDoseEvid;
-  _globals.extraDoseDose[omp_get_thread_num()] = ind->extraDoseDose;
+  _globals.ignoredDoses[_rxTid()] = ind->ignoredDoses;
+  _globals.pendingDoses[_rxTid()] = ind->pendingDoses;
+  _globals.extraDoseTimeIdx[_rxTid()] = ind->extraDoseTimeIdx;
+  _globals.extraDoseTime[_rxTid()] = ind->extraDoseTime;
+  _globals.extraDoseEvid[_rxTid()] = ind->extraDoseEvid;
+  _globals.extraDoseDose[_rxTid()] = ind->extraDoseDose;
 }
 
 extern "C" void rxAssignPtrC(SEXP obj){

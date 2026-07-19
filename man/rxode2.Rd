@@ -15,11 +15,14 @@ rxode2(
   debug = FALSE,
   calcJac = NULL,
   calcSens = NULL,
+  calcSens2 = NULL,
+  calcSens3 = NULL,
   collapseModel = FALSE,
   package = NULL,
   ...,
   linCmtSens = c("linCmtA", "linCmtB"),
   indLin = FALSE,
+  eventSens = NULL,
   verbose = FALSE,
   fullPrint = getOption("rxode2.fullPrint", FALSE),
   envir = parent.frame()
@@ -34,11 +37,14 @@ RxODE(
   debug = FALSE,
   calcJac = NULL,
   calcSens = NULL,
+  calcSens2 = NULL,
+  calcSens3 = NULL,
   collapseModel = FALSE,
   package = NULL,
   ...,
   linCmtSens = c("linCmtA", "linCmtB"),
   indLin = FALSE,
+  eventSens = NULL,
   verbose = FALSE,
   fullPrint = getOption("rxode2.fullPrint", FALSE),
   envir = parent.frame()
@@ -53,11 +59,14 @@ rxode(
   debug = FALSE,
   calcJac = NULL,
   calcSens = NULL,
+  calcSens2 = NULL,
+  calcSens3 = NULL,
   collapseModel = FALSE,
   package = NULL,
   ...,
   linCmtSens = c("linCmtA", "linCmtB"),
   indLin = FALSE,
+  eventSens = NULL,
   verbose = FALSE,
   fullPrint = getOption("rxode2.fullPrint", FALSE),
   envir = parent.frame()
@@ -110,7 +119,32 @@ compiled with verbose debugging information turned on.}
 Jacobain according to the specified ODEs.}
 
 \item{calcSens}{boolean indicating if rxode2 will calculate the
-sensitivities according to the specified ODEs.}
+sensitivities according to the specified ODEs.  May also be a
+character vector of the states/parameters whose first-order
+sensitivities (\verb{rx__sens_<state>_BY_<param>__}) should be
+generated.}
+
+\item{calcSens2}{character vector (or \code{NULL}) requesting
+second-order sensitivities in addition to the first-order ones
+from \code{calcSens}.  When supplied, rxode2 also generates the
+\verb{rx__sens_<state>_BY_<p>_BY_<q>__} compartments (the Hessian
+path), where \code{p} ranges over \code{calcSens} and \code{q} over
+\code{calcSens2}.  Used, for example, for population (\code{THETA})
+second-order event sensitivities.  \code{NULL} (the default) skips the
+second-order generation.}
+
+\item{calcSens3}{character vector (or \code{NULL}) requesting third-order
+sensitivities in addition to the first- and second-order ones.
+Requires \code{calcSens2} to also be supplied (every \code{calcSens3}
+parameter needs its own already-built second-order sensitivity
+compartment, from the pairing of \code{calcSens2} with \code{calcSens3}, to
+reference -- so \code{calcSens3} should be a subset of \code{calcSens2},
+which itself should be a subset of \code{calcSens}, mirroring how
+\code{calcSens2} is used everywhere else in rxode2 today).  When
+supplied, generates the \verb{rx__sens_<state>_BY_<p>_BY_<q>_BY_<r>__}
+compartments, where \code{p} ranges over \code{calcSens}, \code{q} over
+\code{calcSens2}, and \code{r} over \code{calcSens3}, via \code{rxExpandSens3_()}.
+\code{NULL} (the default) skips the third-order generation.}
 
 \item{collapseModel}{boolean indicating if rxode2 will remove all
 LHS variables when calculating sensitivities.}
@@ -123,6 +157,17 @@ LHS variables when calculating sensitivities.}
 
 \item{indLin}{Calculate inductive linearization matrices and
 compile with inductive linearization support.}
+
+\item{eventSens}{controls how dosing/event-parameter (alag, F, rate,
+dur, amt) sensitivities are computed when sensitivities are
+generated: \code{"jump"} injects the analytic event ("jump")
+sensitivities into the sensitivity states at each dosing event,
+\code{"fd"} keeps the legacy finite-difference behavior (the
+backward-compatible opt-out), and \code{"both"} computes both for
+cross-checking.  \code{NULL} (the default) uses
+\code{getOption("rxode2.eventSens", "fd")}.  When not \code{"fd"} and
+\code{calcSens} is supplied, \code{calcJac} is forced to \code{TRUE} so the
+Jacobian is available for the jump injection.}
 
 \item{verbose}{When \code{TRUE} be verbose with the linear
 compartmental model}
@@ -575,9 +620,13 @@ table:\tabular{lll}{
    lag(parameter, number=1) \tab Get the lag of an input parameter; You can specify a number of lagged observations \tab  \cr
    lead(parameter, number=2) \tab Get the lead of an input parameter; You can specify a number of lead observation \tab  \cr
    diff(par, number=1) \tab Get the difference between the current parameter and the last parameter; Can change the parameter number \tab  \cr
+   lag0(parameter, number=1) \tab Like lag() but returns 0 instead of NA when there is no prior value (the first record) \tab  \cr
+   lead0(parameter, number=1) \tab Like lead() but returns 0 instead of NA when there is no following value (the last record) \tab  \cr
+   diff0(par, number=1) \tab Like diff() but returns the value itself (previous value treated as 0) when there is no prior value \tab  \cr
    first(par) \tab Get the first value of an input parameter \tab  \cr
    last(par) \tab Get the last value of an input parameter \tab  \cr
    transit() \tab The transit compartment psuedo function \tab  \cr
+   delay(state, T) \tab Value of an ODE state delayed by T time units (delay differential equations); requires a dense solver \tab  \cr
    is.na() \tab Determine if a value is NA \tab  \cr
    is.nan() \tab Determine if a value is NaN \tab  \cr
    is.infinite() \tab Check to see if the value is infinite \tab  \cr
@@ -742,6 +791,29 @@ The default in \code{nlmixr2}/\code{rxode2} if not otherwise specified is
 statistics will add their variances (not the standard deviations).
 However, the \strong{combined1} can describe the data possibly even better
 than \strong{combined2} so both are possible options in \code{rxode2}/\code{nlmixr2}.
+}
+
+\subsection{Autocorrelated residuals (\code{ar()})}{
+
+Adding \code{ar(cor)} to a normal residual makes successive residuals of the
+same endpoint follow a continuous-time AR(1) process:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{cp ~ add(add.sd) + ar(ar1.cor)
+}\if{html}{\out{</div>}}
+
+Here \code{ar1.cor} is the lag-one correlation and must be in \verb{[0, 1)}. The
+correlation between two residuals separated by a time gap \code{dt} is
+\code{cor^dt}, so irregular sampling is handled directly and the marginal
+(stationary) residual variance is unchanged; the first observation of
+each subject/endpoint uses the marginal distribution. \code{ar()} combines
+with \code{add()}/\code{prop()} normal residuals and uses the same \verb{| cmt}
+endpoint syntax as the other residual functions.
+
+The \code{ar()} specification is identical in \code{rxode2} and \code{nlmixr2}: the
+same model line simulates the autocorrelated residual in \code{rxode2} and
+estimates the correlation in \code{nlmixr2} (the \code{nlm}, \code{focei}/\code{foce} and
+\code{saem} families support it; \code{fo}, \code{foi}, \code{nlme} and \code{nls} do not). See
+Karlsson et al. (1995) for the continuous-time AR(1) residual model.
 }
 
 \subsection{Distributions of known likelihoods}{
@@ -974,6 +1046,8 @@ In general all the that are supported are in the following table
    additive+proportional+cauchy \tab combined2 \tab yeoJohnson(probit()) \tab var ~ yeoJohnson(lambda) + probitNorm(probit.sd) + prop(prop.sd) + dcauchy() + combined2() \tab addProp=2 \tab response variable \cr
    additive+power+cauchy \tab combined1 \tab yeoJohnson(probit()) \tab var ~ yeoJohnson(lambda) + probitNorm(probit.sd) + pow(pow.sd, exponent) + dcauchy() + combined1() \tab addProp=1 \tab response variable \cr
    additive+power+cauchy \tab combined2 \tab yeoJohnson(probit()) \tab var ~ yeoJohnson(lambda) + probitNorm(probit.sd) + pow(pow.sd, exponent) + dcauchy() +combined2() \tab addProp=2 \tab response variable \cr
+   autocorrelated (constant) \tab  \tab None \tab var ~ add(add.sd) + ar(cor) \tab  \tab response variable \cr
+   autocorrelated (additive+proportional) \tab  \tab None \tab var ~ add(add.sd) + prop(prop.sd) + ar(cor) \tab  \tab response variable \cr
    poission \tab  \tab none \tab cmt ~ dpois(lamba) \tab  \tab compartment specification \cr
    binomial \tab  \tab none \tab cmt ~ dbinom(n, p) \tab  \tab compartment specification \cr
    beta \tab  \tab none \tab cmt ~ dbeta(alpha, beta) \tab  \tab compartment specification \cr
