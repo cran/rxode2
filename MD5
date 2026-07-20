@@ -1,6 +1,6 @@
-a6d1c8ac9af132e697f92deeace46ba5 *DESCRIPTION
+599e6146ee637af1be3c25ad4368a401 *DESCRIPTION
 b15c4935224462fd9299c7b8dd9496cc *NAMESPACE
-abd9c4e8fb02601788ddfbec9863f72d *NEWS.md
+6c4cf0528fb23b90093e1d40de638ac3 *NEWS.md
 e07eb8059da406242535c6015fa3c08a *R/000.R
 53879bd100d09757bc199ec75d9307b3 *R/CTS.R
 ad2ce91b3033e776ed903ad934c749ac *R/DollarNames.R
@@ -97,7 +97,7 @@ da9b555d9cbda8c1514329e85ee45872 *R/rxUiBlessed.R
 58c7089d5047300738c674c261e6f6a9 *R/rxValidate.R
 6f37d329b13f2f7f1d0e7ee0d43464c2 *R/rxode-options.R
 016ae75c37813096332ede7f9651027e *R/rxode2.R
-aa5063a89615bd3564e592dcbf7633c2 *R/rxode2_md5.R
+ea463a3708a6f40e09b5ab987c99e737 *R/rxode2_md5.R
 a1d82761fb278110ef1f4fa43cc282b1 *R/rxrandom.R
 5ad2c4a516787feb3c4f39ba3c0ecd9d *R/rxrandomui.R
 4da93f79d3c8255de97b82b23ea12eaf *R/rxsolve.R
@@ -141,7 +141,7 @@ d7d648a3d2c5a1481822628ccc0ee78b *inst/Changes.txt
 016787a447a81ffdd73db455cd709a5b *inst/THANKS
 63d6a62134224b89d8991216a01807b1 *inst/WORDLIST
 3906c90f21f667fb9efb06d073161b7a *inst/doc/rxode2-syntax.Rmd
-945b513ed153948f5911040ccb0136a5 *inst/doc/rxode2-syntax.html
+091b70fac20fee3aabcd29f65de93373 *inst/doc/rxode2-syntax.html
 f2519760fc2a12a82de69f60f33dac15 *inst/include/needSortDefines.h
 a87d5a3e0eb9ed56a34bd6dbb258ee10 *inst/include/rxMemoryCalc.h
 002a47a7cf07706be2f08cbf4aed4c8e *inst/include/rxode2.h
@@ -157,7 +157,7 @@ b6bad32456ad23988d4211a107945f14 *inst/include/rxode2_control.h
 b60c58124fe93ad927313bec52abc021 *inst/include/rxode2parseHandleEvid.h
 97c79c7ebac80ea0570f843ec3f95186 *inst/include/rxode2parseSbuf.h
 b652766d6ba7b8f5fad418652afefb77 *inst/include/rxode2parseStruct.h
-f08e73bd463c087af4e5ea5bda05fb3c *inst/include/rxode2parseVer.h
+8ae5455706f41902683abdbbca888299 *inst/include/rxode2parseVer.h
 9789d9e7cc829fe37ef5840c9a0a8cc7 *inst/include/rxode2parse_control.h
 e887d19e12a799863aa6453dbb4be55c *inst/include/rxode2ptr.h
 8e5949d8fd97e2c2cffba29ba8df2ae4 *inst/include/rxode2random_fillVec.h
@@ -633,8 +633,8 @@ b34517f4b95c814181fb780020b57ef3 *src/cvodes_adjoint.cpp
 ca74cd59d33ac77477a471c833f2f860 *src/dgefa.c
 6f82dc36042331b6a8769ee5c0e1c9ef *src/dgesl.c
 576ef41895b79b1c8747f53086736e82 *src/dgpadm.f
-51d90e2de6888d5ec9a9e85f5e2f6cfe *src/dlsoda.f
-c31fd1bab3840162cd7cc4dea9ddf3d1 *src/dlsode.f
+79d1944a2412a106c703a355d9460456 *src/dlsoda.f
+03d5be01ed36465527d864e6b6465b91 *src/dlsode.f
 0d73e332b3752a8280518a4f161d58ef *src/dop5.cpp
 3910ecb73047745cec46b10f16b4b349 *src/dop54.cpp
 f4979c3405c48bc3c9418ac53bf32719 *src/dop853.c
@@ -667,7 +667,7 @@ aa243311d74c09c196980e3f51b24cee *src/handle_evid.cpp
 dd4f3a28b695779284780145ce6c4b60 *src/iem.cpp
 95ff2ff682dbf73889a10ee6f7cbccbf *src/implicit_euler_rxode2.hpp
 8e84159f4714ab2d6c789c3427f716de *src/implicit_solvers.cpp
-6bc02edc4023f4f412f0b68ab4b7c15d *src/init.c
+0fcb7827691541e6d7b061608005fb9d *src/init.c
 ad576feb391cc73c6e802d6f0de9f6ac *src/install.libs.R
 4f1529fca3c86336719b6edd04c52044 *src/intdy.c
 77d3b86cf6c393144e42ea82fd67dd85 *src/isEt.c
