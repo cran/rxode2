@@ -1534,7 +1534,17 @@ extern "C" int getRxThreadId(void) { return _rxThreadIdOverride; }
 static inline int _rxTid(void) {
   int t = _rxThreadIdOverride;
   if (t < 0) t = omp_get_thread_num();
-  return (t < 0) ? 0 : t;
+  if (t < 0) return 0;
+  // Every `_globals` per-thread slice is sized by op->cores, recorded in
+  // nInfusionRateThreads when they are allocated.  A thread id at or past
+  // that count indexes out of bounds: gInfusionRate[] is an array of
+  // pointers, so it yields a garbage pointer (a NULL there segfaults in
+  // iniSubject), and the flat arrays (gon, gTlastS, gatol2Thread, ...) are
+  // silently overrun.  Clamp to the last valid slot, matching the policy
+  // rx_get_thread() already applies in rxomp.h.
+  int mx = _globals.nInfusionRateThreads;
+  if (mx <= 0) return 0;
+  return (t < mx) ? t : mx - 1;
 }
 
 static inline double *getLinCmtSaveThread() {
@@ -2833,6 +2843,14 @@ extern "C" void freeExtraDosingC() {
 
 extern "C" void allocExtraDosingC() {
   allocExtraDosing(omp_get_max_threads());
+}
+
+// Called from par_solve(), the one choke point every solve goes through --
+// including a downstream package driving par_solve directly rather than
+// through rxSolve_()'s setup.  Runs before the parallel region, and
+// iniSubject() (which hands these pools out) runs inside it.
+extern "C" void ensureExtraDosingC(int ncores) {
+  ensureExtraDosing(ncores);
 }
 
 void resetFkeep();
@@ -5537,6 +5555,7 @@ SEXP rxSolveFromRaw_(const RObject &obj, const RObject &rawObj,
     ensureLinCmtA((int)op->cores);
     ensureLinCmtB((int)op->cores);
     ensureLsodaCtxPool((int)op->cores);
+    ensureExtraDosing((int)op->cores);
     int _bneq = (int)op->neq;
     int _lrw, _liw;
     if (op->stiff == 107) {
@@ -6030,6 +6049,7 @@ SEXP rxSolve_(const RObject &obj, const List &rxControl,
     ensureLinCmtA((int)op->cores);
     ensureLinCmtB((int)op->cores);
     ensureLsodaCtxPool((int)op->cores);
+    ensureExtraDosing((int)op->cores);
 
     CharacterVector _mvState = rxSolveDat->mv[RxMv_state];
     int _bneq = (int)_mvState.size();

@@ -4,7 +4,11 @@ R_NegInf <- -Inf # nolint
 R_PosInf <- Inf # nolint
 NA_LOGICAL <- NA # nolint
 
-.linCmtSens <- NULL
+## Must match what `rxode2()` stores for its `linCmtSens` default (the default
+## choice vector collapsed to the value `match.arg()` picks): it is folded into
+## the parsed md5, so a NULL here would make the first build of a session hash
+## differently from every later one (c() drops NULL).
+.linCmtSens <- "linCmtA"
 .clearME <- function() {
   assignInMyNamespace(".rxMECode", "")
   assignInMyNamespace(".indLinInfo", list())
@@ -292,6 +296,7 @@ NA_LOGICAL <- NA # nolint
 #' @eval .rxodeBuildCode()
 #' @importFrom PreciseSums fsum
 #' @importFrom Rcpp evalCpp
+#' @importFrom RcppParallel RcppParallelLibs
 #' @importFrom checkmate qassert
 #' @importFrom utils getFromNamespace assignInMyNamespace download.file head sessionInfo compareVersion packageVersion removeSource
 #' @importFrom stats setNames update dnorm integrate
@@ -408,8 +413,18 @@ rxode2 <- # nolint
     assignInMyNamespace(".rxEventSensCacheKey",
                         if (.eventSensActiveReq) .eventSensMode else "")
     on.exit(assignInMyNamespace(".rxEventSensCacheKey", ""), add = TRUE)
-    .env$.mv <- rxGetModel(model, calcSens = calcSens, calcJac = calcJac, collapseModel = collapseModel, indLin = indLin, calcSens2 = calcSens2, calcSens3 = calcSens3)
+    ## Set BEFORE the parse: `.linCmtSens` is folded into the parsed md5, so
+    ## assigning it afterwards hashed this build with the previous call's value.
+    ## The default is the whole choice vector, which `match.arg()` resolves to
+    ## its first element -- so collapse an in-effect default to that scalar and
+    ## the default and an explicit "linCmtA" share one cache key instead of
+    ## compiling the identical model twice.  Only the untouched default is
+    ## collapsed; an explicit value is passed through so validation is unchanged.
+    if (identical(linCmtSens, c("linCmtA", "linCmtB"))) {
+      linCmtSens <- "linCmtA"
+    }
     assignInMyNamespace(".linCmtSens", linCmtSens)
+    .env$.mv <- rxGetModel(model, calcSens = calcSens, calcJac = calcJac, collapseModel = collapseModel, indLin = indLin, calcSens2 = calcSens2, calcSens3 = calcSens3)
     .isLinCmt <- .Call(`_rxode2_isLinCmt`) == 1L
     if (.eventSensNeedsJac && !.isLinCmt && !isTRUE(calcJac)) {
       calcJac <- TRUE
@@ -843,6 +858,14 @@ rxGetModel <- function(model, calcSens = NULL, calcJac = NULL, collapseModel = N
   }
   .oldEventSensKey <- .rxEventSensCacheKey
   on.exit(assignInMyNamespace(".rxEventSensCacheKey", .oldEventSensKey), add = TRUE)
+  ## `.indLinInfo` is a session global folded into the parsed md5 by rxMd5().  It
+  ## is an OUTPUT of parsing (this call's own indLin/mexp branches below re-set
+  ## it before codegen), never an input, so clear any value left by a prior
+  ## build BEFORE the parse below hashes the model -- otherwise a stale
+  ## descriptor from an earlier matrix-exponential build (or from a rxSensMatExp
+  ## that never fully compiled) makes an unrelated plain model hash differently
+  ## depending on build order.
+  assignInMyNamespace(".indLinInfo", list())
   .ret <- rxModelVars(model)
   if (!is.null(calcSens)) {
     .calcSens <- TRUE
@@ -1677,10 +1700,12 @@ rxCompile <- function(model, dir, prefix, force = FALSE, modName = NULL,
 #' @export
 #' @author Matthew L. Fidler
 #' @examples
+#' \donttest{
 #' rxode2({
 #'   a <- b
 #' })
 #' rxLastCompile()
+#' }
 rxLastCompile <- function() {
   lapply(names(.rxCompileEnv$lst), function(nm) {
     cli::rule(left = nm)

@@ -1,6 +1,246 @@
+# rxode2 5.1.5
+
+## New features
+
+- `library(rxode2)` is faster.  `.onLoad()` no longer calls
+  `requireNamespace()` on the suggested packages (`pillar`, `tibble`,
+  `arrow`, `dplyr`, `nlme`, `units`, `digest`) before registering their
+  S3 methods.  The registration helper already installs an `onLoad`
+  hook when the other namespace is not loaded yet, so the eager loads
+  only added startup cost; the methods are still registered at the same
+  point in time from the user's perspective.
+
+- `rxControl(sigdig=)` now derives the ODE solver tolerances with one
+  solver-independent formula -- the same for stiff, non-stiff and auto-switching
+  solvers.  The `rtol` exponent IS `sigdig` and `atol` sits three orders below it:
+  `rtol = 10^(-sigdig)` and `atol = 10^(-sigdig-3)`.  The sensitivity tolerances
+  match the main solve (`rtolSens = rtol`, `atolSens = atol`), since gradients and
+  covariances are built from them, and the steady-state tolerances run one order
+  looser (`ssRtol = ssRtolSens = 10*rtol`, `ssAtol = ssAtolSens = 10*atol`).  This
+  matches how `nlmixr2est` derives solver tolerances from its optimization
+  `sigdig`, so the same `sigdig` means the same thing whether it is used for
+  estimation or for a plain `rxSolve()`.
+
+  `sigdig` remains `NULL` by default and continues to have no effect unless you
+  pass it, so solves that do not name `sigdig` are unchanged.
+
+  Two notes for callers who do pass it.  First, the mapping is keyed to `sigdig`
+  as a request for that many significant digits, which for small `sigdig` is
+  *looser* than what the previous symmetric `atol = rtol = 0.5*10^(-sigdig-2)`
+  gave: at `sigdig = 4`, `rtol` moves from `5e-7` to `1e-4`, which is also looser
+  than the `1e-6` default `rtol` (`atol` moves the other way, from `5e-7` to
+  `1e-7`).  If you were using `sigdig` to tighten a solve, raise it or set
+  `atol`/`rtol` directly.  Second, each tolerance is resolved independently and
+  only when you did not supply it, so an explicit `atol`/`rtol` overrides the main
+  solve but does not propagate to the sensitivity or steady-state tolerances --
+  set those directly if they should change too.
+- The SUNDIALS public headers are now vendored into the package
+  (`src/sundials_inc/`) alongside the already-vendored SUNDIALS C sources,
+  and the `LinkingTo: sundialr` dependency has been dropped.  This
+  guarantees the vendored sources always compile against headers from the
+  same SUNDIALS release, instead of silently drifting when sundialr updates
+  its bundled SUNDIALS (#1155).  The vendored include is injected via
+  `PKG_CPPFLAGS` so it precedes the LinkingTo include flags; otherwise the
+  older SUNDIALS copy bundled inside StanHeaders would shadow it.
+
+- `rxSerialize()` now writes the base R types only (`"xz"`, `"bzip2"`,
+  `"base"`); `qs2` is no longer a write format.  `rxDeserialize()` still reads
+  `qs2`/`qdata`-serialized data and base91-encoded strings, so objects stored
+  by earlier versions remain readable.  Test data was converted from `.qs2` to
+  `.rds`.
+
+## Bug fixes
+
+### Serialization
+
+- `qs2` moved to `Imports`.  `rxDeserialize()` used it without declaring it
+  anywhere, and because the call sites named the package as a string, the
+  dependency was invisible to `R CMD check` as well.  Environments that build
+  their library from the declared dependency graph could therefore end up
+  without `qs2` and fail to read objects stored while `qs2` was an allowed
+  `rxode2.serialize.type` -- for example the `origData` slot of fits saved by
+  earlier versions.  `qs2` is now only ever read, never written.
+
+### Error models / transformations
+
+- The first and second derivatives of the Yeo-Johnson transform (`rxTBSd()` and
+  `rxTBSd2()`) had the wrong sign for negative values when `lambda` was exactly
+  `2`.  There `yj(x) = -log(1 - x)`, so the derivatives are `1/(1 - x)` and
+  `1/(1 - x)^2`, both positive; the special case returned them negated, which
+  also contradicted the general formula's limit and made the derivative
+  discontinuous in `lambda` at `2`.  Since Yeo-Johnson is monotone increasing,
+  its first derivative must be positive everywhere.
+
+- Review of the fix above found further errors in the same transform family
+  (all pre-existing, none introduced by that fix):
+  - `rxTBSd2()` returned a wrong second derivative for the `logit` transform
+    (an algebra error in the closed form) and for the composed
+    `logit + yeoJohnson` / `probit + yeoJohnson` transforms, where the chain
+    rule used the first Yeo-Johnson derivative in place of the second and
+    dropped the inner-transform curvature term.
+  - `rxTBSi()` did not invert the composed `logit + yeoJohnson` /
+    `probit + yeoJohnson` transforms: it applied the forward Yeo-Johnson
+    transform (or skipped it entirely) instead of the inverse, so
+    `rxTBSi(rxTBS(x))` did not return `x` for `lambda != 1`.  This affected
+    simulation back-transforms of those error models.
+  - The `lambda` gradient of the transform log-Jacobian (`powerDL`, used by
+    estimation routines) was wrong on the negative Yeo-Johnson branch
+    (`-log1p(x)` instead of `-log1p(-x)`, `NaN` for `x < -1`), returned a
+    spurious `0` at exactly `lambda == 1` for `boxCox`/`yeoJohnson`, was
+    missing the `probit + yeoJohnson` case (returned `NA`), and returned a
+    spurious `log(x)` (instead of `0`) for the lambda-free `lnorm` transform.
+    The log-Jacobian itself (`powerL`) clamped the wrong term in its `logit`
+    guard, giving an unprotected `log(0)` at the upper bound.
+  - For `boxCox`/`lnorm`, `rxTBSd()` and `rxTBSd2()` returned the clamp
+    constant `sqrt(.Machine$double.eps)` itself for `x` at or below the clamp
+    instead of clamping `x` and evaluating the derivative formula, making the
+    derivatives discontinuous (and ~15 orders of magnitude too small) at the
+    boundary.  The clamp now feeds the usual formula, matching how every other
+    transform in the family handles the guard.
+
+### Estimation / symengine translation
+
+- The symbolic derivatives of the relational operators (`>`, `<`, `>=`, `<=`)
+  are now centered on the discontinuity `a == b`: the `atanh(2*tol - 1)` shift
+  that placed the smoothed nascent-delta bump at `a - b ~ +/-0.46` was removed.
+  Since the forward pass evaluates relationals as hard booleans, the shifted
+  bump gave sensitivity/exact-gradient consumers (e.g. FOCEI's analytic
+  gradient paths) a spurious derivative in a band next to the threshold; the
+  centered rule makes the derivative consistent with the forward value.  This
+  also makes the first derivatives of `abs()`, `min()`, and `max()` exact away
+  from the boundary (#1159).
+
+### Solving
+
+- Fixed heap corruption when `OMP_NUM_THREADS` is set below the number of
+  cores a solve asks for -- as it is on CRAN check machines, which set
+  `OMP_NUM_THREADS=2`.  The extra-dosing pools were sized once when the package
+  loaded, from `omp_get_max_threads()` (which honors `OMP_NUM_THREADS`), but
+  they are indexed by the solving thread id, which is bounded by `op$cores`;
+  `rxSolve(cores=)` overrides `OMP_NUM_THREADS` through OpenMP's `num_threads`
+  clause.  Every thread past the first `OMP_NUM_THREADS` therefore wrote off
+  the end of those arrays, corrupting the heap and crashing the session later
+  in an unrelated allocation.  The pools now grow to cover `op$cores` at solve
+  setup, like the other per-thread pools.
+
+- Fixed an out-of-bounds thread index that could segfault a solve.  The
+  internal thread id used to slice the per-thread solving buffers was not
+  bounded by the number of threads those buffers were allocated for
+  (`op$cores`).  A larger id read past the end of `gInfusionRate[]` -- an
+  array of pointers -- and the resulting garbage pointer crashed
+  `iniSubject()`; the flat per-thread arrays were silently overrun in the
+  same way.  The id is now clamped to the last valid slot, matching what
+  `rx_get_thread()` already did.
+
+- Fixed a cross-subject leak in batched multi-subject `linCmt()` solves: the
+  per-thread inter-event amount buffer was never cleared between subjects, so
+  with `cores < nSub` every subject after the first on a thread could start
+  from the previous subject's compartment amounts (surfaced by a modeled
+  `alag()`) (#1153; by Hidde van de Beek).
+
+- `delay()`/`past()` models containing an `if`/`else` block failed to solve
+  with `unexpected 'else'`: the DDE helpers parsed the `rxNorm()` text
+  directly, which puts `}` and `else` on separate top-level lines; the
+  normalized text is now parsed wrapped in a `{ }` block.  In addition, a
+  `past()` history inside an `if`/`else` branch is now rejected with a clear
+  error (it was invisible to validation), and delay-duration root-variable
+  resolution now sees assignments made inside `if`/`else` branches (#1151).
+
+### Event tables
+
+- `ev$id` on an event table now returns the per-row `id` column (matching
+  `as.data.frame(ev)$id`) instead of the unique subject ids, so idiomatic
+  subsets like `ev[ev$id == 3, ]` and per-subject assignments like
+  `ev$wt <- 50 + 20 * ev$id` no longer silently recycle a short vector; the
+  unique ids remain available via `ev$env$ids`.  `[.rxEt` now errors on a
+  logical row index whose length matches neither 1 nor the number of rows,
+  and columns assigned with `ev$col <- value` (new covariates as well as
+  previously hidden canonical columns such as `cmt`) now round-trip through
+  `as.data.frame(ev)` (#1154).
+
+- Columns assigned explicitly on an event table (`ev$wt <- 70`) are now shown in
+  the tibble printed by `print(ev)`, in `ev$get.EventTable()`, and in the
+  compressed preview printed for `ev$get.dosing()`/`ev$get.sampling()`, matching
+  `as.data.frame(ev)`.  They were kept and used when solving, but never
+  displayed, so they looked like they had disappeared (#1154).
+
+- `ev$get.dosing()` and `ev$get.sampling()` now print the same columns
+  `print(ev)` does regardless of how the event table is stored internally.
+  Previously an un-grouped table printed every internal column, including
+  hidden ones such as `low`/`high`/`dur` and covariates that only rode along
+  with an imported data frame, while a compressed one printed only the shown
+  columns.  Every column is still present on the returned data frame for
+  programmatic access, a column added or renamed on the returned frame still
+  prints, and `dplyr` verbs turn it back into a plain data frame the way they
+  already did for `rxEt` -- including the column verbs (`select()`,
+  `relocate()`), which subset with `[` rather than going through
+  `dplyr_reconstruct()`.
+
+- Explicitly assigned columns now survive a round trip through a data frame.
+  `as.data.frame()` tags them in a `rxEtExtraCols` attribute that `et()`,
+  `as.et()` and `$import.EventTable()`/`$importEventTable()` read back, so
+  `et(as.data.frame(ev))` keeps showing `wt` instead of demoting it to a hidden
+  imported covariate.  A data frame built by hand carries no tag, so its
+  covariate columns stay hidden as before.
+
+- `as.data.frame()` on an event table still hides covariate columns that simply
+  rode along with an imported data frame (`et(data)`), while showing columns
+  assigned explicitly on the event table (`ev$wt <- 70`, #1154).  The covariate
+  is still used when solving.  Showing every non-canonical column broke code
+  that imports events and then joins its own covariates back onto
+  `as.data.frame(ev)`, since the join produced `wt.x`/`wt.y` and the model
+  parameter disappeared.
+
+### Model compilation
+
+- The `parsed_md5` of a model no longer depends on how many models were built
+  before it in the session.  `linCmtSens` was folded into the hash but only
+  assigned *after* the model was parsed, so the first build of a session hashed
+  with an unset value and every later build hashed with the *previous* call's
+  value.  Because the compiled DLL is named from `parsed_md5`, the same model
+  could get two different cache keys (and hence a redundant recompile) depending
+  on build order.  It is now set before the parse.
+
+### Installation / linking
+
+- `RcppParallel` is now a runtime import (added to `Imports` with an
+  `importFrom`), so its shared library is loaded into the process before
+  `rxode2`'s.  `rxode2` links against `RcppParallel` (`-lRcppParallel`); with
+  `RcppParallel` only in `LinkingTo` its DLL was not guaranteed to be loaded
+  first, so on Windows `library(rxode2)` could fail with `LoadLibrary failure:
+  The specified module could not be found`.  This surfaced with RcppParallel
+  6.0.0, which statically links TBB and no longer ships the `tbb.dll` stub that
+  previously happened to pull the library in.
+
+- On Windows with RcppParallel >= 6.0.0 (which statically links TBB through
+  Rtools and no longer loads `tbb.dll`), the stale `-ltbb`/`-ltbbmalloc` flags
+  and the `-L` path to RcppParallel's old dynamic TBB directory that
+  `StanHeaders::LdFlags()` still emits are stripped at configure time, so the
+  rxode2 DLL no longer records an unresolvable runtime dependency on
+  `tbb.dll`.  The strip is keyed to that stale `-L<RcppParallel/lib>`
+  signature, so a future StanHeaders that emits corrected flags -- or a
+  user-supplied TBB via `TBB_LINK_LIB`/`TBB_LIB` -- is left untouched (#1161).
+
+- The vendored SUNDIALS `*NewEmpty` constructors now allocate with `calloc`
+  instead of `malloc`, so any struct fields added by a newer SUNDIALS
+  release are NULL (and safely ignored) rather than uninitialized (#1155).
+
 # rxode2 5.1.4
 
 ## Bug fixes
+
+### Model piping
+
+- Model piping no longer shares the `meta` environment by reference between
+  the original and the piped model.  `.newModelAdjust()` assigned the previous
+  model's `meta` env directly (to retain sticky items), so both models shared
+  one env -- including the cached simulation model (`$meta$.simModelBase`).
+  Whichever model was solved first cached its simulation model for both, so a
+  piped model could silently drop an appended compartment/state (e.g. a
+  `nonmem2rx` import: `mod %>% model(d/dt(AUC) <- f, append=TRUE)`) or the
+  original model could silently gain the piped model's states/estimates.  The
+  meta env is now copied via `.copyEnv()` (which drops `.simModelBase`), so
+  each model keeps its own cache.
 
 ### Compilation
 

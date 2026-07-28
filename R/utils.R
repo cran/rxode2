@@ -455,6 +455,27 @@ gammapInva <- function(x, p) {
   }
 }
 
+#' Transform log-Jacobian (powerL) and its lambda gradient (powerDL)
+#'
+#' Internal test hook; the underlying C functions are only shared through
+#' `R_RegisterCCallable()` (consumed by nlmixr2est) and are otherwise
+#' unreachable from R.
+#'
+#' @param x numeric vector on the transformed scale
+#' @param lambda transform parameter
+#' @param low,high transform bounds
+#' @param transform integer transform code (same coding as `.rxTransform`)
+#' @param dLambda when `TRUE` return the lambda gradient (`powerDL`) instead
+#'   of the log-Jacobian (`powerL`)
+#' @return numeric vector
+#' @author Matthew L. Fidler
+#' @noRd
+.rxTransformL <- function(x, lambda = 1.0, low = 0.0, high = 1.0,
+                          transform = 2L, dLambda = FALSE) {
+  .Call(`_rxode2_powerLDL`, as.double(x), as.double(low), as.double(high),
+        as.double(lambda), as.integer(transform), as.integer(dLambda))
+}
+
 #' logit and inverse logit (expit) functions
 #'
 #' @param x Input value(s) in range \[low,high\] to translate -Inf to
@@ -1648,7 +1669,7 @@ rxDerived <- function(..., verbose = FALSE, digits = 0) {
 #' @export
 #' @author Matthew L. Fidler
 #' @examples
-#'
+#' \donttest{
 #' mod <- rxode2({
 #'   Cp <- linCmt(Cl, V, Q2, V2, Q3, V3)
 #'   ke0 <- log(2)/(50)
@@ -1668,6 +1689,7 @@ rxDerived <- function(..., verbose = FALSE, digits = 0) {
 #' rxStateOde(mod)
 #'
 #' rxState(mod)
+#' }
 #'
 rxStateOde <- function(obj) {
   .state <- rxState(obj)
