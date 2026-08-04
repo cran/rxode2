@@ -1,5 +1,5 @@
 Package: rxode2
-Version: 5.1.5
+Version: 5.1.6
 Title: Facilities for Simulating from ODE-Based Models
 Authors@R: c(
    person("Matthew L.","Fidler", role = c("aut", "cre"), email = "matthew.fidler@gmail.com", comment=c(ORCID="0000-0001-8538-6691")),
@@ -63,10 +63,10 @@ Depends: R (>= 4.1.0)
 Suggests: Matrix, DT, covr, crayon, curl, digest, dplyr (>= 0.8.0),
         ggrepel, gridExtra, htmltools, knitr, learnr, microbenchmark,
         nlme, remotes, rlang, rmarkdown, scales, shiny, stringi,
-        symengine, testthat, tidyr, usethis, withr, xgxr, pillar,
-        tibble, units (>= 0.6-0), rsconnect, devtools, patchwork,
-        nlmixr2data, lifecycle, kableExtra, pmxTools, rootSolve, arrow,
-        fst, duckdb, DBI
+        symengine, testthat, tidyr, usethis, withr, xgxr (>= 1.1.6),
+        pillar, tibble, units (>= 0.6-0), rsconnect, devtools,
+        patchwork, nlmixr2data, lifecycle, kableExtra, pmxTools,
+        rootSolve, arrow, fst, duckdb, DBI
 Imports: PreciseSums (>= 0.7), Rcpp (>= 0.12.3), RcppParallel,
         backports, cli (>= 2.0.0), checkmate, ggplot2 (>= 3.4.0),
         inline, lotri (>= 1.0.4), memoise, methods, mirai, rex, sys,
@@ -100,7 +100,7 @@ LazyData: true
 Language: en-US
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
-Packaged: 2026-07-28 02:55:20 UTC; matt-fidler
+Packaged: 2026-08-04 20:06:24 UTC; matt-fidler
 Author: Matthew L. Fidler [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-8538-6691>),
   Wenping Wang [aut],
@@ -159,4 +159,4 @@ Author: Matthew L. Fidler [aut, cre] (ORCID:
   Yu Feng [ctb],
   Zufar Mulyukov [ctb]
 Repository: CRAN
-Date/Publication: 2026-07-28 10:00:02 UTC
+Date/Publication: 2026-08-04 23:00:02 UTC
